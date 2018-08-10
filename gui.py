@@ -3,11 +3,13 @@ from tkinter import messagebox
 from elements import *
 from numpy.linalg import inv
 from extras import ResizingCanvas
+import matplotlib.pyplot as plt
 
 class Window:
     def __init__(self, root, problem=None, *args, **kwargs):
         self.root = root
-        self.root.minsize(width=512, height=512)
+        self.root.minsize(width=1024, height=512)
+        self.root.iconbitmap('dss_icon.ico')
         self.problem = problem
 
         self.mainframe = tk.Frame(self.root, bg='white')
@@ -26,11 +28,31 @@ class Window:
         self.dx = -50; self.dy = 100
         self.kx = 1; self.ky = -1
         self.transformation_matrix = np.array([[self.kx,0,self.dx],[0,self.ky,self.dy],[0,0,1]], dtype=float)
+        # [problem coords] = [[T]] @ [canvas coords]
         self.tx = 0; self.ty = 0  # Translation
         self.prev_x = None; self.prev_y = None
         self.zoom = 1
         self.ratio = 1
 
+        self.linewidth = 2.0
+        self.scale = 50
+        self.node_radius = 2.5
+
+        self.bv_draw_elements = tk.BooleanVar()
+        self.bv_draw_boundary_conditions = tk.BooleanVar()
+        self.bv_draw_loads = tk.BooleanVar()
+        for var in (self.bv_draw_elements, self.bv_draw_boundary_conditions, self.bv_draw_loads):
+            var.set(True)
+
+        self.bv_draw_displaced = tk.BooleanVar()
+        self.bv_draw_shear = tk.BooleanVar()
+        self.bv_draw_moment = tk.BooleanVar()
+        for var in (self.bv_draw_displaced, self.bv_draw_shear, self.bv_draw_moment):
+            var.set(False)
+
+        for var in (self.bv_draw_elements, self.bv_draw_boundary_conditions, self.bv_draw_loads,
+                    self.bv_draw_displaced, self.bv_draw_shear, self.bv_draw_moment):
+            var.trace('w', self.draw_canvas)
 
         self.build_grid()
         self.build_menu()
@@ -38,12 +60,10 @@ class Window:
         self.build_canvas()
         self.build_bc_menu()  # Outsourced
 
-        self.displaced_plot = False
-
         self.problem.create_node((0,0), draw=True)
         self.draw_canvas()
 
-    # Def building functions
+    # Building functions
     def build_grid(self):
         self.mainframe.columnconfigure(0, weight=1)  #
         self.mainframe.rowconfigure(0, weight=0)  # 'DSSolver' banner
@@ -58,11 +78,9 @@ class Window:
         topmenu = tk.Menu(self.root)
         self.root.config(menu=topmenu)
 
-
         menu_file = tk.Menu(topmenu)
         topmenu.add_cascade(label='File', menu=menu_file)
         menu_file.add_command(label='New case', command=lambda: self.new_problem())
-
 
         menu_edit = tk.Menu(topmenu)
         topmenu.add_cascade(label='Edit', menu=menu_edit)
@@ -85,17 +103,30 @@ class Window:
         menu_stdcases.add_command(label='Fanned out cantilever beams',
                             command=lambda: self._selftest(4))
 
-
         show_menu = tk.Menu(topmenu)
         topmenu.add_cascade(label='Show/hide', menu=show_menu)
-
-        show_menu.add_command(label='Displaced shape',
-                            command=lambda: self.draw_displaced())
+        show_menu.add_checkbutton(label='Elements',
+                                  onvalue=True, offvalue=False, variable=self.bv_draw_elements)
+        show_menu.add_checkbutton(label='Loads',
+                                  onvalue=True, offvalue=False, variable=self.bv_draw_loads)
+        show_menu.add_checkbutton(label='Boundary conditions',
+                                  onvalue=True, offvalue=False, variable=self.bv_draw_boundary_conditions)
+        show_menu.add_separator()
+        show_menu.add_checkbutton(label='Displaced shape',
+                                  onvalue=True, offvalue=False, variable=self.bv_draw_displaced)
+        show_menu.add_checkbutton(label='Shear force diagram',
+                                  onvalue=True, offvalue=False, variable=self.bv_draw_shear)
+        show_menu.add_checkbutton(label='Moment diagram',
+                                  onvalue=True, offvalue=False, variable=self.bv_draw_moment)
 
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale())
         topmenu.add_command(label='Move to origin', command= lambda: self.move_to())
 
     def build_bc_menu(self):
+        """
+                Coordinates on these labels are updated when the left mouse button
+                is clicked on the canvas. (See self.rightclickmenu )
+                """
         self.rcm = tk.Menu(root, tearoff=0)
         self.lm = tk.Menu(self.rcm, tearoff=0)  # Load menu
         self.rcm.add_cascade(label='Apply load', menu=self.lm)
@@ -112,11 +143,8 @@ class Window:
                              command=lambda: self.boundary_condition('pin'))
         self.bcm.add_command(label='Roller node at {}'.format(self.closest_node_label),
                              command=lambda: self.boundary_condition('roller'))
-
-        '''
-        All these labels are updated when the left mouse button 
-        is clicked on the canvas. (See self.rightclickmenu )
-        '''
+        self.bcm.add_command(label='Rotation lock node at {}'.format(self.closest_node_label),
+                             command=lambda: self.boundary_condition('locked'))
 
         self.bm = tk.Menu(self.rcm, tearoff=0)  # Beam menu
         self.rcm.add_cascade(label='Start/end element', menu=self.bm)
@@ -126,6 +154,9 @@ class Window:
         self.bm.add_cascade(label='Start element at closest',
                             command=lambda: self.start_or_end_beam
                              (r=self.closest_node_label))
+
+        self.rcm.add_command(label='Query node at {}'.format(self.closest_node_label),
+                             command=lambda: self.query_node(self.closest_node_label))
 
     def build_canvas(self):
         self.canvas = ResizingCanvas(self.mainframe, bg='white', highlightthickness=0)
@@ -147,6 +178,7 @@ class Window:
         self.bcm.entryconfigure(0, label='Fix node at {}'.format(self.closest_node_label))
         self.bcm.entryconfigure(1, label='Pin node at {}'.format(self.closest_node_label))
         self.bcm.entryconfigure(2, label='Roller node at {}'.format(self.closest_node_label))
+        self.bcm.entryconfigure(3, label='Rotation lock node at {}'.format(self.closest_node_label))
 
         self.bm.entryconfigure(0, label='Start element at {}'.format((self.transformation_matrix@[event.x, event.y, 1])[0:2]))
         self.bm.entryconfigure(1, label='Start element at closest: {}'.format(self.closest_node_label))
@@ -154,7 +186,9 @@ class Window:
         self.lm.entryconfigure(0, label='Apply point load at {}'.format(self.closest_node_label))
         self.lm.entryconfigure(1, label='Apply distributed load from {}'.format(self.closest_node_label))
 
-        if self.r1 is not None and np.any(self.r2) is None:
+        self.rcm.entryconfigure(3, label='Query node at {}'.format(self.closest_node_label))
+
+        if self.r1 is not None and np.any(self.r2) is None:  # End distr loads or elements
             self.bm.entryconfigure(0, label='End element at {}'.format((self.transformation_matrix@[event.x, event.y, 1])[0:2]))
             self.bm.entryconfigure(1, label='End element at closest: {}'.format(self.closest_node_label))
             self.lm.entryconfigure(1, label='End distributed load at {}'.format(self.closest_node_label))
@@ -163,64 +197,96 @@ class Window:
         self.rcm.tk_popup(event.x_root, event.y_root, 0)
 
     # Drawing functions
-    def draw_canvas(self):
+    def draw_canvas(self, *args, **kwargs):
+        #print('Draw moments, elements:', self.draw_moment, self.draw_elements)
         self.canvas.delete('all')  # Clear the canvas
-        if self.displaced_plot:
-            self.displaced_plot = False
-            self.draw_displaced()
-            # This is ugly as hell but works as intended
 
-
-        linewidth = 2.0
-        scale = 50
+        # Draw nodes:
         for node in self.problem.nodes:
-
             node_r = (inv(self.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
             if node.draw:
-                node_radius = 2.5
+                node_radius = self.node_radius
                 self.canvas.create_oval(*np.hstack((node_r - node_radius, node_r + node_radius)),
                                                    fill='black', tag='mech')
 
-            if np.any(np.round(node.loads[0:2])):
-                # If lump force, draw force arrow
-                arrow_start = node_r - node.loads[0:2] / np.linalg.norm(node.loads[0:2]) * scale * np.array([1,1])
-                arrow_end = node_r
-                self.canvas.create_line(*arrow_start, *arrow_end,
-                                        arrow='last', fill='blue', tag='mech')
-                self.canvas.create_text(*arrow_start,
-                                        text='{}'.format(node.loads[0:2]),
-                                        anchor='s', tag='mech')
+        if self.bv_draw_elements.get():
+            self.draw_elements()
 
-            if np.alen(node.loads) >= 3 and node.loads[2] != 0:
-                # If lump moment, draw moment arrow
+        if self.bv_draw_loads.get():
+            self.draw_loads()
 
-                arc_start = node_r + [0, -scale/2] * np.sign(node.loads[2])
-                arc_mid = node_r + [scale/2, 0] * np.sign(node.loads[2])
-                arc_end = node_r + [0, scale/2] * np.sign(node.loads[2])
+        if self.bv_draw_boundary_conditions.get():
+            self.draw_boundary_conditions()
 
-                self.canvas.create_line(*arc_start, *arc_mid, *arc_end,
-                                        smooth = True,
-                                        arrow='last', fill='blue', tag='mech')
-                self.canvas.create_text(*arc_start,
-                                        text='{}'.format(node.loads[2]),
-                                        anchor='s', tag='mech')
+        if self.problem.solved:
+            if self.bv_draw_displaced.get():
+                self.draw_displaced()
 
+            if self.bv_draw_shear.get():
+                self.draw_shear_diagram()
 
-            if node.boundary_condition:
-                # If boundary condition, draw boundary condition symbol
-                self.draw_boundary_condition(node.boundary_condition,
-                                             position=node_r,
-                                             draw_angle=np.average([beam.angle for beam in node.beams]))
+            if self.bv_draw_moment.get():
+                self.draw_moment_diagram()
 
+    def draw_elements(self):
+        linewidth = self.linewidth
+        scale = self.scale
         for beam in self.problem.beams:
             beam_r1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
             beam_r2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2]
             if isinstance(beam, Beam):
-                # Draw the beam
                 self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
                                         width=linewidth, tag = 'mech')
+
+            elif isinstance(beam, Rod):
+                self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
+                                        width=linewidth/2, tag='mech')
+
+    def draw_loads(self):
+        linewidth = self.linewidth
+        scale = self.scale
+        node_radius = self.node_radius
+
+        # Draw nodal loads:
+        for node in self.problem.nodes:
+
+            node_r = (inv(self.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
+            # If lump force, draw force arrow
+            if np.any(np.round(node.loads[0:2])):
+
+                arrow_start = node_r - node.loads[0:2] / np.linalg.norm(node.loads[0:2]) * scale * np.array([1,1])
+                arrow_end = node_r
+                self.canvas.create_line(*arrow_start, *arrow_end,
+                                        arrow='first', fill='blue', tag='mech')
+                self.canvas.create_text(*((arrow_start+arrow_end)/2),
+                                        text='{}'.format(node.loads[0:2]),
+                                        anchor='sw', tag='mech')
+
+            # If lump moment, draw moment arrow
+            if np.alen(node.loads) >= 3 and node.loads[2] != 0:
+
+                sign = np.sign(node.loads[2])
+                print(sign)
+                arc_start = node_r + np.array([0, -scale/2]) * sign
+                arc_mid = node_r + np.array([scale/2, 0]) * sign
+                arc_end = node_r + np.array([0, scale/2]) * sign
+
+                arrow = 'first' if sign == 1 else 'last'
+                self.canvas.create_line(*arc_start, *arc_mid, *arc_end,
+                                        smooth = True,
+                                        arrow=arrow, fill='blue', tag='mech')
+                self.canvas.create_text(*arc_start,
+                                        text='{}'.format(node.loads[2]),
+                                        anchor='ne', tag='mech')
+
+        # Draw member loads:
+        for beam in self.problem.beams:
+            beam_r1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
+            beam_r2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2]
+
+            if isinstance(beam, Beam):
                 if beam.distributed_load:
-                    # Draw a distributed load
+                    # If distributed load, draw a distributed load
                     angle = beam.angle
                     c, s = np.cos(-angle), np.sin(-angle)
                     rotation = np.array([[c, -s], [s, c]])
@@ -231,105 +297,145 @@ class Window:
 
                     self.canvas.create_line(*p1, *p3)
                     self.canvas.create_line(*p2, *p4)
+                    self.canvas.create_text(*p4, text='{}'.format(beam.distributed_load), anchor='sw')
+                    # Drawn on every beam with a distr load
                     for x0,y0 in zip(np.linspace(p2[0], p4[0], 3, endpoint=True),
                                       np.linspace(p2[1], p4[1], 3, endpoint=True)):
                         x1, y1 = np.array([x0, y0]) + rotation @ [0, scale/2]
-                        arrow = 'first' if (beam.beta @ beam.member_loads)[2] > 0 else 'last'
+                        arrow = 'last' if (beam.beta @ beam.member_loads)[2] > 0 else 'first'
                         self.canvas.create_line(x0, y0, x1, y1,
                                                 arrow=arrow)
-                        # Bugs out / draws incorrectly / /// if beam is at 90 degrees
 
-
-
-
-            elif isinstance(beam, Rod):
-                self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
-                                        width=linewidth/2, tag='mech')
-
-    def draw_boundary_condition(self, bc_type, position, draw_angle=0):
+    def draw_boundary_conditions(self):
         """
-        :param bc_type: 'fixed', 'pinned', 'roller', 'fix' or 'pin'
+        :param bc_type: 'fixed', 'pinned', 'roller', 'locked', 'fix', 'pin', 'locked'
         """
-        scale = 20
-        linewidth = 3
+        scale = self.scale / 2
+        linewidth = self.linewidth 
+        for node in self.problem.nodes:
+            node_r = (inv(self.transformation_matrix)@np.hstack((node.r, 1)))[0:2] 
 
+            if node.boundary_condition == 'fixed':
+                angle = np.average([beam.angle for beam in node.beams])
+                c, s = np.cos(-angle), np.sin(-angle)
+                rotation = np.array([[c, -s], [s, c]])
 
-        if bc_type == 'fixed':
-            r0 = position  # np.array
-            angle = draw_angle
-            c, s = np.cos(-angle), np.sin(-angle)
-            rotation = np.array([[c, -s], [s, c]])
+                self.canvas.create_line(*(node_r + rotation@[0, scale]), *(node_r + rotation@[0, -scale]),
+                                                              width=linewidth, fill='black', tag='bc')
+                for offset in np.linspace(0, 2*scale, 6):
+                    self.canvas.create_line(*(node_r + rotation@[0, -scale+offset]),
+                                            *(node_r + rotation@[0, -scale+offset] + rotation@[-scale/2, scale/2]),
+                                            width=linewidth, fill='black', tag='bc')
 
-            self.canvas.create_line(*(r0 + rotation@[0, scale]), *(r0 + rotation@[0, -scale]),
-                                                          width=linewidth, fill='black', tag='bc')
-            for offset in np.linspace(0, 2*scale, 6):
-                self.canvas.create_line(*(r0 + rotation@[0, -scale+offset]),
-                                        *(r0 + rotation@[0, -scale+offset] + rotation@[-scale/2, scale/2]),
+            elif node.boundary_condition == 'pinned' or node.boundary_condition == 'roller':
+                k = 1.5  # constant - triangle diameter
+
+                self.canvas.create_oval(*(node_r - scale/4), *(node_r + scale/5))
+                self.canvas.create_line(*node_r, *(node_r + np.array([-np.sin(np.deg2rad(30)),
+                                                              np.cos(np.deg2rad(30))]) * k*scale),
+                                        width=linewidth, fill='black', tag='bc')
+                self.canvas.create_line(*node_r, *(node_r + np.array([np.sin(np.deg2rad(30)),
+                                                              np.cos(np.deg2rad(30))])*k*scale),
                                         width=linewidth, fill='black', tag='bc')
 
-        elif bc_type == 'pinned' or bc_type == 'roller':
-            r0 = position  # np.array
-            k = 1.5  # constant - triangle diameter
-
-            self.canvas.create_oval(*(r0 - scale/4), *(r0 + scale/5))
-            self.canvas.create_line(*r0, *(r0 + np.array([-np.sin(np.deg2rad(30)),
-                                                          np.cos(np.deg2rad(30))]) * k*scale),
-                                    width=linewidth, fill='black', tag='bc')
-            self.canvas.create_line(*r0, *(r0 + np.array([np.sin(np.deg2rad(30)),
-                                                          np.cos(np.deg2rad(30))])*k*scale),
-                                    width=linewidth, fill='black', tag='bc')
-
-            self.canvas.create_line(*(r0 + (np.array([-np.sin(np.deg2rad(30)),
-                                                          np.cos(np.deg2rad(30))])
-                                            + np.array([-1.4/(k*scale), 0])
-                                            ) * k * scale),
-                                    *(r0 + (np.array([np.sin(np.deg2rad(30)),
-                                                     np.cos(np.deg2rad(30))])
-                                            + np.array([1.4/(k*scale), 0])
-                                            ) * k * scale),
-                                    width=linewidth, fill='black', tag='bc')
-            if bc_type == 'roller':
-                self.canvas.create_line(*(r0 + np.array([-np.sin(np.deg2rad(30)),
-                                                         np.cos(np.deg2rad(30))])*k*scale
-                                                        + np.array([-scale/2, scale/4])),
-                                        *(r0 + np.array([np.sin(np.deg2rad(30)),
-                                                         np.cos(np.deg2rad(30))])*k*scale)
-                                                        + np.array([scale/2, scale/4]),
+                self.canvas.create_line(*(node_r + (np.array([-np.sin(np.deg2rad(30)),
+                                                              np.cos(np.deg2rad(30))])
+                                                + np.array([-1.4/(k*scale), 0])
+                                                ) * k * scale),
+                                        *(node_r + (np.array([np.sin(np.deg2rad(30)),
+                                                         np.cos(np.deg2rad(30))])
+                                                + np.array([1.4/(k*scale), 0])
+                                                ) * k * scale),
                                         width=linewidth, fill='black', tag='bc')
+                if node.boundary_condition == 'roller':
+                    self.canvas.create_line(*(node_r + np.array([-np.sin(np.deg2rad(30)),
+                                                             np.cos(np.deg2rad(30))])*k*scale
+                                                            + np.array([-scale/2, scale/4])),
+                                            *(node_r + np.array([np.sin(np.deg2rad(30)),
+                                                             np.cos(np.deg2rad(30))])*k*scale)
+                                                            + np.array([scale/2, scale/4]),
+                                            width=linewidth, fill='black', tag='bc')
+
+            elif node.boundary_condition == 'locked':
+                self.canvas.create_oval(*(node_r + np.array([-scale, -scale])),
+                                        *(node_r - np.array([-scale, -scale])),
+                                        width=linewidth/2, tag='bc')
+                self.canvas.create_line(*node_r, *(node_r + np.array([scale, -scale])*1.4),
+                                        width=linewidth/2, fill='black', tag='bc')
 
     def draw_displaced(self):
-
-        node_radius = 2.5
+        node_radius = self.node_radius
         for node in self.problem.nodes:
             if node.draw:
-                node.r_ = (inv(self.transformation_matrix) @ [node.r[0], node.r[1], 1])[0:2]
-                self.canvas.create_oval(*np.hstack((node.r_ - node_radius + node.displacements[0:2]*[-1,1],
-                                                    node.r_ + node_radius + node.displacements[0:2]*[-1,1])),
+                node_r = (inv(self.transformation_matrix) @ [node.r[0], node.r[1], 1])[0:2]
+                node_disp = (inv(self.transformation_matrix[0:2,0:2]) @ node.displacements[0:2])
+                print(node_r)
+                print(node_disp)
+
+                self.canvas.create_oval(*np.hstack((node_r - node_radius + node_disp,
+                                                    node_r + node_radius + node_disp)),
                                         fill='red', tag='mech_disp')
 
-                if np.any(np.round(node.loads[0:2])):  # If node is loaded
+                if np.any(np.round(node.loads[0:2])) and False:  # If node is loaded, draw load arrow
                     scale = 50
-                    arrow_start = node.r_ - node.loads[0:2]/np.linalg.norm(node.loads[0:2])*scale*[1, 1]
-                    arrow_end = node.r_
-                    self.canvas.create_line(*arrow_start + node.displacements[0:2]*[-1,1],
-                                            *arrow_end + node.displacements[0:2]*[-1,1],
-                                            arrow='last', fill='blue', tag='mech_disp')
+                    arrow_start = node_r - node.loads[0:2]/np.linalg.norm(node.loads[0:2])*scale*[1, 1]
+                    arrow_end = node_r
+                    self.canvas.create_line(*arrow_start + node_disp,
+                                            *arrow_end + node_disp,
+                                            arrow='first', fill='blue', tag='mech_disp')
 
-                self.canvas.create_text(*node.r_ + node.displacements[0:2],
+                self.canvas.create_text(*node_r + node_disp,
                                         text='{}'.format(np.round(node.displacements, 1)),
                                         anchor='sw', tag='mech_disp')
 
         for beam in self.problem.beams:
-            beam.r1_ = (inv(self.transformation_matrix) @ [beam.r1[0], beam.r1[1], 1])[0:2]
-            beam.r2_ = (inv(self.transformation_matrix) @ [beam.r2[0], beam.r2[1], 1])[0:2]
-            self.canvas.create_line(*np.hstack((beam.r1_ + beam.nodes[0].displacements[0:2]*[-1,1],
-                                                beam.r2_ + beam.nodes[1].displacements[0:2]*[-1,1])),
+            beam_r1 = (inv(self.transformation_matrix) @ [beam.r1[0], beam.r1[1], 1])[0:2]
+            beam_r2 = (inv(self.transformation_matrix) @ [beam.r2[0], beam.r2[1], 1])[0:2]
+            beam_disp1 = inv(self.transformation_matrix[0:2,0:2]) @ beam.nodes[0].displacements[0:2]
+            beam_disp2 = inv(self.transformation_matrix[0:2,0:2]) @ beam.nodes[1].displacements[0:2]
+            self.canvas.create_line(*np.hstack((beam_r1 + beam_disp1,
+                                                beam_r2 + beam_disp2)),
                                         fill='red', tag='mech_disp', dash=(1,))
 
-        if hasattr(self, 'displaced_plot'):
-            if self.displaced_plot:
-                self.canvas.delete('mech_disp')
-        self.displaced_plot = not self.displaced_plot
+    def draw_shear_diagram(self):
+        max_shear = np.max(np.abs(np.array([self.problem.forces[:, 1], self.problem.forces[:, 4]])))
+        scale = 100/max_shear
+        for beam in self.problem.beams:
+            s,c = np.sin(beam.angle), np.cos(beam.angle)
+            R = np.array([[c, -s], [s, c]])
+
+            v1 = beam.forces[1]
+            v2 = -beam.forces[4]
+
+            p1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
+            p2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
+            self.canvas.create_line(*p1, *p2,
+                                    tag='sheardiagram')
+            self.canvas.create_text(*p1, text='{}'.format(np.round(v1,2)), anchor='sw')
+
+    def draw_moment_diagram(self):
+        max_moment = np.max(np.abs(np.array([self.problem.forces[:,2], self.problem.forces[:,5]])))
+        print('Max moment', max_moment)
+        scale = 100/max_moment
+        for beam in self.problem.beams:
+            s,c = np.sin(beam.angle), np.cos(beam.angle)
+            R = np.array([[c, -s], [s, c]])
+
+            v1 = beam.forces[2]
+            print('v1', v1)
+            v2 = -beam.forces[5]
+
+            p1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
+            p2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
+            self.canvas.create_line(*p1, *p2,
+                                    tag='momentdiagram')
+            self.canvas.create_text(*p1, text='{}'.format(np.round(v1, 2)), anchor='sw')
+
+    def query_node(self, node):
+        self.problem.nodes[self.problem.node_at(node)].draw = True
+        self.draw_canvas()
+        pass
+
 
     # Scaling and moving functions
     def scaleup(self, event):
@@ -343,15 +449,18 @@ class Window:
         self.draw_canvas()
 
     def autoscale(self):
-        canvas_size = np.sqrt(self.canvas.width**2 + self.canvas.height**2)
-        model_size = self.problem.model_size()
-        self.ratio = 1/2 * canvas_size / model_size  # Big if model size is small
-        self.transformation_matrix[0:2,0:2] = np.array([[1,0],[0,-1]]) / self.ratio
+        try:
+            canvas_size = np.sqrt(self.canvas.width**2 + self.canvas.height**2)
+            model_size = self.problem.model_size()
+            self.ratio = 1/2*canvas_size/model_size  # Big if model size is small
+            self.transformation_matrix[0:2, 0:2] = np.array([[1, 0], [0, -1]])/self.ratio
 
-
-        self.zoom = self.ratio
-        self.move_to((self.canvas.width/2, self.canvas.height/2))
-        self.draw_canvas()
+            self.zoom = self.ratio
+            self.move_to(np.array([self.canvas.width/2, self.canvas.height/2])
+                         + np.average(p.nodal_coordinates, axis=0)*np.array([-1,1])/2)
+            self.draw_canvas()
+        except:
+            pass
 
     def move(self, event):
         if self.prev_x is None or self.prev_y is None:
@@ -366,7 +475,7 @@ class Window:
         self.prev_y = event.y
         self.draw_canvas()
 
-    def move_to(self, xy=(200, -200)):
+    def move_to(self, xy=(50, -150)):
         # Moves the problem csys origin to canvas csys (xy)
         x,y = xy
         self.transformation_matrix[0:3,2] = np.array([-self.transformation_matrix[0,0]*(x-1),
@@ -408,7 +517,7 @@ class Window:
 
     def boundary_condition(self, bc):
         """
-        :param bc: 'fixed', 'fix', 'pinned', 'pin' or 'roller'
+        :param bc: 'fixed', 'fix', 'pinned', 'locked', 'pin', 'roller', 'lock'
         """
         if bc == 'fix':
             self.problem.fix(self.problem.node_at(self.closest_node_label))
@@ -416,6 +525,8 @@ class Window:
             self.problem.pin(self.problem.node_at(self.closest_node_label))
         elif bc == 'roller':
             self.problem.roller(self.problem.node_at(self.closest_node_label))
+        elif bc == 'locked':
+            self.problem.lock(self.problem.node_at(self.closest_node_label))
         else:
             pass
         self.draw_canvas()
@@ -466,9 +577,10 @@ class Window:
 
     def _selftest(self, loadcase = 1):
         if loadcase == 1:  # Cantilever beam, point load
-            self.problem.create_beams((0,0), (707,-707), n=5)
+            self.problem.create_beams((0,0), (1000,0), n=4)
             self.problem.fix(self.problem.node_at((0,0)))
-            #self.problem.load_members_distr((0,0),(707,-707),1)
+            self.problem.load_members_distr((0,0),(1000,0), -10)
+
 
             self.draw_canvas()
 
@@ -508,6 +620,7 @@ class LoadInputMenu:
         """
         top = self.top = tk.Toplevel(root)
         self.top.winfo_toplevel().title('Apply load')
+        self.top.iconbitmap('dss_icon.ico')
 
         self.window = window
         self.root = root
@@ -557,6 +670,7 @@ class DistrLoadInputMenu:
         """
         top = self.top = tk.Toplevel(root)
         self.top.winfo_toplevel().title('Apply distributed load')
+        self.top.iconbitmap('dss_icon.ico')
 
         self.window = window
         self.root = root
@@ -605,6 +719,7 @@ class BeamInputMenu:
 
         top = self.top = tk.Toplevel(root)
         self.top.winfo_toplevel().title('Create element(s)')
+        self.top.iconbitmap('dss_icon.ico')
         self.window = window
         self.root = root
         self.problem = problem
@@ -681,6 +796,45 @@ class BeamInputMenu:
                 self.window.autoscale()
 
         self.top.destroy()
+
+class ForceDiagram:
+    def __init__(self, window, root, problem):
+        """
+                :param window: The DSSolver main window (passed as 'self' from class Window)
+                :param root: root is the root = tkinter.Tk() (passed as 'self.root')
+                :param problem: Instance of the Problem class (passed as 'self.problem')
+                """
+        self.window = window
+        self.root = root
+        self.problem = problem
+
+        self.top = tk.Toplevel(self.root, bg='white')
+        self.top.minsize(width=512, height=512)
+
+        self.canvas = ResizingCanvas(self.top, bg='white', highlightthickness=0)
+        self.canvas.grid(sticky='nsew')
+        self.canvas.grid(row=1)
+
+        self.topmenu = tk.Menu(self.top)
+        self.top.config(menu=self.topmenu)
+        self.topmenu.add_command(label='Shear force diagram',
+                                 command=lambda: self.shear_diagram())
+        self.topmenu.add_command(label='Moment diagram',
+                                 command=lambda: self.moment_diagram())
+        self.topmenu.add_command(label='Clear',
+                                 command=lambda: self.clear())
+
+    def draw_problem(self):
+        pass
+
+    def shear_diagram(self):
+        pass
+
+    def moment_diagram(self):
+        pass
+
+    def clear(self):
+        pass
 
 class NodeInputMenu:
     def __init__(self, root, problem):

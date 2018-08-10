@@ -14,8 +14,10 @@ class Problem:
 
         self.constrained_dofs = tuple()
         self.loads = np.array([])  # Joint loads
-        self.member_loads = np.array([])  # Member loads
+        self.member_loads = np.array([])  # Member loads, for distr loads and such
+        self.forces = None  # Forces (at all nodes, incl removed dofs)
         self.displacements = None  # Assigned at solution ( self.solve() )
+        self.solved = False
 
     def create_beam(self, r1, r2, E=2e5, A=1e5, I=1e5, drawnodes=3):
         """
@@ -119,6 +121,11 @@ class Problem:
         self.nodes[node_id].draw = True
         self.nodes[node_id].boundary_condition = 'roller'
 
+    def lock(self, node_id):
+        self.constrained_dofs += (self.nodes[node_id].dofs[2],)
+        self.nodes[node_id].draw = True
+        self.nodes[node_id].boundary_condition = 'locked'
+
     def glider(self, node_id):
         self.constrained_dofs += (self.nodes[node_id].dofs[2], self.nodes[node_id].dofs[2])
         self.nodes[node_id].draw = True
@@ -139,13 +146,13 @@ class Problem:
     def load_member_distr(self, member_id, load):
         # Distributed load
         beam = self.beams[member_id]  # Beam object
-        beam.member_loads = beam.beta.T @ np.array([0,
+        beam.member_loads = -beam.beta.T @ np.array([0,
                                       load * beam.length/2,
                                       load * beam.length**2 / 12,
                                       0,
                                       load*beam.length/2,
                                       -load * beam.length**2 / 12])
-        beam.distributed_load = True if load != 0 else False  # For drawing purposes
+        beam.distributed_load = load if load != 0 else False  # For drawing purposes
         # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
 
     def load_members_distr(self, r1, r2, load):
@@ -214,10 +221,17 @@ class Problem:
             beam.displacements = np.hstack((beam.nodes[0].displacements,
                                             beam.nodes[1].displacements))
             beam.forces = beam.k @ beam.displacements + beam.member_loads
+            #beam.nodes[0].forces = beam.forces[0:3]
+            #beam.nodes[1].forces = beam.forces[3:6]  # No sign convention
 
         print('Nodal displacements', self.displacements)
         print('Nodal loads', self.loads)
         print('Member loads', self.member_loads)
+
+        self.forces = np.array([beam.forces for beam in self.beams])
+        # forces.shape == (n, 6), n: no. of beams
+
+        self.solved = True
         return dr
 
     def plot(self):
@@ -310,10 +324,11 @@ class Node:
 
         self.beams = list()
         self.loads = np.array([0,0,0]) # self.loads (Fx, Fy, M) assigned on loading
+        self.forces = np.array([0,0,0])  # self.forces (Fx, Fy, M) assigned on solution
 
         self.number = None  # (node id) assigned on creation
         self.dofs = None  # self.dofs (dof1, dof2, dof3) assigned on creation
-        self.displacements = None  # self.displacement (d1, d2, d3) asssigned on solution
+        self.displacements = np.array([0,0,0])  # self.displacement (d1, d2, d3) asssigned on solution
         self.boundary_condition = None  # 'fixed', 'pinned', 'roller'
 
         self.draw = draw  # Node is not drawn unless it is interesting
@@ -348,7 +363,7 @@ class Beam:
         self.displacements = None  # (1x6) assigned on solution
         self.forces = None  # (1x6) assigned on solution
         self.member_loads = np.zeros(6)  #
-        self.distributed_load = False
+        self.distributed_load = 0
         # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
 
         self.s, self.c = np.sin(self.angle), np.cos(self.angle)
