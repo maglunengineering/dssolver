@@ -1,8 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
-import matplotlib.patches as patches
-import itertools as it
+
 
 np.set_printoptions(suppress=True)
 
@@ -14,8 +13,11 @@ class Problem:
         self.beams = list()
 
         self.constrained_dofs = tuple()
-        self.loads = np.array([])
+        self.loads = np.array([])  # Joint loads
+        self.member_loads = np.array([])  # Member loads, for distr loads and such
+        self.forces = None  # Forces (at all nodes, incl removed dofs)
         self.displacements = None  # Assigned at solution ( self.solve() )
+        self.solved = False
 
     def create_beam(self, r1, r2, E=2e5, A=1e5, I=1e5, drawnodes=3):
         """
@@ -50,7 +52,6 @@ class Problem:
             print('NO BEAM CREATED, already exists between', r1, r2)
             return self.beams[self.beams.index(beam)]
 
-
     def create_rod(self, r1, r2, E=2e5, A=1e5, *args):
         rod = Rod(r1, r2, E, A)
 
@@ -75,8 +76,8 @@ class Problem:
             else:
                 self.create_beam(ri, rj, E, A, I, drawnodes=0)
 
-    def create_node(self, r):
-        node = Node(r)
+    def create_node(self, r, draw=False):
+        node = Node(r, draw=draw)
         if node not in self.nodes:  # Node does not exist, i.e. this is a new node
             self.nodes.append(node)
             self.loads = np.append(self.loads, np.zeros(3))  # Append three zeroes to global load vector
@@ -101,13 +102,13 @@ class Problem:
     def beam_at(self, r1, r2):
         r1, r2 = np.asarray(r1), np.asarray(r2)
         for beam in self.beams:
-            if beam == Beam(r1, r2):
+            if beam == Beam(r1, r2) or beam == Beam(r2, r1):
                 return beam.number
         return 'No beam'
 
     def fix(self, node_id):
         self.constrained_dofs += tuple(self.nodes[node_id].dofs)
-        self.nodes[node_id].draw = True
+        self.nodes[node_id].draw = False
         self.nodes[node_id].boundary_condition = 'fixed'
 
     def pin(self, node_id):
@@ -119,6 +120,11 @@ class Problem:
         self.constrained_dofs += (self.nodes[node_id].dofs[1],)
         self.nodes[node_id].draw = True
         self.nodes[node_id].boundary_condition = 'roller'
+
+    def lock(self, node_id):
+        self.constrained_dofs += (self.nodes[node_id].dofs[2],)
+        self.nodes[node_id].draw = True
+        self.nodes[node_id].boundary_condition = 'locked'
 
     def glider(self, node_id):
         self.constrained_dofs += (self.nodes[node_id].dofs[2], self.nodes[node_id].dofs[2])
@@ -137,13 +143,49 @@ class Problem:
         self.loads[dofs] = load
         self.nodes[node_id].draw = True
 
+    def load_member_distr(self, member_id, load):
+        # Distributed load
+        beam = self.beams[member_id]  # Beam object
+        beam.member_loads = -beam.beta.T @ np.array([0,
+                                      load * beam.length/2,
+                                      load * beam.length**2 / 12,
+                                      0,
+                                      load*beam.length/2,
+                                      -load * beam.length**2 / 12])
+        beam.distributed_load = load if load != 0 else False  # For drawing purposes
+        # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
+
+    def load_members_distr(self, r1, r2, load):
+        # Distributed load on colinear beams from r1 to r2
+        starting_node = self.nodes[self.node_at(r1)]
+        ending_node = self.nodes[self.node_at(r2)]
+        r1 = np.array(r1); r2 = np.array(r2)
+        dir = (r2 - r1) / np.linalg.norm(r2 - r1)
+
+        checking_node = starting_node
+        while checking_node != ending_node:
+            # OBS! Will loop forever if it fails
+            for possible_next_node in checking_node.connected_nodes():
+                dir_to_node = (possible_next_node.r - checking_node.r)/ \
+                              np.linalg.norm(possible_next_node.r - checking_node.r)
+                if np.isclose(dir @ dir_to_node, 1):
+                    # possible_next_node is the next node
+                    self.load_member_distr(self.beam_at(possible_next_node.r,
+                                                        checking_node.r), load)
+                    checking_node = possible_next_node
+
+        print('Done adding loads')
+
     def model_size(self):
-        xy = np.array([node.r for node in self.nodes])
-        model_size = np.sqrt( (np.max(xy[:,0]) - np.min(xy[:,0]))**2 + np.max(xy[:,1]) - np.min(xy[:,1]))
-        return model_size
+        xy = self.nodal_coordinates
+        if not np.any(xy):
+            return 1
+        else:
+            model_size = np.sqrt( (np.max(xy[:,0]) - np.min(xy[:,0]))**2 + (np.max(xy[:,1]) - np.min(xy[:,1]))**2)
+            return model_size
 
     def K(self, reduced=False):
-        dofs = 3 * len(self.nodes)
+        dofs = 3 * len(self.nodes)  # int: Number of system dofs
         K = np.zeros((dofs,dofs))
         for beam in self.beams:
             K += beam.Ki(dofs)
@@ -154,23 +196,20 @@ class Problem:
             K = np.delete(K, self.constrained_dofs, axis=1)
             return K
 
-    def K_nlgeom(self, reduced=False):
+    def Qf(self):  # Member force vector
         dofs = 3*len(self.nodes)
-        K = np.zeros((dofs, dofs))
+        self.member_loads = np.zeros(dofs)
         for beam in self.beams:
-            K += beam.Ki(dofs)
-        if not reduced:
-            return K
-        else:
-            K = np.delete(K, self.constrained_dofs, axis=0)
-            K = np.delete(K, self.constrained_dofs, axis=1)
-            return K
+            self.member_loads += beam.Qfi(dofs)
 
     def solve(self):
         free_dofs = np.delete(np.arange(3 * len(self.nodes)), self.constrained_dofs)
+        self.Qf()  # Compute system member load vector
 
         Kr = self.K(reduced=True)
-        Fr = self.loads[free_dofs]
+        F = self.loads - self.member_loads
+        Fr = F[free_dofs]
+        print('Fr', Fr)
         dr = np.linalg.inv(Kr) @ Fr
 
         self.displacements = np.zeros(3 * len(self.nodes))
@@ -178,8 +217,21 @@ class Problem:
 
         for node in self.nodes:
             node.displacements = self.displacements[np.array(node.dofs)]
+        for beam in self.beams:
+            beam.displacements = np.hstack((beam.nodes[0].displacements,
+                                            beam.nodes[1].displacements))
+            beam.forces = beam.k @ beam.displacements + beam.member_loads
+            #beam.nodes[0].forces = beam.forces[0:3]
+            #beam.nodes[1].forces = beam.forces[3:6]  # No sign convention
+
         print('Nodal displacements', self.displacements)
         print('Nodal loads', self.loads)
+        print('Member loads', self.member_loads)
+
+        self.forces = np.array([beam.forces for beam in self.beams])
+        # forces.shape == (n, 6), n: no. of beams
+
+        self.solved = True
         return dr
 
     def plot(self):
@@ -219,13 +271,13 @@ class Problem:
             if node.draw:
                 plt.plot(node.r[0] + node.displacements[0]*scale,
                          node.r[1] + node.displacements[1]*scale, 'ko')
-            try:
+            if not np.isclose(np.linalg.norm(node.loads[0:2]), 0):
+                print('Norm', np.linalg.norm(node.loads[0:2]))
                 plt.arrow(*(node.r + node.displacements[0:2]),
                           *node.loads[0:2]/np.linalg.norm(node.loads[0:2])*self.model_size()/10,
                            head_width = 20
                           )
-            except:
-                pass
+
         for beam in self.beams:
             pos = np.array([beam.r1, beam.r2])
             disp = np.array([beam.nodes[0].displacements[0:2]*scale,
@@ -261,30 +313,36 @@ class Problem:
 
     @property
     def nodal_coordinates(self):
-        nodal_coordinates = np.array([0,0])
-        for node in self.nodes:
-            nodal_coordinates = np.vstack((nodal_coordinates, node.r))
+        nodal_coordinates = np.array([node.r for node in self.nodes])
         return nodal_coordinates
 
 
-
 class Node:
-    def __init__(self, xy):
+    def __init__(self, xy, draw=False):
         self.x, self.y = xy
         self.r = xy
 
         self.beams = list()
         self.loads = np.array([0,0,0]) # self.loads (Fx, Fy, M) assigned on loading
+        self.forces = np.array([0,0,0])  # self.forces (Fx, Fy, M) assigned on solution
 
         self.number = None  # (node id) assigned on creation
         self.dofs = None  # self.dofs (dof1, dof2, dof3) assigned on creation
-        self.displacements = None  # self.displacement (d1, d2, d3) asssigned on solution
+        self.displacements = np.array([0,0,0])  # self.displacement (d1, d2, d3) asssigned on solution
         self.boundary_condition = None  # 'fixed', 'pinned', 'roller'
 
-        self.draw = False  # Node is not drawn unless it is interesting
+        self.draw = draw  # Node is not drawn unless it is interesting
 
     def add_beam(self, beam):
         self.beams.append(beam)
+
+    def connected_nodes(self):
+        other_nodes = []
+        for beam in self.beams:
+            for node in beam.nodes:
+                if not node == self:
+                    other_nodes.append(node)
+        return other_nodes
 
     def __str__(self):
         return '{},{}'.format(self.x, self.y)
@@ -302,6 +360,11 @@ class Beam:
         self.length = np.sqrt( np.dot(self.r2 - self.r1, self.r2 - self.r1) )
 
         self.number = None  # (beam id) assigned on creation
+        self.displacements = None  # (1x6) assigned on solution
+        self.forces = None  # (1x6) assigned on solution
+        self.member_loads = np.zeros(6)  #
+        self.distributed_load = 0
+        # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
 
         self.s, self.c = np.sin(self.angle), np.cos(self.angle)
         self.beta = np.array([[self.c, self.s, 0, 0, 0, 0],
@@ -311,7 +374,7 @@ class Beam:
                               [0, 0, 0, -self.s, self.c, 0],
                               [0, 0, 0, 0, 0, 1]])
 
-        
+
         self.kn = A*E/self.length * (E*I/self.length**3)**(-1)
         self.ke = E*I/self.length**3 * np.array(
              [[self.kn, 0, 0, -self.kn, 0, 0],
@@ -330,13 +393,19 @@ class Beam:
             E[j, i] = 1
         return E @ self.k @ E.T
 
+    def Qfi(self, newdim):
+        dofs = self.nodes[0].dofs + self.nodes[1].dofs
+        E = np.zeros((newdim, len(dofs)))
+        for i, j in enumerate(dofs):
+            E[j, i] = 1
+        return E@self.member_loads
+
 
     def __eq__(self, other):
         return np.array_equal(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
 
 class Rod(Beam):
     """
-
     A beam element with no bending or shear stiffness.
     However, the endnodes of this element must have stiffness against bending and shear, or the stiffness
      matrix will be singular.
@@ -485,8 +554,23 @@ if __name__ == '__main__':
             m.fix(m.node_at((20,120)))
             m.load_node(m.node_at((200,240)), (100000,0,0))
 
+        def lc14():
+            m.create_beams((0,0),(707,-707), n=1)
+            m.fix(m.node_at((0,0)))
+            #m.pin(m.node_at((0,1000)))
 
-    lc6()
+            #m.load_node(m.node_at((500,0)), (0, -10000, 0))
+            #for i in range(6):
+            #    m.load_member_distr(i, 1)
+            m.load_members_distr((0,0),(707,-707), 10)
+
+        def lc15():
+            m.create_beams((0,0),(1000,0), n=1)
+            m.fix(m.node_at((0,0)))
+            m.load_members_distr((0,0),(1000,0),10)
+
+
+    lc15()
 
     m.solve()
     #m.plot()
