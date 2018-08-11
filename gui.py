@@ -575,11 +575,10 @@ class Window:
         print('r1, r2', self.r1, self.r2)
 
     def _selftest(self, loadcase = 1):
+        self.new_problem()
         if loadcase == 1:  # Cantilever beam, point load
             self.problem.create_beams((0,0), (1000,0), n=4)
             self.problem.fix(self.problem.node_at((0,0)))
-            self.problem.load_members_distr((0,0),(1000,0), -10)
-
 
             self.draw_canvas()
 
@@ -590,20 +589,12 @@ class Window:
 
             self.draw_canvas()
 
-        if loadcase == 3:  # L beam(s), point load
-            self.problem.create_beams((0,0), (1000,0))
-            self.problem.create_beams((1000,0), (1000,-1000))
-            self.problem.fix(self.problem.node_at((0,0)))
-
-            self.draw_canvas()
-
         if loadcase == 4:  # Fanned out cantilever beams with load=10 distr loads
             for point in ((1000,0),(707,-707),(0,-1000),(-707,-707),(-1000,0)):
                 self.problem.create_beams((0,0),point, n=2)
                 self.problem.load_members_distr((0,0),point, load=10)
 
             self.problem.fix(self.problem.node_at((0,0)))
-
 
             self.draw_canvas()
 
@@ -834,27 +825,6 @@ class ForceDiagram:
 
     def clear(self):
         pass
-
-class NodeInputMenu:
-    def __init__(self, root, problem):
-        top = self.top = tk.Toplevel(root)
-        self.root = root
-        self.problem = problem
-
-        self.label = tk.Label(top, text='Create node at:')
-        self.label.pack()
-
-        self.entry = tk.Entry(top)
-        self.entry.pack()
-
-        self.b = tk.Button(top, text='Create node', command=self.cleanup)
-        self.b.pack()
-
-    def cleanup(self):
-        value = np.array(eval(self.entry.get()))
-        self.problem.create_node(value)
-        self.top.destroy()
-        return value
 
 
 if __name__ == '__main__':
