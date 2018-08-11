@@ -1,4 +1,4 @@
-# dssolver
+# DSSolver
 
 Last commit: 11/8-2018
 
