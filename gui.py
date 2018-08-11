@@ -121,6 +121,8 @@ class Window:
 
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale())
 
+        #topmenu.add_command(label='SecMgr', command=lambda: SectionManager(self, self.root, self.problem))
+
     def build_bc_menu(self):
         """
                 Coordinates on these labels are updated when the left mouse button
@@ -736,6 +738,14 @@ class BeamInputMenu:
         self.e_r2.insert(0, '{},{}'.format(def_r2[0], def_r2[1]))
         self.e_r1.focus_set()
 
+        self.secmgr = tk.Button(top,
+                                text='Section manager',
+                                command=lambda: SectionManager(bip=self,
+                                                               window=self.window,
+                                                               root=self.root))
+        self.secmgr.grid(row=0, column=1, columnspan=2, sticky='e')
+        #self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
+
 
         self.b = tk.Button(top, text='Create element(s)', command=self.cleanup)
         self.b.grid(row=8, column=0)
@@ -765,6 +775,7 @@ class BeamInputMenu:
             self.e_I.config(state=tk.NORMAL)
             self.e_n.config(state=tk.NORMAL)
 
+
     def cleanup(self):
         r1 = np.array(eval(self.e_r1.get()))
         r2 = np.array(eval(self.e_r2.get()))
@@ -786,6 +797,92 @@ class BeamInputMenu:
                 self.window.autoscale()
 
         self.top.destroy()
+
+class SectionManager:
+    def __init__(self, bip, window, root):
+        """
+        :param bip: The BeamInputMenu window (passed as 'self' from class BeamInputMenu)
+        :param window: The DSSolver main window (passed as 'self' from class Window)
+        :param root: root is the root = tkinter.Tk() (passed as 'self.root')
+        :param problem: Instance of the Problem class (passed as 'self.problem')
+        """
+        top = self.top = tk.Toplevel(root)
+        self.top.winfo_toplevel().title('Section manager')
+        self.top.iconbitmap(window.icon)
+
+        self.bip = bip
+        self.window = window
+        self.root = root
+
+        self.A = None
+        self.I = None
+
+        self.sec = tk.StringVar()
+        self.sec.set('Rectangular')
+        self.sec.trace('w', self.change_dropdown)
+        self.sections = ['Rectangular', 'Circular', 'I-beam']
+        self.dropdown = tk.OptionMenu(top, self.sec, *self.sections)
+        self.dropdown.grid(row=0, column=1, rowspan=2)
+
+        entrykeys = ['DIM1', 'DIM2', 'DIM3', 'DIM4']
+        entries = [self.dim1, self.dim2, self.dim3, self.dim4] = [tk.Entry(top) for _ in range(4)]
+        for idx, entry in enumerate(entries):
+            entry.grid(row=idx+2, column=1)
+
+        for idx, key in enumerate(entrykeys):
+            tk.Label(top, text=key).grid(row=idx+2)
+
+        self.dim3.insert(0, 0)
+        self.dim4.insert(0, 0)
+
+        self.valuelabel = tk.Label(top, text='Placeholder, area: A, I:I')
+        self.valuelabel.grid(row=6, column=0, columnspan=2)
+
+        self.b = tk.Button(top, text='Ok', command=self.cleanup)
+        self.b.grid(row=7, column=0, columnspan=2)
+        self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
+
+        self.photo = tk.PhotoImage(file='dim_Rectangular.gif')
+        self.photolabel = tk.Label(top, image=self.photo)
+        self.photolabel.photo = self.photo
+        self.photolabel.grid(row=1, column=2, rowspan=7)
+
+    def change_dropdown(self, *args):
+        file = 'dim_{}.gif'.format(self.sec.get())
+        self.photo = tk.PhotoImage(file=file)
+        self.photolabel.configure(image=self.photo)
+
+        if self.sec.get() == 'Circular':
+            self.dim3.config(state=tk.DISABLED)
+            self.dim4.config(state=tk.DISABLED)
+        else:
+            self.dim3.config(state=tk.NORMAL)
+            self.dim4.config(state=tk.NORMAL)
+
+    def cleanup(self, *args):
+        dim1 = eval(self.dim1.get())
+        dim2 = eval(self.dim2.get())
+        dim3 = eval(self.dim3.get())
+        dim4 = eval(self.dim4.get())
+        if self.sec.get() == 'Rectangular':
+            self.I = 1/12 * (dim1 * dim2**3 - dim3 * dim4**3)
+            self.A = (dim1*dim2) - (dim3*dim4)
+        elif self.sec.get() == 'Circular':
+            self.I = np.pi/4 * ((dim1/2)**4 - (dim2/2)**4)
+            self.A = np.pi * (dim1**2 - dim2**2)
+        elif self.sec.get() == 'I-beam':
+            self.I = 1/12 * ((dim1 * dim3**3)
+                            -((dim1-dim4) * (dim3-2*dim2)**3))
+            self.A = (dim1*dim3) - (dim3-2*dim2)*(dim1-dim4)
+
+        self.bip.e_A.delete(0, tk.END)
+        self.bip.e_I.delete(0, tk.END)
+        self.bip.e_A.insert(0, str(self.A))
+        self.bip.e_I.insert(0, str(self.I))
+
+        self.top.destroy()
+
+
 
 class ForceDiagram:
     def __init__(self, window, root, problem):
