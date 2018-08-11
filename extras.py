@@ -19,3 +19,7 @@ class ResizingCanvas(tk.Canvas):
         self.config(width=self.width, height=self.height)
         # rescale all the objects tagged with the "all" tag
         #self.scale("all",0,0,wscale,hscale)
+
+    #@property
+    def size(self):
+        return (self.height**2 + self.width**2) ** 0.5

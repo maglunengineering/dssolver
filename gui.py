@@ -1,15 +1,15 @@
 import tkinter as tk
-from tkinter import messagebox
 from elements import *
 from numpy.linalg import inv
 from extras import ResizingCanvas
-import matplotlib.pyplot as plt
+from sys import platform as _platform
 
 class Window:
     def __init__(self, root, problem=None, *args, **kwargs):
         self.root = root
         self.root.minsize(width=1024, height=512)
-        self.root.iconbitmap('dss_icon.ico')
+        self.icon = 'dss_icon.ico' if _platform=='win32' or _platform=='win64' else '@dss_icon.xbm'
+        self.root.iconbitmap(self.icon)
         self.problem = problem
 
         self.mainframe = tk.Frame(self.root, bg='white')
@@ -120,7 +120,6 @@ class Window:
                                   onvalue=True, offvalue=False, variable=self.bv_draw_moment)
 
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale())
-        topmenu.add_command(label='Move to origin', command= lambda: self.move_to())
 
     def build_bc_menu(self):
         """
@@ -620,7 +619,7 @@ class LoadInputMenu:
         """
         top = self.top = tk.Toplevel(root)
         self.top.winfo_toplevel().title('Apply load')
-        self.top.iconbitmap('dss_icon.ico')
+        self.top.iconbitmap(window.icon)
 
         self.window = window
         self.root = root
@@ -670,7 +669,7 @@ class DistrLoadInputMenu:
         """
         top = self.top = tk.Toplevel(root)
         self.top.winfo_toplevel().title('Apply distributed load')
-        self.top.iconbitmap('dss_icon.ico')
+        self.top.iconbitmap(window.icon)
 
         self.window = window
         self.root = root
@@ -719,7 +718,7 @@ class BeamInputMenu:
 
         top = self.top = tk.Toplevel(root)
         self.top.winfo_toplevel().title('Create element(s)')
-        self.top.iconbitmap('dss_icon.ico')
+        self.top.iconbitmap(window.icon)
         self.window = window
         self.root = root
         self.problem = problem
