@@ -14,12 +14,14 @@ class Window:
 
         self.mainframe = tk.Frame(self.root, bg='white')
         self.mainframe.pack(fill=tk.BOTH, expand=True)
+        #self.mainframe.grid(row=0, column=0, sticky='nsew')
         self.mainframe.winfo_toplevel().title('DSSolver')
         self.canvas = tk.Canvas()  # Changed later on
         self.rcm = None
         self.bcm = None
         self.bm = None
         self.lm = None
+        self.rsmenu = None
         self.click_x = None
         self.click_y = None
         self.r1 = None
@@ -54,9 +56,10 @@ class Window:
                     self.bv_draw_displaced, self.bv_draw_shear, self.bv_draw_moment):
             var.trace('w', self.draw_canvas)
 
-        self.build_grid()
+        #self.build_grid()
         self.build_menu()
         self.build_banner()
+        #self.build_rsmenu()
         self.build_canvas()
         self.build_bc_menu()  # Outsourced
 
@@ -66,13 +69,27 @@ class Window:
     # Building functions
     def build_grid(self):
         self.mainframe.columnconfigure(0, weight=1)  #
+        #self.mainframe.columnconfigure(1, weight=0)  # Quick menu
         self.mainframe.rowconfigure(0, weight=0)  # 'DSSolver' banner
         self.mainframe.rowconfigure(1, weight=1)  # Canvas (resizable)
         self.mainframe.rowconfigure(2, weight=0)  # Output console?
 
+
     def build_banner(self):
-        banner = tk.Label(self.mainframe, bg='white', text='DSSolver')
-        banner.grid(row=0, column=0)
+        self.banner = tk.Label(self.mainframe, bg='white', text='DSSolver')
+        self.banner.grid(row=0, column=0)
+
+    def build_rsmenu(self):
+        self.rsm = tk.Label(self.mainframe, bg='black')
+        self.rsm.grid(row=1, column=1, rowspan=1, sticky='ns')
+
+        self.rsm_b1 = tk.Button(self.rsmenu, text='RSM button')
+        self.rsm_b1.grid(row=0, column=0)
+
+        self.rsm_lbox = tk.Listbox(self.rsmenu, text='Listbox')
+        self.rsm_lbox.insert(1, 'Node 1')
+        self.rsm_lbox.insert(2, 'Node 2')
+        self.rsm_lbox.grid(row=1, column=1)
 
     def build_menu(self):
         topmenu = tk.Menu(self.root)
@@ -80,7 +97,7 @@ class Window:
 
         menu_file = tk.Menu(topmenu)
         topmenu.add_cascade(label='File', menu=menu_file)
-        menu_file.add_command(label='New case', command=lambda: self.new_problem())
+        menu_file.add_command(label='New problem ', command=lambda: self.new_problem())
 
         menu_edit = tk.Menu(topmenu)
         topmenu.add_cascade(label='Edit', menu=menu_edit)
@@ -98,10 +115,8 @@ class Window:
                             command=lambda: self._selftest(1))
         menu_stdcases.add_command(label='Simply supported beam',
                             command=lambda: self._selftest(2))
-        menu_stdcases.add_command(label='L beam(s)',
-                            command=lambda: self._selftest(3))
         menu_stdcases.add_command(label='Fanned out cantilever beams',
-                            command=lambda: self._selftest(4))
+                            command=lambda: self._selftest(3))
 
         show_menu = tk.Menu(topmenu)
         topmenu.add_cascade(label='Show/hide', menu=show_menu)
@@ -119,7 +134,7 @@ class Window:
         show_menu.add_checkbutton(label='Moment diagram',
                                   onvalue=True, offvalue=False, variable=self.bv_draw_moment)
 
-        topmenu.add_command(label='Autoscale', command=lambda: self.autoscale())
+        topmenu.add_command(label='Autoscale', command=lambda: self.autoscale() )
 
         #topmenu.add_command(label='SecMgr', command=lambda: SectionManager(self, self.root, self.problem))
 
@@ -162,7 +177,7 @@ class Window:
     def build_canvas(self):
         self.canvas = ResizingCanvas(self.mainframe, bg='white', highlightthickness=0)
         self.canvas.grid(sticky='nsew')
-        self.canvas.grid(row=1)
+        self.canvas.grid(row=1, column=0)
 
         self.canvas.bind('<Button-1>', self._printcoords)
         self.canvas.bind('<Button-3>', self.rightclickmenu)
@@ -232,16 +247,16 @@ class Window:
     def draw_elements(self):
         linewidth = self.linewidth
         scale = self.scale
-        for beam in self.problem.beams:
-            beam_r1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
-            beam_r2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2]
-            if isinstance(beam, Beam):
+        for element in self.problem.beams:
+            beam_r1 = (inv(self.transformation_matrix) @ np.hstack((element.r1, 1)))[0:2]
+            beam_r2 = (inv(self.transformation_matrix) @ np.hstack((element.r2, 1)))[0:2]
+            if type(element) == Beam:
                 self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
                                         width=linewidth, tag = 'mech')
 
-            elif isinstance(beam, Rod):
+            elif type(element) == Rod:
                 self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
-                                        width=linewidth/2, tag='mech')
+                                        width=linewidth/4, tag='mech')
 
     def draw_loads(self):
         linewidth = self.linewidth
@@ -317,7 +332,8 @@ class Window:
             node_r = (inv(self.transformation_matrix)@np.hstack((node.r, 1)))[0:2] 
 
             if node.boundary_condition == 'fixed':
-                angle = np.average([beam.angle for beam in node.beams])
+                angle_vector = sum(n.r-node.r for n in node.connected_nodes())
+                angle = np.arctan2(*angle_vector[::-1])
                 c, s = np.cos(-angle), np.sin(-angle)
                 rotation = np.array([[c, -s], [s, c]])
 
@@ -450,18 +466,34 @@ class Window:
         self.draw_canvas()
 
     def autoscale(self):
-        try:
-            canvas_size = np.sqrt(self.canvas.width**2 + self.canvas.height**2)
-            model_size = self.problem.model_size()
-            self.ratio = 1/2*canvas_size/model_size  # Big if model size is small
-            self.transformation_matrix[0:2, 0:2] = np.array([[1, 0], [0, -1]])/self.ratio
+        print('AUTOSCALE')
+        x_ = (np.max(self.problem.nodal_coordinates[:, 0]) + np.min(self.problem.nodal_coordinates[:, 0]))/2
+        y_ = (np.max(self.problem.nodal_coordinates[:, 1]) + np.min(self.problem.nodal_coordinates[:, 1]))/2
 
-            self.zoom = self.ratio
-            self.move_to(np.array([self.canvas.width/2, self.canvas.height/2])
-                         + np.average(p.nodal_coordinates, axis=0)*np.array([-1,1])/2)
-            self.draw_canvas()
-        except:
-            pass
+        w = self.canvas.width
+        h = self.canvas.height
+
+        a = self.problem.model_size()*0.7
+        print('x_, y_, a', x_, y_, a)
+
+        r0 = np.array([x_, y_, 1]) - np.array([a/2, a/2, 0])  # Problem bounding square SW corner
+        r0_ = np.array([w/5, 4*h/5, 1])  # Canvas subsquare SW corner
+
+        r = np.array([x_, y_, 1])  # Problem midpoint
+        r_ = np.array([w/5, 4*h/5, 1]) + np.array([h/3, -h/3, 0])  # Canvas subsquare midpoint
+
+        r1 = np.array([x_, y_, 1]) + np.array([0, a/2, 0])  # Problem bounding square N centerpoint
+        r1_ = r_ + np.array([0, -h/3, 0])  # Canvas subsquare N centerpoint
+
+        R = np.array([r0, r, r1]).T
+        R_ = np.array([r0_, r_, r1_]).T
+        print('R', R)
+        print('R_', R_)
+        # Must make sure both R and R_ are invertible, or T will not be invertible
+
+        self.transformation_matrix = R@inv(R_)
+        # print(self.transformation_matrix)
+        self.draw_canvas()
 
     def move(self, event):
         if self.prev_x is None or self.prev_y is None:
@@ -479,10 +511,28 @@ class Window:
     def move_to(self, xy=(50, -150)):
         # Moves the problem csys origin to canvas csys (xy)
         x,y = xy
-        self.transformation_matrix[0:3,2] = np.array([-self.transformation_matrix[0,0]*(x-1),
-                                                      -self.transformation_matrix[1,1]*(y-1),
+        #print(xy)
+        self.transformation_matrix[0:3,2] = np.array([self.transformation_matrix[0,0]*(x-1),
+                                                      self.transformation_matrix[1,1]*(y-1),
                                                       1])
         self.draw_canvas()
+
+    def _autoscale_old(self):
+        canvas_size = np.sqrt(self.canvas.width**2 + self.canvas.height**2)
+        model_size = self.problem.model_size()
+        self.ratio = 1/4*canvas_size/model_size  # Big if model size is small
+        self.transformation_matrix[0:2, 0:2] = np.array([[1, 0], [0, -1]])/self.ratio
+
+        self.zoom = self.ratio
+        x_ = np.max(self.problem.nodal_coordinates[:,0]) - np.min(self.problem.nodal_coordinates[:,0])
+        y_ = np.max(self.problem.nodal_coordinates[:,1]) - np.min(self.problem.nodal_coordinates[:,1])
+
+        #self.move_to(np.array([self.canvas.width/2, self.canvas.height/2])
+        #             + (inv(self.transformation_matrix) @ np.array([x_, -y_, 1]))[0:2])
+        #self.move_to_()
+        self.move_to()
+        self.draw_canvas()
+
 
     # Mechanical functions
     def start_or_end_beam(self, r):  # r: Problem coordinates
@@ -575,6 +625,7 @@ class Window:
         print("Clicked at canvas", [event.x, event.y], 'problem', (self.transformation_matrix@[event.x,event.y,1])[0:2])
         print('Closest node', self.closest_node_label)
         print('r1, r2', self.r1, self.r2)
+        #print('T', self.transformation_matrix)
 
     def _selftest(self, loadcase = 1):
         self.new_problem()
@@ -582,26 +633,22 @@ class Window:
             self.problem.create_beams((0,0), (1000,0), n=4)
             self.problem.fix(self.problem.node_at((0,0)))
 
-            self.draw_canvas()
 
         if loadcase == 2:  # Simply supported beam, no load
             self.problem.create_beams((0,0), (1000,0))
             self.problem.pin(self.problem.node_at((0,0)))
             self.problem.roller(self.problem.node_at((1000,0)))
 
-            self.draw_canvas()
 
-        if loadcase == 4:  # Fanned out cantilever beams with load=10 distr loads
+        if loadcase == 3:  # Fanned out cantilever beams with load=10 distr loads
             for point in ((1000,0),(707,-707),(0,-1000),(-707,-707),(-1000,0)):
                 self.problem.create_beams((0,0),point, n=2)
                 self.problem.load_members_distr((0,0),point, load=10)
 
             self.problem.fix(self.problem.node_at((0,0)))
 
-            self.draw_canvas()
 
         self.autoscale()
-
 
 class LoadInputMenu:
     def __init__(self, window, root, problem):
