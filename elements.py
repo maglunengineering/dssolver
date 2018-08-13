@@ -19,7 +19,7 @@ class Problem:
         self.displacements = None  # Assigned at solution ( self.solve() )
         self.solved = False
 
-    def create_beam(self, r1, r2, E=2e5, A=1e5, I=1e5, drawnodes=3):
+    def create_beam(self, r1, r2, E=2e5, A=1e5, I=1e5, z=None, drawnodes=3):
         """
         drawnode:
         0 - Don't draw any nodes
@@ -27,14 +27,13 @@ class Problem:
         2 - Draw node at r2
         3 - Draw nodes at r1 and r2
         """
-        beam = Beam(r1, r2, E, A, I)
+        beam = Beam(r1, r2, E, A, I, z)
 
         if beam not in self.beams:
             for r in (r1, r2):
                 node = self.create_node(r)  # Create (or identify) node
                 beam.nodes.append(node)  # Add node to beam node list
                 node.beams.append(beam)  # Add beam to node beam list
-
 
             self.beams.append(beam)
             beam.number = self.beams.index(beam)
@@ -46,7 +45,6 @@ class Problem:
                 beam.nodes[1].draw = True
             elif drawnodes == 3:
                 beam.nodes[0].draw = beam.nodes[1].draw = True
-
 
         else:  # Beam already exists between r1 and r2
             print('NO BEAM CREATED, already exists between', r1, r2)
@@ -63,18 +61,17 @@ class Problem:
         self.beams.append(rod)
         print('Rod created between', r1, r2)
 
-    def create_beams(self, r1, r2, E=2e5, A=1e5, I=1e5, n=10):
+    def create_beams(self, r1, r2, E=2e5, A=1e5, I=1e5, z=None, n=4):
         nodes = np.array([ np.linspace(r1[0], r2[0], n+1),
                            np.linspace(r1[1], r2[1], n+1)])
 
-
         for ri, rj in zip(nodes.T, nodes.T[1:]):
             if np.all(ri == r1):
-                self.create_beam(ri, rj, E, A, I, drawnodes=1)
+                self.create_beam(ri, rj, E, A, I, z, drawnodes=1)
             elif np.all(rj == r2):
-                self.create_beam(ri, rj, E, A, I, drawnodes=2)
+                self.create_beam(ri, rj, E, A, I, z, drawnodes=2)
             else:
-                self.create_beam(ri, rj, E, A, I, drawnodes=0)
+                self.create_beam(ri, rj, E, A, I, z, drawnodes=0)
 
     def create_node(self, r, draw=False):
         node = Node(r, draw=draw)
@@ -90,6 +87,12 @@ class Problem:
             return node
         else:  # Node already exists at r
             return self.nodes[self.nodes.index(node)] # Return the node which already exists
+
+    def remove_node(self, r):
+        self.nodes.remove(self.nodes[self.node_at(r)])
+
+    def remove_element(self, r1, r2):
+        self.beams.remove(self.beams[self.beam_at(r1, r2)])
 
     def node_at(self, r):
         r = np.asarray(r)
@@ -210,6 +213,7 @@ class Problem:
         F = self.loads - self.member_loads
         Fr = F[free_dofs]
         print('Fr', Fr)
+        print('Reduced stiffness matrix size', np.shape(Kr))
         dr = np.linalg.inv(Kr) @ Fr
 
         self.displacements = np.zeros(3 * len(self.nodes))
@@ -221,6 +225,7 @@ class Problem:
             beam.displacements = np.hstack((beam.nodes[0].displacements,
                                             beam.nodes[1].displacements))
             beam.forces = beam.k @ beam.displacements + beam.member_loads
+            beam.stress = beam.cpl @ beam.beta @ beam.forces
             #beam.nodes[0].forces = beam.forces[0:3]
             #beam.nodes[1].forces = beam.forces[3:6]  # No sign convention
 
@@ -320,7 +325,7 @@ class Problem:
 class Node:
     def __init__(self, xy, draw=False):
         self.x, self.y = xy
-        self.r = xy
+        self.r = np.array(xy)
 
         self.beams = list()
         self.loads = np.array([0,0,0]) # self.loads (Fx, Fy, M) assigned on loading
@@ -329,7 +334,7 @@ class Node:
         self.number = None  # (node id) assigned on creation
         self.dofs = None  # self.dofs (dof1, dof2, dof3) assigned on creation
         self.displacements = np.array([0,0,0])  # self.displacement (d1, d2, d3) asssigned on solution
-        self.boundary_condition = None  # 'fixed', 'pinned', 'roller'
+        self.boundary_condition = None  # 'fixed', 'pinned', 'roller', 'lock'
 
         self.draw = draw  # Node is not drawn unless it is interesting
 
@@ -352,16 +357,23 @@ class Node:
 
 class Beam:
 
-    def __init__(self, r1, r2, E=2e5, A=1e5, I=1e5):
+    def __init__(self, r1, r2, E=2e5, A=1e5, I=1e5, z=None):
         self.nodes = list()
+
+        self.E = E
+        self.A = A
+        self.I = I
+        self.z = z if z else np.sqrt(I/A)/3
 
         self.r1, self.r2 = np.asarray(r1), np.asarray(r2)
         self.angle = np.arctan2( *(self.r2 - self.r1)[::-1] )
         self.length = np.sqrt( np.dot(self.r2 - self.r1, self.r2 - self.r1) )
 
         self.number = None  # (beam id) assigned on creation
-        self.displacements = None  # (1x6) assigned on solution
-        self.forces = None  # (1x6) assigned on solution
+        self.displacements = np.zeros(6)  # (1x6) assigned on solution
+        self.forces = np.zeros(6)  # (1x6) assigned on solution
+        self.stress = np.zeros(6)  # (1x6) assigned on solution
+        # Stress given as sigma_x (top), sigma_x (bottom), tau_xy (average!)
         self.member_loads = np.zeros(6)  #
         self.distributed_load = 0
         # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
@@ -385,6 +397,14 @@ class Beam:
               [0, 6*self.length, 2*self.length**2, 0, -6*self.length, 4*self.length**2]])
 
         self.k = self.beta.T @ self.ke @ self.beta
+
+        self.cpl = np.zeros((6,6))
+        self.cpl_ = np.array([[1/self.A, 0, -self.z/self.I],
+                             [1/self.A, 0, self.z/self.I],
+                             [0,     1/self.A,   0]])
+        self.cpl[0:3, 0:3] = self.cpl[3:6, 3:6] = self.cpl_
+
+
 
     def Ki(self, newdim):
         dofs = self.nodes[0].dofs + self.nodes[1].dofs
@@ -411,7 +431,6 @@ class Rod(Beam):
      matrix will be singular.
     This means both endnodes must either be connected to a beam element or be restrained (e.g. fixed).
     """
-
 
     def __init__(self, r1, r2, E=2e5, A=1e5, **kwargs):
         super().__init__(r1=r1, r2=r2, E=E, A=A)
@@ -442,7 +461,7 @@ if __name__ == '__main__':
             m.load_node(m.node_at((1000,1000)), (0, 0, 50000000))
 
         def lc2():
-            m.create_beams((0,0),(1000,0), n=10)
+            m.create_beams((0,0),(1000,0), n=2)
             m.fix(m.node_at((0,0)))
             #m.pin(m.node_at((1000,0)))
 
@@ -570,10 +589,10 @@ if __name__ == '__main__':
             m.load_members_distr((0,0),(1000,0),10)
 
 
-    lc15()
+    lc2()
 
-    m.solve()
-    #m.plot()
+    #m.solve()
+    m.plot()
     #print(m.nodes[m.node_at(n)].displacements)
-    m.plot_displaced()
+    #m.plot_displaced()
     plt.show()
