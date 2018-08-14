@@ -212,7 +212,8 @@ class Window:
                 self.bv_draw_shear,                 self.bv_draw_moment]
 
         for b,v,i in zip(buttons, vars, range(len(buttons))):
-            button = tk.Checkbutton(self.rsm_shm, text=b, variable=v, bg=self.color2)
+            button = tk.Checkbutton(self.rsm_shm, text=b, variable=v, bg=self.color2,
+                                    highlightthickness=0, justify=tk.LEFT)
             button.grid(row = int(i/2+1), column = i%2, sticky='wns')
 
     def upd_rsmenu(self, *args):
