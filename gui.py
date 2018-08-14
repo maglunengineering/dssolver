@@ -179,8 +179,9 @@ class Window:
         self.canvas.bind('<ButtonRelease-1>', self.reset_prev)
 
     def build_rsmenu(self):
-        color1 = 'gray74'
-        self.rsm = tk.Frame(self.mainframe, bg=color1, width=192)
+        self.color1 = 'gray74'
+        self.color2 = 'gray82'
+        self.rsm = tk.Frame(self.mainframe, bg=self.color1, width=192)
         self.rsm.grid(row=1, column=1, sticky='ns')
 
         #self.rsm_b1 = tk.Button(self.rsm, text='RSM button')
@@ -192,12 +193,12 @@ class Window:
         self.rsm_lbox.bind('<Double-Button-1>', self.rs_click)
         self.rsm_lbox.bind('<Button-3>', self.upd_rsmenu)
 
-        self.rsm_info = tk.Label(self.rsm, text='Double click element for info', bg=color1)
+        self.rsm_info = tk.Label(self.rsm, text='Double click element for info', bg=self.color1)
         self.rsm_info.grid(row=2, column=0, sticky='ew')
 
-        self.rsm_shm = tk.Frame(self.rsm, bg='SystemButtonFace')
+        self.rsm_shm = tk.Frame(self.rsm, bg=self.color2)
         self.rsm_shm.grid(row=3, column=0, sticky='sew')
-        self.rsm_shm_label = tk.Label(self.rsm_shm, text='Show/hide', bg='SystemButtonFace')
+        self.rsm_shm_label = tk.Label(self.rsm_shm, text='Show/hide', bg=self.color2)
         self.rsm_shm_label.grid(row=0, column=0, columnspan=2, sticky='ew')
 
         buttons = [     'Elements', 'Nodes \n (interesting)',
@@ -211,7 +212,7 @@ class Window:
                 self.bv_draw_shear,                 self.bv_draw_moment]
 
         for b,v,i in zip(buttons, vars, range(len(buttons))):
-            button = tk.Checkbutton(self.rsm_shm, text=b, variable=v)
+            button = tk.Checkbutton(self.rsm_shm, text=b, variable=v, bg=self.color2)
             button.grid(row = int(i/2+1), column = i%2, sticky='wns')
 
     def upd_rsmenu(self, *args):
@@ -1009,6 +1010,7 @@ class SectionManager:
         self.photolabel.configure(image=self.photo)
 
         if self.sec.get() == 'Circular':
+            self.insert(0, 0)
             self.dim3.config(state=tk.DISABLED)
             self.dim4.config(state=tk.DISABLED)
         else:
