@@ -5,6 +5,7 @@ from numpy.linalg import inv
 from extras import ResizingCanvas
 from sys import platform as _platform
 import os
+import pickle
 
 
 
@@ -764,71 +765,17 @@ class Window:
 
     # Open and save
     def save_problem(self):
-        filename = filedialog.asksaveasfile()
-        print('File', filename)
-        with filename as file:
-            for e in self.problem.beams:
-                file.write('{} {} {} {} {} {} {} {} {}\n'.format(
-                    type(e).__name__, e.r1[0], e.r1[1], e.r2[0], e.r2[1], e.E, e.A, e.I, e.z
-                ))  # *e.r1, *e.r2
-                if e.distributed_load:
-                    file.write('mload {} {} {} {} {}\n'.format(
-                    *e.r1, *e.r2, e.distributed_load
-                ))
-
-            for no in self.problem.nodes:
-                file.write('draw_node {} {} {}\n'.format(
-                    *no.r, int(no.draw)
-                ))
-                if no.boundary_condition:
-                    file.write('bc {} {} {}\n'.format(
-                        no.x, no.y, no.boundary_condition
-                ))
-                if not np.all(no.loads == 0):
-                    file.write('nload {} {} {} {} {}\n'.format(
-                        *no.r, *no.loads
-                    ))
-            file.write('nloads {}\n'.format(
-                self.problem.loads)
-            )
+        filename = filedialog.asksaveasfilename()
+        with open(filename, 'wb') as file:
+            pickle.dump(self.problem, file, pickle.HIGHEST_PROTOCOL)
 
     def open_problem(self):
         self.new_problem()
         filename = filedialog.askopenfilename()
-        print('File', filename)
-        with open(filename, 'r') as file:
-            for line in file:
-                self.interpret_line(line)
+        with open(filename, 'rb') as file:
+            self.problem = pickle.load(file)
+
         self.autoscale()
-
-    def interpret_line(self, line):
-        # Line format 'beam r1x r1y r2x r2y E A I z'
-        line = line.strip('\n')
-        flag = line.split(' ')[0]
-        if flag == 'Beam':
-            print(line)
-            cls, r1x, r1y, r2x, r2y, E, A, I, z = line.split(' ')
-            self.problem.create_beam((float(r1x), float(r1y)), (float(r2x), float(r2y)),
-                                     float(E), float(A), float(I), float(z))
-        elif flag == 'Rod':
-            cls, r1x, r1y, r2x, r2y, E, A, I, z = line.split(' ')
-            self.problem.create_rod((float(r1x), float(r1y)), (float(r2x), float(r2y)),
-                                    float(E), float(A))
-        elif flag == 'bc':
-            bctype, rx, ry, bctype = line.split(' ')
-            self.problem.boundary_condition((float(rx), float(ry)), bctype)
-
-        elif flag == 'nload':
-            rx, ry, f1,f2,m3 = np.array(line.split(' ')[1:], dtype=float)
-            self.problem.load_node(self.problem.node_at((rx, ry)), np.array([f1,f2,m3]))
-
-        elif flag == 'mload':
-            r1x, r1y, r2x, r2y, load = np.array(line.split(' ')[1:], dtype=float)
-            self.problem.load_members_distr((r1x, r1y), (r2x, r2y), load)
-
-        elif flag == 'draw_node':
-            rx, ry, boolean = line.split(' ')[1:]
-            self.problem.nodes[self.problem.node_at((float(rx), float(ry)))].draw = bool(int(boolean))
 
 class LoadInputMenu:
     def __init__(self, window, root, problem):
@@ -1149,7 +1096,7 @@ if __name__ == '__main__':
     if _platform == 'win32' or _platform == 'win64':
         icon = os.getcwd() + '/gfx/dss_icon.ico'
     else:
-        icon = '@dss_icon.xbm'
+        icon = '@' + os.getcwd() + 'dss_icon.xbm'
 
     p = Problem()
 
