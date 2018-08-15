@@ -1,1 +1,1 @@
-python gui.py
+python dsgui.py
