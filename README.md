@@ -14,7 +14,7 @@ Features:
 Last commit: 14/8-2018
 
 Recent changes: 
-- Can now save and load problems (solution results are not saved)
+- Can now save and load problems
 - There is now a right side menu is added with show/hide toggles and element info 
 - Solver now calculates stress (x-top, x-bottom, average shear) and "half section height" is now a beam element attribute. Stress is shown in the right side menu 
 - There is now a section manager for auto-calculation of area, second moment of area and half section height for rectangular, circular and I-beam cross sections
