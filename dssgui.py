@@ -7,8 +7,6 @@ from sys import platform as _platform
 import os
 import pickle
 
-
-
 class Window:
     def __init__(self, root, problem=None, *args, **kwargs):
         self.root = root
@@ -104,6 +102,9 @@ class Window:
         topmenu.add_cascade(label='Edit', menu=menu_edit)
         menu_edit.add_command(label='Create element(s)',
                               command=lambda: BeamInputMenu(self, self.root, self.problem))
+        menu_edit.add_command(label='Auto rotation lock',
+                              command=lambda: self.problem.auto_rotation_lock())
+        menu_edit.add_separator()
         menu_edit.add_command(label='Redraw canvas',
                               command=lambda: self.draw_canvas())
 
@@ -192,8 +193,10 @@ class Window:
         self.rsm = tk.Frame(self.mainframe, bg=self.color1, width=192)
         self.rsm.grid(row=1, column=1, sticky='ns')
 
-        #self.rsm_b1 = tk.Button(self.rsm, text='RSM button')
-        #self.rsm_b1.grid(row=0, column=0)
+        self.rsm_view_elements = True
+        self.rsm_b1 = tk.Button(self.rsm, text='Element/node view', command=lambda: self.switch_resmenu())
+        self.rsm_b1.grid(row=0, column=0)
+
 
         self.rsm_lbox = tk.Listbox(self.rsm)
         self.rsm_lbox.grid(row=1, column=0)
@@ -201,7 +204,7 @@ class Window:
         self.rsm_lbox.bind('<Double-Button-1>', self.rs_click)
         self.rsm_lbox.bind('<Button-3>', self.upd_rsmenu)
 
-        self.rsm_info = tk.Label(self.rsm, text='Double click element for info', bg=self.color1)
+        self.rsm_info = tk.Label(self.rsm, text='Double click object for information', bg=self.color1)
         self.rsm_info.grid(row=2, column=0, sticky='ew')
 
         self.rsm_shm = tk.Frame(self.rsm, bg=self.color2)
@@ -226,47 +229,84 @@ class Window:
 
     def upd_rsmenu(self, *args):
         self.rsm_lbox.delete(0, tk.END)
-        self.lboxdict = {}
+        self.lboxdict_elements = {}
+        self.lboxdict_nodes = {}
 
-        for element in self.problem.beams:
-            text = '{} {}-{}'.format(type(element).__name__, element.r1, element.r2)
-            self.lboxdict[text] = element.number
-            self.rsm_lbox.insert(tk.END, text)
+        if self.rsm_view_elements:
+            for element in self.problem.beams:
+                text = '{} {}-{}'.format(type(element).__name__, element.r1, element.r2)
+                self.lboxdict_elements[text] = element.number
+                self.rsm_lbox.insert(tk.END, text)
 
-        print(self.rsm_lbox.curselection())
+        elif not self.rsm_view_elements:
+            for node in self.problem.nodes:
+                text = 'Node {}'.format(node.r)
+                self.lboxdict_nodes[text] = node.number
+                self.rsm_lbox.insert(tk.END, text)
+
         self.bv_draw_highlight.set(0)
         self.draw_canvas()
         pass
 
+    def switch_resmenu(self):
+        self.rsm_view_elements = not self.rsm_view_elements
+        self.upd_rsmenu()
+
     def rs_click(self, *args):
-        elm = self.rsm_lbox.get(self.rsm_lbox.curselection())
-        print(elm)
-        element = self.problem.beams[self.lboxdict[elm]]
-        self.rsm_info.config(text='Element id {} \n '
-                                  'At r1: \n'
-                                  'Boundary condition: {} \n'
-                                  'Displacements {} \n'
-                                  'Int. forces {} \n'
-                                  'Stress {} \n'
-                                  'At r2: \n'
-                                  'Boundary condition: {} \n'
-                                  'Displacements {} \n'
-                                  'Int. forces {} \n'
-                                  'Stress {} \n'
-                                  'Length {}\n '.format(
-            element.number,
-            element.nodes[0].boundary_condition,
-            np.round(element.displacements[0:3], decimals=2),
-            np.round(element.forces[0:3], decimals=2),
-            np.round(element.stress[0:3], decimals=2),
-            element.nodes[1].boundary_condition,
-            np.round(element.displacements[3:6], decimals=2),
-            np.round(element.forces[3:6], decimals=2),
-            np.round(element.stress[3:6], decimals=2),
-            element.length)
+        curselection = self.rsm_lbox.curselection()
+        print(curselection)
+        obj = self.rsm_lbox.get(curselection)
+        print(obj)
+
+        if self.rsm_view_elements:
+            element = self.problem.beams[self.lboxdict_elements[obj]]  # Only works for beams?
+            self.rsm_info.config(text='Double click object for information \n'
+                                      'Element id {} \n '
+                                      'At r1: \n'
+                                      'Boundary condition: {} \n'
+                                      'Displacements {} \n'
+                                      'Int. forces {} \n'
+                                      'Stress {} \n'
+                                      'At r2: \n'
+                                      'Boundary condition: {} \n'
+                                      'Displacements {} \n'
+                                      'Int. forces {} \n'
+                                      'Stress {} \n'
+                                      'Length {}\n '.format(
+                element.number,
+                element.nodes[0].boundary_condition,
+                np.round(element.displacements[0:3], decimals=2),
+                np.round(element.forces[0:3], decimals=2),
+                np.round(element.stress[0:3], decimals=2),
+                element.nodes[1].boundary_condition,
+                np.round(element.displacements[3:6], decimals=2),
+                np.round(element.forces[3:6], decimals=2),
+                np.round(element.stress[3:6], decimals=2),
+                element.length)
                                                         )
-        # Superimpose in red
-        self.bv_draw_highlight.set(element.number + 1)
+            # Superimpose in red
+            self.bv_draw_highlight.set(element.number + 1)
+
+            """ TODO: Displacements and forces (not stress?) are given in global csys. Probably should
+            be given in local.  
+            
+            """
+
+        elif not self.rsm_view_elements:
+            node = self.problem.nodes[self.lboxdict_nodes[obj]]
+            self.rsm_info.config(text='Node id {} \n'
+                                      'r: {} \n'
+                                      'Boundary condition: {} \n'
+                                      'Displacements: {} \n'
+                                      'Abs. int. forces {} \n'.format(
+                node.number,
+                node.r,
+                node.boundary_condition,
+                np.round(node.displacements, decimals=2),
+                np.round(node.abs_forces, decimals=2) )
+            )
+            self.bv_draw_highlight.set(node.number + 1)
+
         self.draw_canvas()
         #self.draw_highlight(element_id = element.number)
 
@@ -298,7 +338,6 @@ class Window:
 
     # Drawing functions
     def draw_canvas(self, *args, **kwargs):
-        #print('Draw moments, elements:', self.draw_moment, self.draw_elements)
         self.canvas.delete('all')  # Clear the canvas
 
         # Draw nodes:
@@ -312,8 +351,10 @@ class Window:
         if self.bv_draw_loads.get():
             self.draw_loads()
 
-        if self.bv_draw_highlight.get():
+        if self.bv_draw_highlight.get() and self.rsm_view_elements:
             self.draw_highlight(element_id = self.bv_draw_highlight.get() - 1)
+        elif self.bv_draw_highlight.get() and not self.rsm_view_elements:
+            self.draw_highlight(node_id = self.bv_draw_highlight.get() - 1)
 
         if self.bv_draw_boundary_conditions.get():
             self.draw_boundary_conditions()
@@ -374,7 +415,6 @@ class Window:
             if np.alen(node.loads) >= 3 and node.loads[2] != 0:
 
                 sign = np.sign(node.loads[2])
-                print(sign)
                 arc_start = node_r + np.array([0, -scale/2]) * sign
                 arc_mid = node_r + np.array([scale/2, 0]) * sign
                 arc_end = node_r + np.array([0, scale/2]) * sign
@@ -468,9 +508,9 @@ class Window:
             elif node.boundary_condition == 'locked':
                 self.canvas.create_oval(*(node_r + np.array([-scale, -scale])),
                                         *(node_r - np.array([-scale, -scale])),
-                                        width=linewidth/2, tag='bc')
-                self.canvas.create_line(*node_r, *(node_r + np.array([scale, -scale])*1.4),
-                                        width=linewidth/2, fill='black', tag='bc')
+                                        width=linewidth, tag='bc')
+                self.canvas.create_line(*node_r, *(node_r + np.array([scale/2, -scale])*1.4),
+                                        width=linewidth, fill='black', tag='bc')
 
     def draw_displaced(self):
         node_radius = self.node_radius
@@ -478,8 +518,6 @@ class Window:
             if node.draw:
                 node_r = (inv(self.transformation_matrix) @ [node.r[0], node.r[1], 1])[0:2]
                 node_disp = (inv(self.transformation_matrix[0:2,0:2]) @ node.displacements[0:2])
-                print(node_r)
-                print(node_disp)
 
                 self.canvas.create_oval(*np.hstack((node_r - node_radius + node_disp,
                                                     node_r + node_radius + node_disp)),
@@ -513,8 +551,8 @@ class Window:
             s,c = np.sin(beam.angle), np.cos(beam.angle)
             R = np.array([[c, -s], [s, c]])
 
-            v1 = beam.forces[1]
-            v2 = -beam.forces[4]
+            v1 = (beam.beta @ beam.forces)[1]
+            v2 = -(beam.beta @ beam.forces)[4]
 
             p1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
             p2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
@@ -524,14 +562,12 @@ class Window:
 
     def draw_moment_diagram(self):
         max_moment = np.max(np.abs(np.array([self.problem.forces[:,2], self.problem.forces[:,5]])))
-        print('Max moment', max_moment)
         scale = 100/max_moment
         for beam in self.problem.beams:
             s,c = np.sin(beam.angle), np.cos(beam.angle)
             R = np.array([[c, -s], [s, c]])
 
             v1 = beam.forces[2]
-            print('v1', v1)
             v2 = -beam.forces[5]
 
             p1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
@@ -547,20 +583,29 @@ class Window:
         :return:  """
 
         self.canvas.delete('highlight')
-        element = self.problem.beams[element_id]
-        beam_r1 = (inv(self.transformation_matrix)@np.hstack((element.r1, 1)))[0:2]
-        beam_r2 = (inv(self.transformation_matrix)@np.hstack((element.r2, 1)))[0:2]
 
-        self.canvas.create_text(*beam_r1, text='r1', anchor='sw')
-        self.canvas.create_text(*beam_r2, text='r2', anchor='sw')
+        if element_id is not None:
+            element = self.problem.beams[element_id]
+            beam_r1 = (inv(self.transformation_matrix)@np.hstack((element.r1, 1)))[0:2]
+            beam_r2 = (inv(self.transformation_matrix)@np.hstack((element.r2, 1)))[0:2]
 
-        if type(element) == Beam:
-            self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
-                                    width=self.linewidth, tag='highlight', fill='red')
+            self.canvas.create_text(*beam_r1, text='r1', anchor='sw')
+            self.canvas.create_text(*beam_r2, text='r2', anchor='sw')
 
-        elif type(element) == Rod:
-            self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
-                                    width=self.linewidth/4, tag='highlight', fill='red')
+            if type(element) == Beam:
+                self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
+                                        width=self.linewidth, tag='highlight', fill='red')
+
+            elif type(element) == Rod:
+                self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
+                                        width=self.linewidth/4, tag='highlight', fill='red')
+
+        elif node_id is not None:
+            node = self.problem.nodes[node_id]
+            node_r = (inv(self.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
+            node_radius = self.node_radius * 1.5
+            self.canvas.create_oval(*np.hstack((node_r - node_radius, node_r + node_radius)),
+                                    fill='red', tag='mech')
 
     def query_node(self, node):
         self.problem.nodes[self.problem.node_at(node)].draw = True
@@ -579,7 +624,6 @@ class Window:
         self.draw_canvas()
 
     def autoscale(self):
-        print('AUTOSCALE')
         x_ = (np.max(self.problem.nodal_coordinates[:, 0]) + np.min(self.problem.nodal_coordinates[:, 0]))/2
         y_ = (np.max(self.problem.nodal_coordinates[:, 1]) + np.min(self.problem.nodal_coordinates[:, 1]))/2
 
@@ -587,7 +631,6 @@ class Window:
         h = self.canvas.height
 
         a = self.problem.model_size()*0.7
-        print('x_, y_, a', x_, y_, a)
 
         r0 = np.array([x_, y_, 1]) - np.array([a/2, a/2, 0])  # Problem bounding square SW corner
         r0_ = np.array([w/5, 4*h/5, 1])  # Canvas subsquare SW corner
@@ -600,12 +643,9 @@ class Window:
 
         R = np.array([r0, r, r1]).T
         R_ = np.array([r0_, r_, r1_]).T
-        print('R', R)
-        print('R_', R_)
-        # Must make sure both R and R_ are invertible, or T will not be invertible
+        # R and R_ must be invertible, or T will not be invertible
 
         self.transformation_matrix = R@inv(R_)
-        # print(self.transformation_matrix)
         self.draw_canvas()
 
     def move(self, event):
@@ -624,7 +664,6 @@ class Window:
     def move_to(self, xy=(50, -150)):
         # Moves the problem csys origin to canvas csys (xy)
         x,y = xy
-        #print(xy)
         self.transformation_matrix[0:3,2] = np.array([self.transformation_matrix[0,0]*(x-1),
                                                       self.transformation_matrix[1,1]*(y-1),
                                                       1])
@@ -886,6 +925,7 @@ class BeamInputMenu:
         top = self.top = tk.Toplevel(root)
         self.top.winfo_toplevel().title('Create element(s)')
         self.top.iconbitmap(window.icon)
+        self.top.columnconfigure(1, weight=1)
         self.window = window
         self.root = root
         self.problem = problem
@@ -893,17 +933,29 @@ class BeamInputMenu:
         self.label = tk.Label(top, text='Create element(s) between:')
         self.label.grid(row=0, column=0)
 
+        self.nodeframe = tk.Frame(self.top, width=300)
+        self.nodeframe.grid(row=1, column=0, columnspan=3, sticky='ew')
+        self.nodeframe.grid_columnconfigure(0, weight=1)
 
-        entrykeys = ['Node 1', 'Node 2', 'Area', 'Elastic modulus', '2nd mmt of area',
+        self.morenodes = tk.Button(top,
+                                   text='+1 \n node',
+                                   command=lambda: self.more_nodes())
+        self.morenodes.grid(row=0, column=2)
+
+        self.n = 0
+        self.more_nodes()
+        self.more_nodes()
+
+        entrykeys = ['Area', 'Elastic modulus', '2nd mmt of area',
                      'Half section height', 'No. of elements']
-        entries = [self.e_r1, self.e_r2, self.e_A, self.e_E, self.e_I, self.e_z, self.e_n] = \
-            [tk.Entry(top) for _ in range(7)]
+        entries = [self.e_A, self.e_E, self.e_I, self.e_z, self.e_n] = \
+            [tk.Entry(top) for _ in range(5)]
 
         for idx, entry in enumerate(entries):
-            entry.grid(row=idx+1, column=1, columnspan=2)
+            entry.grid(row=idx+2, column=1, columnspan=2)
 
         for idx, key in enumerate(entrykeys):
-            tk.Label(top, text=key).grid(row=idx+1)
+            tk.Label(top, text=key).grid(row=idx+2)
 
         defaults = (1e5, 2e5, 1e5, 4)
         for value, entry in zip(defaults, (self.e_A, self.e_E, self.e_I, self.e_n)):
@@ -915,12 +967,13 @@ class BeamInputMenu:
         self.e_r1.focus_set()
 
         self.secmgr = tk.Button(top,
-                                text='Section manager',
+                                text='Section \n manager',
                                 command=lambda: SectionManager(bip=self,
                                                                window=self.window,
                                                                root=self.root))
-        self.secmgr.grid(row=0, column=1, columnspan=2, sticky='e')
+        self.secmgr.grid(row=0, column=1, columnspan=1, sticky='e')
         #self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
+
 
 
         self.b = tk.Button(top, text='Create element(s)', command=self.cleanup)
@@ -938,7 +991,6 @@ class BeamInputMenu:
         b2.grid(row=9, column=2)
         self.k.set(1)
         self.check_choice()
-        print(self.k.get())
 
     def check_choice(self):
         if self.k.get() == 2:
@@ -953,28 +1005,37 @@ class BeamInputMenu:
             self.e_z.config(state=tk.NORMAL)
             self.e_n.config(state=tk.NORMAL)
 
+    def more_nodes(self):
+        self.__setattr__('e_r{}'.format(self.n+1), tk.Entry(self.nodeframe))
+        self.__getattribute__('e_r{}'.format(self.n+1)).grid(row=self.n, column=1, columnspan=2, sticky='e')
+        #.grid(row=self.n, column=1, columnspan=2))
+        tk.Label(self.nodeframe, text='Node {}'.format(self.n+1)).grid(row=self.n, column=0, sticky='ew')
+        self.n += 1
+
     def cleanup(self):
-        r1 = np.array(eval(self.e_r1.get()))
-        r2 = np.array(eval(self.e_r2.get()))
-        A = eval(self.e_A.get())
-        E = eval(self.e_E.get())
-        I = eval(self.e_I.get())
-        z = eval(self.e_z.get())
-        n = eval(self.e_n.get())
+        A = float(self.e_A.get())
+        E = float(self.e_E.get())
+        I = float(self.e_I.get())
+        z = float(self.e_z.get())
+        n = float(self.e_n.get())
 
-        if self.k.get() == 1:  # Beam
-            self.problem.create_beams(r1, r2, A=A, E=E, I=I, z=z, n=n)
-            self.window.draw_canvas()
-            if len(self.problem.beams) == n:
-                self.window.autoscale()
+        if self.k.get() == 1: # Beam
+            func = self.problem.create_beams
 
-        elif self.k.get() == 2:  # Rod
-            self.problem.create_rod(r1, r2, A=A, E=E)
-            self.window.draw_canvas()
-            if len(self.problem.beams) == 1:
-                self.window.autoscale()
+        elif self.k.get() == 2: # Rod
+            func = self.problem.create_rod
+
+        for k in range(self.n - 1):
+            ri = self.__getattribute__('e_r{}'.format(k+1)).get()
+            ri = np.array(ri.split(','), dtype=float)
+            rj = self.__getattribute__('e_r{}'.format(k+2)).get()
+            rj = np.array(rj.split(','), dtype=float)
+            print('Element', ri, rj)
+            func(ri, rj, A=A, E=E, I=I, z=z, n=n)
+
 
         self.window.upd_rsmenu()
+        self.window.autoscale()
         self.top.destroy()
 
 class SectionManager:

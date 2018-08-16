@@ -50,7 +50,7 @@ class Problem:
             print('NO BEAM CREATED, already exists between', r1, r2)
             return self.beams[self.beams.index(beam)]
 
-    def create_rod(self, r1, r2, E=2e5, A=1e5, *args):
+    def create_rod(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):
         rod = Rod(r1, r2, E, A)
 
         for r in (r1, r2):
@@ -59,6 +59,7 @@ class Problem:
             node.beams.append(rod)  # Add beam to node beam list
 
         self.beams.append(rod)
+        rod.number = self.beams.index(rod)
         print('Rod created between', r1, r2)
 
     def create_beams(self, r1, r2, E=2e5, A=1e5, I=1e5, z=None, n=4):
@@ -157,6 +158,15 @@ class Problem:
         self.constrained_dofs += tuple(np.array(self.nodes[node_id].dofs)[dofs])
         self.nodes[node_id].draw = True
 
+    def auto_rotation_lock(self):
+        """
+        Rotation locks all nodes where only Rod elements meet. Useful for truss analysis.
+        """
+        for node in self.nodes:
+            if np.all([type(element)==Rod for element in node.beams])\
+                    and node.boundary_condition is None:
+                self.lock(node.number)
+
     def load_node(self, node_id, load):
         # Load : global (Nx, Ny, M)
         dofs = list(self.nodes[node_id].dofs)
@@ -236,6 +246,7 @@ class Problem:
 
         self.displacements = np.zeros(3 * len(self.nodes))
         self.displacements[free_dofs] = dr
+        self.ext_forces = self.K() @ self.displacements
 
         for node in self.nodes:
             node.displacements = self.displacements[np.array(node.dofs)]
@@ -351,8 +362,8 @@ class Node:
         self.r = np.array(xy)
 
         self.beams = list()
-        self.loads = np.array([0,0,0]) # self.loads (Fx, Fy, M) assigned on loading
-        self.forces = np.array([0,0,0])  # self.forces (Fx, Fy, M) assigned on solution
+        self.loads = np.array([0,0,0]) # self.loads (global Fx, Fy, M) assigned on loading
+        #self.forces = np.array([0,0,0])  # self.forces (Fx, Fy, M) calculated by self.abs_force
 
         self.number = None  # (node id) assigned on creation
         self.dofs = None  # self.dofs (dof1, dof2, dof3) assigned on creation
@@ -363,6 +374,17 @@ class Node:
 
     def add_beam(self, beam):
         self.beams.append(beam)
+
+    @property
+    def abs_forces(self):
+        self.forces = np.array([0,0,0])
+        for element in self.beams:
+            if np.array_equal(element.r1, self.r):
+                self.forces = self.forces + np.abs(element.forces[0:3]) / 2
+            elif np.array_equal(element.r2, self.r):
+                self.forces = self.forces + np.abs(element.forces[3:6]) / 2
+        return self.forces + np.abs(self.loads/2)
+
 
     def connected_nodes(self):
         other_nodes = []
@@ -394,10 +416,10 @@ class Beam:
 
         self.number = None  # (beam id) assigned on creation
         self.displacements = np.zeros(6)  # (1x6) assigned on solution
-        self.forces = np.zeros(6)  # (1x6) assigned on solution
-        self.stress = np.zeros(6)  # (1x6) assigned on solution
+        self.forces = np.zeros(6)  # global csys (1x6) assigned on solution
+        self.stress = np.zeros(6)  # local csys(1x6) assigned on solution
         # Stress given as sigma_x (top), sigma_x (bottom), tau_xy (average!)
-        self.member_loads = np.zeros(6)  # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12 in local csys
+        self.member_loads = np.zeros(6)  # local csys distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
         self.distributed_load = 0
         # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
 
@@ -440,7 +462,6 @@ class Beam:
             E[j, i] = 1
         return E@self.member_loads
 
-
     def __eq__(self, other):
         return np.array_equal(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
 
@@ -452,7 +473,7 @@ class Rod(Beam):
     This means both endnodes must either be connected to a beam element or be restrained (e.g. fixed).
     """
 
-    def __init__(self, r1, r2, E=2e5, A=1e5, **kwargs):
+    def __init__(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):
         super().__init__(r1=r1, r2=r2, E=E, A=A)
 
         self.ke = np.array(      [[self.kn, 0, 0, -self.kn, 0, 0],
