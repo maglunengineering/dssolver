@@ -12,7 +12,7 @@ class Problem:
         self.nodes = list()
         self.beams = list()
 
-        self.constrained_dofs = tuple()
+        self.constrained_dofs = []
         self.loads = np.array([])  # Joint loads
         self.member_loads = np.array([])  # Member loads, for distr loads and such
         self.forces = None  # Forces (at all nodes, incl removed dofs)
@@ -129,29 +129,24 @@ class Problem:
             self.glider(self.node_at(r))
 
     def fix(self, node_id):
-        self.constrained_dofs += tuple(self.nodes[node_id].dofs)
         self.nodes[node_id].draw = False
         self.nodes[node_id].boundary_condition = 'fixed'
 
     def pin(self, node_id):
-        self.constrained_dofs += tuple(self.nodes[node_id].dofs[0:2])
         self.nodes[node_id].draw = True
         self.nodes[node_id].boundary_condition = 'pinned'
 
     def roller(self, node_id):
-        self.constrained_dofs += (self.nodes[node_id].dofs[1],)
         self.nodes[node_id].draw = True
         self.nodes[node_id].boundary_condition = 'roller'
 
     def lock(self, node_id):
-        self.constrained_dofs += (self.nodes[node_id].dofs[2],)
         self.nodes[node_id].draw = True
         self.nodes[node_id].boundary_condition = 'locked'
 
     def glider(self, node_id):
-        self.constrained_dofs += (self.nodes[node_id].dofs[2], self.nodes[node_id].dofs[2])
         self.nodes[node_id].draw = True
-        # Broken for unknown reasons atm
+        self.nodes[node_id].boundary_condition = 'glider'
 
     def custom(self, node_id, dofs):
         dofs = np.array(dofs)
@@ -166,6 +161,20 @@ class Problem:
             if np.all([type(element)==Rod for element in node.beams])\
                     and node.boundary_condition is None:
                 self.lock(node.number)
+
+    def remove_dofs(self):  # Interpret boundary conditions
+        self.constrained_dofs = []
+        for node in self.nodes:
+            if node.boundary_condition == 'fixed':
+                self.constrained_dofs.extend(node.dofs)
+            elif node.boundary_condition == 'pinned':
+                self.constrained_dofs.extend(node.dofs[0:2])
+            elif node.boundary_condition == 'roller':
+                self.constrained_dofs.append(node.dofs[1])
+            elif node.boundary_condition == 'locked':
+                self.constrained_dofs.append(node.dofs[2])
+            elif node.boundary_condition == 'glider':
+                self.constrained_dofs.extend((node.dofs[0], node.dofs[2]))
 
     def load_node(self, node_id, load):
         # Load : global (Nx, Ny, M)
@@ -234,6 +243,7 @@ class Problem:
             self.member_loads += beam.Qfi(dofs)
 
     def solve(self):
+        self.remove_dofs()
         free_dofs = np.delete(np.arange(3 * len(self.nodes)), self.constrained_dofs)
         self.Qf()  # Compute system member load vector
 
@@ -476,6 +486,7 @@ class Rod(Beam):
     def __init__(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):
         super().__init__(r1=r1, r2=r2, E=E, A=A)
 
+        self.kn = A*E/self.length
         self.ke = np.array(      [[self.kn, 0, 0, -self.kn, 0, 0],
                                   [0, 0, 0, 0, 0, 0],
                                   [0, 0, 0, 0, 0, 0],

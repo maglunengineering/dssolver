@@ -3,15 +3,17 @@ import tkinter as tk
 from tkinter import filedialog
 from solver import *
 from numpy.linalg import inv
-from extras import ResizingCanvas, HyperlinkManager
+from extras import ResizingCanvas
 from sys import platform as _platform
 import os
 import pickle
 
+np.set_printoptions(precision=2, suppress=True)
+
 class Window:
     def __init__(self, root, problem=None, *args, **kwargs):
         self.root = root
-        self.root.minsize(width=1024, height=512)
+        self.root.minsize(width=1024, height=640)
         self.icon = icon if icon else None
         self.root.iconbitmap(self.icon)
         self.problem = problem
@@ -166,6 +168,8 @@ class Window:
                              command=lambda: self.boundary_condition('roller'))
         self.bcm.add_command(label='Rotation lock node at {}'.format(self.closest_node_label),
                              command=lambda: self.boundary_condition('locked'))
+        self.bcm.add_command(label='Glider node at {}'.format(self.closest_node_label),
+                             command=lambda: self.boundary_condition('glider'))
 
         self.bm = tk.Menu(self.rcm, tearoff=0)  # Beam menu
         self.rcm.add_cascade(label='Start/end element', menu=self.bm)
@@ -193,8 +197,8 @@ class Window:
     def build_rsmenu(self):
         self.color1 = 'gray74'
         self.color2 = 'gray82'
-        self.rsm = tk.Frame(self.mainframe, bg=self.color1, width=192)
-        self.rsm.grid(row=1, column=1, sticky='ns')
+        self.rsm = tk.Frame(self.mainframe, bg=self.color1, width=256)
+        self.rsm.grid(row=1, column=1, sticky='nsew')
 
         self.rsm_view_elements = True
         self.rsm_b1 = tk.Button(self.rsm, text='Element/node view', command=lambda: self.switch_resmenu())
@@ -210,10 +214,10 @@ class Window:
         self.rsm_info = tk.Label(self.rsm, text='Double click object for information', bg=self.color1)
         self.rsm_info.grid(row=2, column=0, sticky='ew')
 
-        self.rsm_shm = tk.Frame(self.rsm, bg=self.color2)
-        self.rsm_shm.grid(row=3, column=0, sticky='sew')
+        self.rsm_shm = tk.Frame(self.rsm, bg=self.color2, width=255)
+        self.rsm_shm.grid(row=3, column=0, sticky='nw')
         self.rsm_shm_label = tk.Label(self.rsm_shm, text='Show/hide', bg=self.color2)
-        self.rsm_shm_label.grid(row=0, column=0, columnspan=2, sticky='ew')
+        self.rsm_shm_label.grid(row=0, column=0, columnspan=2, sticky='e')
 
         buttons = [     'Elements', 'Nodes \n (interesting)',
                         'Loads', 'Nodes (all)',
@@ -278,14 +282,14 @@ class Window:
                                       'Length {}\n '.format(
                 element.number,
                 element.nodes[0].boundary_condition,
-                np.round(element.displacements[0:3], decimals=2),
-                np.round(element.forces[0:3], decimals=2),
+                np.round(element.beta[0:3,0:3]@element.displacements[0:3], decimals=2),
+                np.round(element.beta[0:3,0:3]@element.forces[0:3], decimals=2),
                 np.round(element.stress[0:3], decimals=2),
                 element.nodes[1].boundary_condition,
-                np.round(element.displacements[3:6], decimals=2),
-                np.round(element.forces[3:6], decimals=2),
+                np.round(element.beta[3:6,3:6] @ element.displacements[3:6], decimals=2),
+                np.round(element.beta[3:6,3:6] @ element.forces[3:6], decimals=2),
                 np.round(element.stress[3:6], decimals=2),
-                element.length)
+                np.round(element.length, decimals=2))
                                                         )
             # Superimpose in red
             self.bv_draw_highlight.set(element.number + 1)
@@ -297,7 +301,8 @@ class Window:
 
         elif not self.rsm_view_elements:
             node = self.problem.nodes[self.lboxdict_nodes[obj]]
-            self.rsm_info.config(text='Node id {} \n'
+            self.rsm_info.config(text='Double click object for information\n'
+                                      'Node id {} \n'
                                       'r: {} \n'
                                       'Boundary condition: {} \n'
                                       'Displacements: {} \n'
@@ -306,11 +311,13 @@ class Window:
                 node.r,
                 node.boundary_condition,
                 np.round(node.displacements, decimals=2),
-                np.round(node.abs_forces, decimals=2) )
+                np.round(node.abs_forces, decimals=2),
+                )
             )
             self.bv_draw_highlight.set(node.number + 1)
 
         self.draw_canvas()
+        self.canvas.resize(width=self.canvas.width, height=self.canvas.height)
         #self.draw_highlight(element_id = element.number)
 
     def rightclickmenu(self, event):
@@ -322,6 +329,7 @@ class Window:
         self.bcm.entryconfigure(1, label='Pin node at {}'.format(self.closest_node_label))
         self.bcm.entryconfigure(2, label='Roller node at {}'.format(self.closest_node_label))
         self.bcm.entryconfigure(3, label='Rotation lock node at {}'.format(self.closest_node_label))
+        self.bcm.entryconfigure(4, label='Glider node at {}'.format(self.closest_node_label))
 
         self.bm.entryconfigure(0, label='Start element at {}'.format((self.transformation_matrix@[event.x, event.y, 1])[0:2]))
         self.bm.entryconfigure(1, label='Start element at closest: {}'.format(self.closest_node_label))
@@ -371,6 +379,8 @@ class Window:
 
             if self.bv_draw_moment.get():
                 self.draw_moment_diagram()
+
+        self.draw_csys()
 
     def draw_elements(self):
         linewidth = self.linewidth
@@ -459,7 +469,7 @@ class Window:
 
     def draw_boundary_conditions(self):
         """
-        :param bc_type: 'fixed', 'pinned', 'roller', 'locked', 'fix', 'pin', 'locked'
+        :param bc_type: 'fixed', 'pinned', 'roller', 'locked', 'fix', 'pin', 'locked', 'glider'
         """
         scale = self.scale / 2
         linewidth = self.linewidth 
@@ -508,12 +518,34 @@ class Window:
                                                             + np.array([scale/2, scale/4]),
                                             width=linewidth, fill='black', tag='bc')
 
+
             elif node.boundary_condition == 'locked':
                 self.canvas.create_oval(*(node_r + np.array([-scale, -scale])),
                                         *(node_r - np.array([-scale, -scale])),
                                         width=linewidth, tag='bc')
                 self.canvas.create_line(*node_r, *(node_r + np.array([scale/2, -scale])*1.4),
                                         width=linewidth, fill='black', tag='bc')
+
+            elif node.boundary_condition == 'glider':
+                angle_vector = sum(n.r - node.r for n in node.connected_nodes())
+                angle = np.arctan2(*angle_vector[::-1])
+                angle = 0 # Could be pi
+                c, s = np.cos(-angle), np.sin(-angle)
+                rotation = np.array([[c, -s], [s, c]])
+
+                self.canvas.create_line(*(node_r + rotation@[0, scale]), *(node_r + rotation@[0, -scale]),
+                                        width=linewidth, fill='black', tag='bc')
+                self.canvas.create_oval(*(node_r + rotation@[0,-scale/4]), *(node_r + rotation@[scale/2,-3*scale/4]))
+                self.canvas.create_oval(*(node_r + rotation@[0, scale/4]), *(node_r + rotation@[scale/2, 3*scale/4]))
+                self.canvas.create_line(*(node_r + rotation@[scale/2,0] + rotation@[0,scale]),
+                                        *(node_r + rotation@[scale/2,0] + rotation@[0,-scale]),
+                                        width=linewidth, fill='black', tag='bc')
+
+                for offset in np.linspace(0, 2*scale, 6):
+                    self.canvas.create_line(*(node_r + rotation@[scale/2, -scale + offset]),
+                                            *(node_r + rotation@[scale/2, -scale + offset]
+                                              + rotation@[scale/2, scale/2]),
+                                            width=linewidth, fill='black', tag='bc')
 
     def draw_displaced(self):
         node_radius = self.node_radius
@@ -579,6 +611,16 @@ class Window:
                                     tag='momentdiagram')
             self.canvas.create_text(*p1, text='{}'.format(np.round(v1, 2)), anchor='sw')
 
+    def draw_csys(self):
+        self.canvas.create_line(10, self.canvas.height-10,
+                                110, self.canvas.height-10,
+                                arrow='last')
+        self.canvas.create_text(110, self.canvas.height-10, text='x', anchor='sw')
+        self.canvas.create_line(10, self.canvas.height-10,
+                                10, self.canvas.height-110,
+                                arrow='last')
+        self.canvas.create_text(10, self.canvas.height-110, text='y', anchor='sw')
+
     def draw_highlight(self, node_id=None, element_id=None):
         """
         :param node_id: node.number
@@ -611,7 +653,7 @@ class Window:
                                     fill='red', tag='mech')
 
     def query_node(self, node):
-        self.problem.nodes[self.problem.node_at(node)].draw = True
+        self.problem.nodes[self.problem.node_at(node)].draw = not self.problem.nodes[self.problem.node_at(node)].draw
         self.draw_canvas()
         pass
 
@@ -716,6 +758,8 @@ class Window:
             self.problem.roller(self.problem.node_at(self.closest_node_label))
         elif bc == 'locked':
             self.problem.lock(self.problem.node_at(self.closest_node_label))
+        elif bc == 'glider':
+            self.problem.glider(self.problem.node_at(self.closest_node_label))
         else:
             pass
         self.draw_canvas()
@@ -1140,6 +1184,7 @@ class BeamManager:
 class HelpBox:
     def __init__(self, root):
         top = self.top = tk.Toplevel(root)
+        self.top.iconbitmap(icon)
         self.root = root
 
         self.textbox = tk.Text(top)
@@ -1157,7 +1202,8 @@ class HelpBox:
                      'Q{}: Can I do truss analysis using DSSolver?\n',
                      'Q{}: Rod elements make my analysis fail\n',
                      'Q{}: What units does DSSolver use?\n' ,
-                     'Q{}: How many Beam elements should I use?\n']
+                     'Q{}: How many Beam elements should I use?\n',
+                     'Q{}: Data view descriptions and sign conventions\n']
 
         answers = ['A{}: It will be someday, probably.\n',
                    """A{}: Double click mouse-1 to zoom in. Double click mousewheel to zoom out. 
@@ -1186,7 +1232,17 @@ pounds pr square inch). More systems can be found on Google.\n""",
 force- and moment diagrams, not the accuracy of the analysis. Displaced shapes and shear force- 
 and moment diagrams are drawn with one straight line segment pr element. The number of elements 
 also affect the solution time, but you are probably not analyzing systems of such size that 
-solution time is a concern with this software.\n"""]
+solution time is a concern with this software.\n""",
+                   """A{}: /n -All vectors written on the graphics view refer to the global system coordinate system. /n
+- The distributed load sign 'convention' is a little arbitrary, but the drawn direction drawn is what it is. /n
+- Displacements and forces for nodes in the right hand menu are given in the global csys. /n
+- Displacements, forces and stresses for elements in the right hand menu are given in the local (element) csys, that 
+is (axial, transversal, rotational)./n
+- Stresses for elements are given as (max axial, min axial, avg shear)./n
+- Moment diagrams seem to always be drawn on the tensile side, but this is purely an accident and may not always be the 
+case.
+ 
+"""]
 
         for idx, Q in enumerate(questions):
             self.textbox.insert(tk.INSERT, Q.format(idx).replace('\n', ''))
@@ -1197,7 +1253,7 @@ solution time is a concern with this software.\n"""]
         for idx, (Q,A) in enumerate(zip(questions,answers)):
             self.textbox.insert(tk.INSERT, Q.format(idx).replace('\n', ''))
             self.textbox.insert(tk.INSERT, '\n')
-            self.textbox.insert(tk.INSERT, A.format(idx).replace('\n', ''))
+            self.textbox.insert(tk.INSERT, A.format(idx).replace('\n', '').replace('/n','\n'))
             self.textbox.insert(tk.INSERT, '\n\n')
 
 
@@ -1210,7 +1266,6 @@ if __name__ == '__main__':
         icon = '@' + os.getcwd() + 'dss_icon.xbm'
 
     p = Problem()
-
     root = tk.Tk()
     w = Window(root, problem=p)
 
