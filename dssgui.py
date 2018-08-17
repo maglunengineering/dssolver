@@ -1,8 +1,9 @@
 import tkinter as tk
+
 from tkinter import filedialog
 from solver import *
 from numpy.linalg import inv
-from extras import ResizingCanvas
+from extras import ResizingCanvas, HyperlinkManager
 from sys import platform as _platform
 import os
 import pickle
@@ -137,6 +138,8 @@ class Window:
                                   onvalue=True, offvalue=False, variable=self.bv_draw_moment)
 
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale() )
+
+        topmenu.add_command(label='Help', command=lambda: HelpBox(self.root))
 
         #topmenu.add_command(label='Func', command=lambda: self.upd_rsmenu())
 
@@ -669,22 +672,6 @@ class Window:
                                                       1])
         self.draw_canvas()
 
-    def _autoscale_old(self):
-        canvas_size = np.sqrt(self.canvas.width**2 + self.canvas.height**2)
-        model_size = self.problem.model_size()
-        self.ratio = 1/4*canvas_size/model_size  # Big if model size is small
-        self.transformation_matrix[0:2, 0:2] = np.array([[1, 0], [0, -1]])/self.ratio
-
-        self.zoom = self.ratio
-        x_ = np.max(self.problem.nodal_coordinates[:,0]) - np.min(self.problem.nodal_coordinates[:,0])
-        y_ = np.max(self.problem.nodal_coordinates[:,1]) - np.min(self.problem.nodal_coordinates[:,1])
-
-        #self.move_to(np.array([self.canvas.width/2, self.canvas.height/2])
-        #             + (inv(self.transformation_matrix) @ np.array([x_, -y_, 1]))[0:2])
-        #self.move_to_()
-        self.move_to()
-        self.draw_canvas()
-
     # Mechanical functions
     def start_or_end_beam(self, r):  # r: Problem coordinates
         if self.r1 is None:  # If r1 does not exist
@@ -1149,6 +1136,69 @@ class BeamManager:
             [tk.Entry(top) for _ in range(3)]
 
         self.e_A.insert(0, self.problem.beams[element_id].A)
+
+class HelpBox:
+    def __init__(self, root):
+        top = self.top = tk.Toplevel(root)
+        self.root = root
+
+        self.textbox = tk.Text(top)
+        self.top.columnconfigure(0, weight=1)
+        self.top.columnconfigure(1, weight=0)
+        self.top.rowconfigure(0, weight=1)
+
+        self.textbox.grid(row=0, column=0, sticky='nsew')
+
+        self.scr = tk.Scrollbar(top)
+        self.scr.grid(row=0, column=1, sticky='ns')
+
+        questions = ['Q{}: Why is this table of contents not clickable?\n',
+                     'Q{}: Key bindings\n',
+                     'Q{}: Can I do truss analysis using DSSolver?\n',
+                     'Q{}: Rod elements make my analysis fail\n',
+                     'Q{}: What units does DSSolver use?\n' ,
+                     'Q{}: How many Beam elements should I use?\n']
+
+        answers = ['A{}: It will be someday, probably.\n',
+                   """A{}: Double click mouse-1 to zoom in. Double click mousewheel to zoom out. 
+Drag and drop to move the view.\n""",
+                   """A{}: Yes - just use Rod elements. Due to how Rod elements work, you will have to 
+use the lock rotation boundary condition on all nodes that only connect Rod elements. 
+Use the "Auto rotation lock" (in the Edit menu) to automatically rotation lock all nodes 
+that only connect Rod elements.  
+You should also fix (not pin/roller) the truss where it is supported. See 'Rod 
+elements make my analysis fail' for more info.\n""",
+                   """A{}: Just like Beam elements, Rod elements have 3 degrees of freedom pr node (two 
+translations and one rotation) to ensure compatibility with beam elements. However, Rod 
+elements only have stiffness against axial deformations. All nodes in a system must have 
+stiffness against all deformations (x, y, rotation) or the system stiffness matrix will be 
+singular. Therefore, at both endnodes of a Rod element, there must either be (1) a Beam 
+element, which provides stiffness against all deformations, (2) a fixed support, which 
+removes all degrees of freedom at that node, or (3) a differently oriented Rod element 
+and a rotation lock support, which in sum will have stiffness against both translations 
+and remove the rotation degree of freedom.\n""",
+                   """A{}: DSSolver is unitless, meaning you can use any units you want as long as they are 
+internally consistent. All outputs will be in the same units. Some systems of consistent 
+units are SI (meters, newtons, newtonmeters, pascals), SI (mm) (millimeters, newtons, 
+newtonmillimeters, megapascals) and imperial (inches) (inches, pounds, pound-inches, 
+pounds pr square inch). More systems can be found on Google.\n""",
+                   """A{}: The number of beam elements only affects the drawing of displaced shapes and shear 
+force- and moment diagrams, not the accuracy of the analysis. Displaced shapes and shear force- 
+and moment diagrams are drawn with one straight line segment pr element. The number of elements 
+also affect the solution time, but you are probably not analyzing systems of such size that 
+solution time is a concern with this software.\n"""]
+
+        for idx, Q in enumerate(questions):
+            self.textbox.insert(tk.INSERT, Q.format(idx).replace('\n', ''))
+            self.textbox.insert(tk.INSERT, '\n')
+
+        self.textbox.insert(tk.INSERT, '\n \n')
+
+        for idx, (Q,A) in enumerate(zip(questions,answers)):
+            self.textbox.insert(tk.INSERT, Q.format(idx).replace('\n', ''))
+            self.textbox.insert(tk.INSERT, '\n')
+            self.textbox.insert(tk.INSERT, A.format(idx).replace('\n', ''))
+            self.textbox.insert(tk.INSERT, '\n\n')
 
 
 
