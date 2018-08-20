@@ -226,9 +226,7 @@ class Problem:
 
     def K(self, reduced=False):
         dofs = 3 * len(self.nodes)  # int: Number of system dofs
-        K = np.zeros((dofs,dofs))
-        for beam in self.beams:
-            K += beam.Ki(dofs)
+        K = sum(beam.Ki(dofs) for beam in self.beams)
         if not reduced:
             return K
         else:

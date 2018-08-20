@@ -1,5 +1,4 @@
 import tkinter as tk
-
 from tkinter import filedialog
 from solver import *
 from numpy.linalg import inv
@@ -22,7 +21,7 @@ class Window:
         self.mainframe.pack(fill=tk.BOTH, expand=True)
         #self.mainframe.grid(row=0, column=0, sticky='nsew')
         self.mainframe.winfo_toplevel().title('DSSolver')
-        self.canvas = tk.Canvas()  # Changed later on
+        self.canvas = None  # Changed later on
         self.rcm = None
         self.bcm = None
         self.bm = None
@@ -33,9 +32,7 @@ class Window:
         self.r1 = None
         self.r2 = None  # For self.start_or_end_beam()
         self.closest_node_label = None
-        self.dx = -50; self.dy = 100
-        self.kx = 1; self.ky = -1
-        self.transformation_matrix = np.array([[self.kx,0,self.dx],[0,self.ky,self.dy],[0,0,1]], dtype=float)
+        self.transformation_matrix = np.array([[1,0,-50],[0,-1,100],[0,0,1]], dtype=float)
         # [problem coords] = [[T]] @ [canvas coords]
         self.tx = 0; self.ty = 0  # Translation
         self.prev_x = None; self.prev_y = None
@@ -294,10 +291,6 @@ class Window:
             # Superimpose in red
             self.bv_draw_highlight.set(element.number + 1)
 
-            """ TODO: Displacements and forces (not stress?) are given in global csys. Probably should
-            be given in local.  
-            
-            """
 
         elif not self.rsm_view_elements:
             node = self.problem.nodes[self.lboxdict_nodes[obj]]
@@ -350,8 +343,6 @@ class Window:
     # Drawing functions
     def draw_canvas(self, *args, **kwargs):
         self.canvas.delete('all')  # Clear the canvas
-
-        # Draw nodes:
 
         if self.bv_draw_nodes_intr or self.bv_draw_nodes_nintr:
             self.draw_nodes()
@@ -808,7 +799,6 @@ class Window:
         print("Clicked at canvas", [event.x, event.y], 'problem', (self.transformation_matrix@[event.x,event.y,1])[0:2])
         print('Closest node', self.closest_node_label)
         print('r1, r2', self.r1, self.r2)
-        #print('T', self.transformation_matrix)
 
     def _selftest(self, loadcase = 1):
         self.new_problem()
@@ -847,32 +837,35 @@ class Window:
 
         self.autoscale()
 
-class LoadInputMenu:
-    def __init__(self, window, root, problem):
-        """
-        :param window: The DSSolver main window (passed as 'self' from class Window)
-        :param root: root is the root = tkinter.Tk() (passed as 'self.root')
-        :param problem: Instance of the Problem class (passed as 'self.problem')
-        """
-        top = self.top = tk.Toplevel(root)
-        self.top.winfo_toplevel().title('Apply load')
+class DSSInputMenu:
+    def __init__(self, window, root, problem, *args, **kwargs):
+        self.top = tk.Toplevel(root)
         self.top.iconbitmap(window.icon)
 
         self.window = window
         self.root = root
         self.problem = problem
 
-        self.label = tk.Label(top, text='Apply load at node')
+class LoadInputMenu(DSSInputMenu):
+    def __init__(self, window, root, problem):
+        """
+        :param window: The DSSolver main window (passed as 'self' from class Window)
+        :param root: root is the root = tkinter.Tk() (passed as 'self.root')
+        :param problem: Instance of the Problem class (passed as 'self.problem')
+        """
+        super().__init__(window, root, problem)
+        self.top.winfo_toplevel().title('Apply load')
+        self.label = tk.Label(self.top, text='Apply load at node')
         self.label.grid(row=0, column=0)
 
         entrykeys = ['Fx', 'Fy', 'M']
-        entries = [self.e_fx, self.e_fy, self.e_m] = [tk.Entry(top) for _ in range(3)]
+        entries = [self.e_fx, self.e_fy, self.e_m] = [tk.Entry(self.top) for _ in range(3)]
 
         for idx, entry in enumerate(entries):
             entry.grid(row=idx+1, column=1)
 
         for idx, key in enumerate(entrykeys):
-            tk.Label(top, text=key).grid(row=idx+1)
+            tk.Label(self.top, text=key).grid(row=idx+1)
 
         for idx, entry in enumerate((self.e_fx, self.e_fy, self.e_m)):
             try:
@@ -882,7 +875,7 @@ class LoadInputMenu:
 
         self.e_fx.focus_set()
 
-        self.b = tk.Button(top, text='Apply load', command=self.cleanup)
+        self.b = tk.Button(self.top, text='Apply load', command=self.cleanup)
         self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
         self.b.grid(row=4, column=0)
 
@@ -897,32 +890,27 @@ class LoadInputMenu:
 
         self.top.destroy()
 
-class DistrLoadInputMenu:
+class DistrLoadInputMenu(DSSInputMenu):
     def __init__(self, window, root, problem, r1 = np.array([0,0]), r2 = np.array([0,0])):
         """
         :param window: The DSSolver main window (passed as 'self' from class Window)
         :param root: root is the root = tkinter.Tk() (passed as 'self.root')
         :param problem: Instance of the Problem class (passed as 'self.problem')
         """
-        top = self.top = tk.Toplevel(root)
+        super().__init__(window, root, problem)
         self.top.winfo_toplevel().title('Apply distributed load')
-        self.top.iconbitmap(window.icon)
 
-        self.window = window
-        self.root = root
-        self.problem = problem
-
-        self.label = tk.Label(top, text='Apply distributed load')
+        self.label = tk.Label(self.top, text='Apply distributed load')
         self.label.grid(row=0, column=0)
 
         entrykeys = ['Starting node', 'Ending node', 'Load magnitude']
-        entries = [self.e_r1, self.e_r2, self.e_load] = [tk.Entry(top) for _ in range(3)]
+        entries = [self.e_r1, self.e_r2, self.e_load] = [tk.Entry(self.top) for _ in range(3)]
 
         for idx, entry in enumerate(entries):
             entry.grid(row=idx+1, column=1)
 
         for idx, key in enumerate(entrykeys):
-            tk.Label(top, text=key).grid(row=idx+1)
+            tk.Label(self.top, text=key).grid(row=idx+1)
 
         self.e_r1.insert(0, '{},{}'.format(r1[0], r1[1]))
         self.e_r2.insert(0, '{},{}'.format(r2[0], r2[1]))
@@ -930,7 +918,7 @@ class DistrLoadInputMenu:
 
         self.e_r2.focus_set()
 
-        self.b = tk.Button(top, text='Apply load', command=self.cleanup)
+        self.b = tk.Button(self.top, text='Apply load', command=self.cleanup)
         self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
         self.b.grid(row=4, column=0)
 
@@ -940,35 +928,29 @@ class DistrLoadInputMenu:
         load = float(eval(self.e_load.get()))
         self.problem.load_members_distr(r1=r1, r2=r2, load=load)
 
-
         self.window.draw_canvas()
-
         self.top.destroy()
 
-class BeamInputMenu:
+class BeamInputMenu(DSSInputMenu):
     def __init__(self, window, root, problem, def_r1=np.array([0,0]), def_r2=np.array([1000,0])):
         """
         :param window: The DSSolver main window (passed as 'self' from class Window)
         :param root: root is the root = tkinter.Tk() (passed as 'self.root')
         :param problem: Instance of the Problem class (passed as 'self.problem')
         """
+        super().__init__(window, root, problem)
 
-        top = self.top = tk.Toplevel(root)
         self.top.winfo_toplevel().title('Create element(s)')
-        self.top.iconbitmap(window.icon)
         self.top.columnconfigure(1, weight=1)
-        self.window = window
-        self.root = root
-        self.problem = problem
 
-        self.label = tk.Label(top, text='Create element(s) between:')
+        self.label = tk.Label(self.top, text='Create element(s) between:')
         self.label.grid(row=0, column=0)
 
         self.nodeframe = tk.Frame(self.top, width=300)
         self.nodeframe.grid(row=1, column=0, columnspan=3, sticky='ew')
         self.nodeframe.grid_columnconfigure(0, weight=1)
 
-        self.morenodes = tk.Button(top,
+        self.morenodes = tk.Button(self.top,
                                    text='+1 \n node',
                                    command=lambda: self.more_nodes())
         self.morenodes.grid(row=0, column=2)
@@ -980,13 +962,13 @@ class BeamInputMenu:
         entrykeys = ['Area', 'Elastic modulus', '2nd mmt of area',
                      'Half section height', 'No. of elements']
         entries = [self.e_A, self.e_E, self.e_I, self.e_z, self.e_n] = \
-            [tk.Entry(top) for _ in range(5)]
+            [tk.Entry(self.top) for _ in range(5)]
 
         for idx, entry in enumerate(entries):
             entry.grid(row=idx+2, column=1, columnspan=2)
 
         for idx, key in enumerate(entrykeys):
-            tk.Label(top, text=key).grid(row=idx+2)
+            tk.Label(self.top, text=key).grid(row=idx+2)
 
         defaults = (1e5, 2e5, 1e5, 4)
         for value, entry in zip(defaults, (self.e_A, self.e_E, self.e_I, self.e_n)):
@@ -997,7 +979,7 @@ class BeamInputMenu:
         self.e_z.insert(0, '158')
         self.e_r1.focus_set()
 
-        self.secmgr = tk.Button(top,
+        self.secmgr = tk.Button(self.top,
                                 text='Section \n manager',
                                 command=lambda: SectionManager(bip=self,
                                                                window=self.window,
@@ -1007,7 +989,7 @@ class BeamInputMenu:
 
 
 
-        self.b = tk.Button(top, text='Create element(s)', command=self.cleanup)
+        self.b = tk.Button(self.top, text='Create element(s)', command=self.cleanup)
         self.b.grid(row=9, column=0)
         self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
 
@@ -1069,7 +1051,7 @@ class BeamInputMenu:
         self.window.autoscale()
         self.top.destroy()
 
-class SectionManager:
+class SectionManager(DSSInputMenu):
     def __init__(self, bip, window, root):
         """
         :param bip: The BeamInputMenu window (passed as 'self' from class BeamInputMenu)
@@ -1077,13 +1059,9 @@ class SectionManager:
         :param root: root is the root = tkinter.Tk() (passed as 'self.root')
         :param problem: Instance of the Problem class (passed as 'self.problem')
         """
-        top = self.top = tk.Toplevel(root)
+        super().__init__(window, root, problem=None)
         self.top.winfo_toplevel().title('Section manager')
-        self.top.iconbitmap(window.icon)
-
         self.bip = bip
-        self.window = window
-        self.root = root
 
         self.A = None
         self.I = None
@@ -1092,30 +1070,30 @@ class SectionManager:
         self.sec.set('Rectangular')
         self.sec.trace('w', self.change_dropdown)
         self.sections = ['Rectangular', 'Circular', 'I-beam']
-        self.dropdown = tk.OptionMenu(top, self.sec, *self.sections)
+        self.dropdown = tk.OptionMenu(self.top, self.sec, *self.sections)
         self.dropdown.grid(row=0, column=1, rowspan=2)
 
         entrykeys = ['DIM1', 'DIM2', 'DIM3', 'DIM4']
-        entries = [self.dim1, self.dim2, self.dim3, self.dim4] = [tk.Entry(top) for _ in range(4)]
+        entries = [self.dim1, self.dim2, self.dim3, self.dim4] = [tk.Entry(self.top) for _ in range(4)]
         for idx, entry in enumerate(entries):
             entry.grid(row=idx+2, column=1)
 
         for idx, key in enumerate(entrykeys):
-            tk.Label(top, text=key).grid(row=idx+2)
+            tk.Label(self.top, text=key).grid(row=idx+2)
 
         self.dim3.insert(0, 0)
         self.dim4.insert(0, 0)
 
-        self.valuelabel = tk.Label(top, text='Placeholder, area: A, I:I')
+        self.valuelabel = tk.Label(self.top, text='Placeholder, area: A, I:I')
         self.valuelabel.grid(row=6, column=0, columnspan=2)
 
-        self.b = tk.Button(top, text='Ok', command=self.cleanup)
+        self.b = tk.Button(self.top, text='Ok', command=self.cleanup)
         self.b.grid(row=7, column=0, columnspan=2)
         self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
 
         file = os.getcwd() + '/gfx/dim_Rectangular.gif'
         self.photo = tk.PhotoImage(file=file)
-        self.photolabel = tk.Label(top, image=self.photo)
+        self.photolabel = tk.Label(self.top, image=self.photo)
         self.photolabel.photo = self.photo
         self.photolabel.grid(row=1, column=2, rowspan=7)
 
@@ -1255,7 +1233,6 @@ case.
             self.textbox.insert(tk.INSERT, '\n')
             self.textbox.insert(tk.INSERT, A.format(idx).replace('\n', '').replace('/n','\n'))
             self.textbox.insert(tk.INSERT, '\n\n')
-
 
 
 if __name__ == '__main__':
