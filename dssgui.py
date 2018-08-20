@@ -43,27 +43,24 @@ class Window:
         self.scale = 50
         self.node_radius = 2.5
 
-        self.bv_draw_elements = tk.BooleanVar()
-        self.bv_draw_boundary_conditions = tk.BooleanVar()
-        self.bv_draw_loads = tk.BooleanVar()
-        self.bv_draw_nodes_intr = tk.BooleanVar()
-        self.bv_draw_nodes_nintr = tk.BooleanVar()
-        for var in (self.bv_draw_elements, self.bv_draw_boundary_conditions,
-                    self.bv_draw_loads, self.bv_draw_nodes_intr):
-            var.set(True)
+        self.bv_draw = {'elements': tk.BooleanVar(),
+                        'boundary_conditions': tk.BooleanVar(),
+                        'loads': tk.BooleanVar(),
+                        'nodes_intr': tk.BooleanVar(),
+                        'nodes_nintr': tk.BooleanVar(),
+                        'displaced': tk.BooleanVar(),
+                        'shear': tk.BooleanVar(),
+                        'moment': tk.BooleanVar(),
+                        'highlight':tk.IntVar()}
 
-        self.bv_draw_displaced = tk.BooleanVar()
-        self.bv_draw_shear = tk.BooleanVar()
-        self.bv_draw_moment = tk.BooleanVar()
-        self.bv_draw_highlight = tk.IntVar()
-        for var in (self.bv_draw_displaced, self.bv_draw_shear, self.bv_draw_moment,
-                    self.bv_draw_nodes_nintr):
-            var.set(False)
+        for var in ('elements', 'boundary_conditions', 'loads', 'nodes_intr'):
+            self.bv_draw[var].set(True)
 
-        for var in (self.bv_draw_elements, self.bv_draw_boundary_conditions, self.bv_draw_loads,
-                    self.bv_draw_displaced, self.bv_draw_shear, self.bv_draw_moment,
-                    self.bv_draw_nodes_intr, self.bv_draw_nodes_nintr):
-            var.trace('w', self.draw_canvas)
+        for var in ('displaced', 'shear', 'moment', 'nodes_nintr'):
+            self.bv_draw[var].set(False)
+
+        for var in self.bv_draw.keys():
+            self.bv_draw[var].trace('w', self.draw_canvas)
 
         self.build_grid()
         self.build_menu()
@@ -123,18 +120,18 @@ class Window:
         show_menu = tk.Menu(topmenu)
         topmenu.add_cascade(label='Show/hide', menu=show_menu)
         show_menu.add_checkbutton(label='Elements',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw_elements)
+                                  onvalue=True, offvalue=False, variable=self.bv_draw['elements'])
         show_menu.add_checkbutton(label='Loads',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw_loads)
+                                  onvalue=True, offvalue=False, variable=self.bv_draw['loads'])
         show_menu.add_checkbutton(label='Boundary conditions',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw_boundary_conditions)
+                                  onvalue=True, offvalue=False, variable=self.bv_draw['boundary_conditions'])
         show_menu.add_separator()
         show_menu.add_checkbutton(label='Displaced shape',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw_displaced)
+                                  onvalue=True, offvalue=False, variable=self.bv_draw['displaced'])
         show_menu.add_checkbutton(label='Shear force diagram',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw_shear)
+                                  onvalue=True, offvalue=False, variable=self.bv_draw['shear'])
         show_menu.add_checkbutton(label='Moment diagram',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw_moment)
+                                  onvalue=True, offvalue=False, variable=self.bv_draw['moment'])
 
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale() )
 
@@ -214,17 +211,17 @@ class Window:
         self.rsm_shm = tk.Frame(self.rsm, bg=self.color2, width=255)
         self.rsm_shm.grid(row=3, column=0, sticky='nw')
         self.rsm_shm_label = tk.Label(self.rsm_shm, text='Show/hide', bg=self.color2)
-        self.rsm_shm_label.grid(row=0, column=0, columnspan=2, sticky='e')
+        self.rsm_shm_label.grid(row=0, column=0, columnspan=2, sticky='ew')
 
         buttons = [     'Elements', 'Nodes \n (interesting)',
                         'Loads', 'Nodes (all)',
                         'Boundary \n conditions', 'Displaced \n shape',
                         'Shear \n diagram', 'Moment \n diagram']
 
-        vars = [self.bv_draw_elements,              self.bv_draw_nodes_intr,
-                self.bv_draw_loads,                 self.bv_draw_nodes_nintr,
-                self.bv_draw_boundary_conditions,   self.bv_draw_displaced,
-                self.bv_draw_shear,                 self.bv_draw_moment]
+        vars = [self.bv_draw['elements'],              self.bv_draw['nodes_intr'],
+                self.bv_draw['loads'],                 self.bv_draw['nodes_nintr'],
+                self.bv_draw['boundary_conditions'],   self.bv_draw['displaced'],
+                self.bv_draw['shear'],                 self.bv_draw['moment']]
 
         for b,v,i in zip(buttons, vars, range(len(buttons))):
             button = tk.Checkbutton(self.rsm_shm, text=b, variable=v, bg=self.color2,
@@ -248,7 +245,7 @@ class Window:
                 self.lboxdict_nodes[text] = node.number
                 self.rsm_lbox.insert(tk.END, text)
 
-        self.bv_draw_highlight.set(0)
+        self.bv_draw['highlight'].set(0)
         self.draw_canvas()
         pass
 
@@ -289,7 +286,7 @@ class Window:
                 np.round(element.length, decimals=2))
                                                         )
             # Superimpose in red
-            self.bv_draw_highlight.set(element.number + 1)
+            self.bv_draw['highlight'].set(element.number + 1)
 
 
         elif not self.rsm_view_elements:
@@ -307,7 +304,7 @@ class Window:
                 np.round(node.abs_forces, decimals=2),
                 )
             )
-            self.bv_draw_highlight.set(node.number + 1)
+            self.bv_draw['highlight'].set(node.number + 1)
 
         self.draw_canvas()
         self.canvas.resize(width=self.canvas.width, height=self.canvas.height)
@@ -344,31 +341,31 @@ class Window:
     def draw_canvas(self, *args, **kwargs):
         self.canvas.delete('all')  # Clear the canvas
 
-        if self.bv_draw_nodes_intr or self.bv_draw_nodes_nintr:
+        if self.bv_draw['nodes_intr'] or self.bv_draw['nodes_nintr'].get():
             self.draw_nodes()
 
-        if self.bv_draw_elements.get():
+        if self.bv_draw['elements'].get():
             self.draw_elements()
 
-        if self.bv_draw_loads.get():
+        if self.bv_draw['loads'].get():
             self.draw_loads()
 
-        if self.bv_draw_highlight.get() and self.rsm_view_elements:
-            self.draw_highlight(element_id = self.bv_draw_highlight.get() - 1)
-        elif self.bv_draw_highlight.get() and not self.rsm_view_elements:
-            self.draw_highlight(node_id = self.bv_draw_highlight.get() - 1)
+        if self.bv_draw['highlight'].get() and self.rsm_view_elements:
+            self.draw_highlight(element_id = self.bv_draw['highlight'].get() - 1)
+        elif self.bv_draw['highlight'].get() and not self.rsm_view_elements:
+            self.draw_highlight(node_id = self.bv_draw['highlight'].get() - 1)
 
-        if self.bv_draw_boundary_conditions.get():
+        if self.bv_draw['boundary_conditions'].get():
             self.draw_boundary_conditions()
 
         if self.problem.solved:
-            if self.bv_draw_displaced.get():
+            if self.bv_draw['displaced'].get():
                 self.draw_displaced()
 
-            if self.bv_draw_shear.get():
+            if self.bv_draw['shear'].get():
                 self.draw_shear_diagram()
 
-            if self.bv_draw_moment.get():
+            if self.bv_draw['moment'].get():
                 self.draw_moment_diagram()
 
         self.draw_csys()
@@ -390,7 +387,7 @@ class Window:
     def draw_nodes(self):
         for node in self.problem.nodes:
             node_r = (inv(self.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
-            if node.draw or self.bv_draw_nodes_nintr.get():
+            if node.draw or self.bv_draw['nodes_nintr'].get():
                 node_radius = self.node_radius
                 self.canvas.create_oval(*np.hstack((node_r - node_radius, node_r + node_radius)),
                                                    fill='black', tag='mech')
