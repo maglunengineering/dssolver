@@ -296,12 +296,11 @@ class Window:
                                       'r: {} \n'
                                       'Boundary condition: {} \n'
                                       'Displacements: {} \n'
-                                      'Abs. int. forces {} \n'.format(
+                                     .format(
                 node.number,
                 node.r,
                 node.boundary_condition,
                 np.round(node.displacements, decimals=2),
-                np.round(node.abs_forces, decimals=2),
                 )
             )
             self.bv_draw['highlight'].set(node.number + 1)
