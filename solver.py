@@ -18,6 +18,11 @@ class Problem:
         self.forces = None  # Forces (at all nodes, incl removed dofs)
         self.displacements = None  # Assigned at solution ( self.solve() )
         self.solved = False
+        self.C = None  # tie matrix
+
+        # For incremental analysis
+        self.incremental_loads = None
+        self.incremental_displacements = None
 
     def create_beam(self, r1, r2, E=2e5, A=1e5, I=1e5, z=None, drawnodes=3):
         """
@@ -89,11 +94,22 @@ class Problem:
         else:  # Node already exists at r
             return self.nodes[self.nodes.index(node)] # Return the node which already exists
 
-    def remove_node(self, r):
-        self.nodes.remove(self.nodes[self.node_at(r)])
+    def remove_orphan_nodes(self):
+        for node in self.nodes:
+            if len(node.beams) == 0:
+                self.nodes.remove(node)
+        self.reassign_dofs()
 
     def remove_element(self, r1, r2):
-        self.beams.remove(self.beams[self.beam_at(r1, r2)])
+        try:
+            element = self.beams[self.beam_at(r1, r2)]
+            for node in element.nodes:
+                node.beams.remove(element)
+            self.beams.remove(self.beams[self.beam_at(r1, r2)])
+            print('Removed element at', r1, r2)
+            self.remove_orphan_nodes()
+        except:
+            print('Failed to remove; No element at', r1, r2)
 
     def node_at(self, r):
         r = np.asarray(r)
@@ -103,16 +119,51 @@ class Problem:
                 return node_id
         print('No node at {}'.format(r))
 
+    def nodeobj_at(self, r):
+        r = np.asarray(r)
+        for node in self.nodes:
+            if node == Node(r):
+                return node
+        print('No node at {}'.format(r))
+
     def beam_at(self, r1, r2):
         r1, r2 = np.asarray(r1), np.asarray(r2)
         for beam in self.beams:
             if beam == Beam(r1, r2) or beam == Beam(r2, r1):
-                return beam.number
-        return 'No beam'
+                return self.beams.index(beam)
+
+        print('No beam at', r1, r2)
+
+    def reassign_dofs(self):
+        self.loads = np.array([])
+        for i,node in enumerate(self.nodes):
+            node.number = i
+            node.dofs = (3*i, 3*i+1, 3*i+2)
+            self.loads = np.append(self.loads, node.loads)
+
+    def reform_geometry(self):
+        oldbeams = self.beams.copy()
+        for element in oldbeams:
+            if np.allclose(element.r1, np.array([100,20])):
+                print('Criterion')
+                pass
+            new_r1 = element.r1 + element.displacements[0:2]
+            new_r2 = element.r2 + element.displacements[3:5]
+            self.remove_element(element.r1, element.r2)
+
+            if type(element) == Beam:
+                self.create_beam(new_r1, new_r2, element.E, element.A, element.I, element.z)
+            elif type(element) == Rod:
+                self.create_rod(new_r1, new_r2, element.E, element.A)
+
+            for i,node in enumerate(element.nodes):
+                self.boundary_condition(node.r + node.displacements[0:2], node.boundary_condition)
+
+
+        self.remove_orphan_nodes()
 
     def boundary_condition(self, r, bctype):
         """
-        For the GUI
         :param r: Location of node
         :param bctype: 'fixed', 'pinned', 'roller', 'lock'
         """
@@ -152,6 +203,11 @@ class Problem:
         dofs = np.array(dofs)
         self.constrained_dofs += tuple(np.array(self.nodes[node_id].dofs)[dofs])
         self.nodes[node_id].draw = True
+
+    def tie(self, node1, node2):
+        """ Translational (not rotational) tie """
+        dofs_1 = np.asarray(node1.dofs)[0:2]
+        dofs_2 = np.asarray(node2.dofs)[0:2]
 
     def auto_rotation_lock(self):
         """
@@ -225,6 +281,7 @@ class Problem:
             return model_size
 
     def K(self, reduced=False):
+        self.remove_dofs()
         dofs = 3 * len(self.nodes)  # int: Number of system dofs
         K = sum(beam.Ki(dofs) for beam in self.beams)
         if not reduced:
@@ -234,16 +291,17 @@ class Problem:
             K = np.delete(K, self.constrained_dofs, axis=1)
             return K
 
-    def Qf(self):  # Member force vector
+    def Qf(self):  # Member force vector for distr loads
         dofs = 3*len(self.nodes)
         self.member_loads = np.zeros(dofs)
         for beam in self.beams:
             self.member_loads += beam.Qfi(dofs)
 
     def solve(self):
+        self.reassign_dofs()
         self.remove_dofs()
         free_dofs = np.delete(np.arange(3 * len(self.nodes)), self.constrained_dofs)
-        self.Qf()  # Compute system member load vector
+        self.Qf()  # Compute system load vector
 
         Kr = self.K(reduced=True)
         F = self.loads - self.member_loads
@@ -254,7 +312,7 @@ class Problem:
 
         self.displacements = np.zeros(3 * len(self.nodes))
         self.displacements[free_dofs] = dr
-        self.ext_forces = self.K() @ self.displacements
+        #self.ext_forces = self.K() @ self.displacements
 
         for node in self.nodes:
             node.displacements = self.displacements[np.array(node.dofs)]
@@ -275,6 +333,23 @@ class Problem:
 
         self.solved = True
         return dr
+
+    def solve_nlgeom(self, n):
+        loadstep = self.loads.copy() / n
+        self.incremental_loads = np.zeros_like(loadstep) * np.zeros(n).reshape((n,1))
+        self.incremental_displacements = np.zeros_like(loadstep) * np.zeros(n).reshape((n,1))
+
+        for i in range(1,n+1):
+            print('LOAD STEP {} of {}'.format(i,n))
+            for j, nodal_loads in enumerate(loadstep.reshape((-1, 3))):
+                """Apply load to nodes, as solver builds the global load vector by iterating through the nodes """
+                self.nodes[j].loads = nodal_loads
+            self.solve()
+
+            self.incremental_loads[i-1] = self.incremental_loads[i-2] + self.loads
+            self.incremental_displacements[i-1] = self.incremental_displacements[i-2] + self.displacements
+            print('GEOMETRY REFORMING')
+            self.reform_geometry()
 
     def plot(self):
         nodal_coordinates = np.array([0,0])
@@ -376,7 +451,7 @@ class Node:
         self.number = None  # (node id) assigned on creation
         self.dofs = None  # self.dofs (dof1, dof2, dof3) assigned on creation
         self.displacements = np.array([0,0,0])  # self.displacement (d1, d2, d3) asssigned on solution
-        self.boundary_condition = None  # 'fixed', 'pinned', 'roller', 'lock'
+        self.boundary_condition = None  # 'fixed', 'pinned', 'roller', 'locked', 'glider'
 
         self.draw = draw  # Node is not drawn unless it is interesting
 
@@ -393,7 +468,6 @@ class Node:
                 self.forces = self.forces + np.abs(element.forces[3:6]) / 2
         return self.forces + np.abs(self.loads/2)
 
-
     def connected_nodes(self):
         other_nodes = []
         for beam in self.beams:
@@ -406,7 +480,7 @@ class Node:
         return '{},{}'.format(self.x, self.y)
 
     def __eq__(self, other):
-        return np.array_equal(self.r, other.r)
+        return np.allclose(self.r, other.r)
 
 class Beam:
 
@@ -471,7 +545,7 @@ class Beam:
         return E@self.member_loads
 
     def __eq__(self, other):
-        return np.array_equal(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
+        return np.allclose(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
 
 class Rod(Beam):
     """
@@ -638,11 +712,22 @@ if __name__ == '__main__':
             m.fix(m.node_at((0,0)))
             m.load_members_distr((0,0),(1000,0),10)
 
+        def lcnl1():
+            m.create_rod((0,0),(1000,100))
+            m.fix(m.node_at((0,0)))
+            m.glider(m.node_at((1000,100)))
+            m.load_node(m.node_at((1000,100)), (0, -7e6, 0))
+            m.solve_nlgeom(32)
 
-    lc2()
+        def lcnl2():
+            m.create_beams((0,0),(500,100), n=10)
+            m.create_beams((500,100),(1000,0), n=10)
+            m.fix(m.node_at((0,0)))
+            m.fix(m.node_at((1000,0)))
+            m.load_node(m.node_at((500,100)), (0, -1e7, 0))
 
-    #m.solve()
-    m.plot()
-    #print(m.nodes[m.node_at(n)].displacements)
-    #m.plot_displaced()
-    plt.show()
+            node = m.nodes[m.node_at((500,100))]
+
+
+    lcnl2()
+    m.solve_nlgeom(5)
