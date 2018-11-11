@@ -11,7 +11,6 @@ Features:
 - Calculates displacements, forces and stresses 
 - Drawing displaced shapes, shear force- and moment diagrams 
 
-Last commit: 17/8-2018
 
 Recent changes: 
 - Help box thing
