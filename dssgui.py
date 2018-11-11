@@ -116,6 +116,10 @@ class Window:
                             command=lambda: self._selftest(2))
         menu_stdcases.add_command(label='Fanned out cantilever beams',
                             command=lambda: self._selftest(3))
+        menu_stdcases.add_command(label='Circular arch',
+                            command=lambda: self._selftest(4))
+        menu_stdcases.add_command(label='270 arch',
+                            command=lambda: self._selftest(5))
 
         show_menu = tk.Menu(topmenu)
         topmenu.add_cascade(label='Show/hide', menu=show_menu)
@@ -266,22 +270,26 @@ class Window:
                                       'At r1: \n'
                                       'Boundary condition: {} \n'
                                       'Displacements {} \n'
-                                      'Int. forces {} \n'
+                                      'Int. forces {} \n'  # Local csys! 
+                                      'Int. f. global {} \n'
                                       'Stress {} \n'
                                       'At r2: \n'
                                       'Boundary condition: {} \n'
                                       'Displacements {} \n'
                                       'Int. forces {} \n'
+                                      'Int. f. global {} \n'
                                       'Stress {} \n'
                                       'Length {}\n '.format(
                 element.number,
                 element.nodes[0].boundary_condition,
-                np.round(element.beta[0:3,0:3]@element.displacements[0:3], decimals=2),
-                np.round(element.beta[0:3,0:3]@element.forces[0:3], decimals=2),
+                np.round(element.beta(element.angle)[0:3,0:3]@element.displacements[0:3], decimals=2),
+                np.round(element.beta(element.angle)[0:3,0:3]@element.forces[0:3], decimals=2),
+                np.round(element.forces[0:3], decimals=2),
                 np.round(element.stress[0:3], decimals=2),
                 element.nodes[1].boundary_condition,
-                np.round(element.beta[3:6,3:6] @ element.displacements[3:6], decimals=2),
-                np.round(element.beta[3:6,3:6] @ element.forces[3:6], decimals=2),
+                np.round(element.beta(element.angle)[3:6,3:6] @ element.displacements[3:6], decimals=2),
+                np.round(element.beta(element.angle)[3:6,3:6] @ element.forces[3:6], decimals=2),
+                np.round(element.forces[3:6], decimals=2),
                 np.round(element.stress[3:6], decimals=2),
                 np.round(element.length, decimals=2))
                                                         )
@@ -450,7 +458,7 @@ class Window:
                     for x0,y0 in zip(np.linspace(p2[0], p4[0], 3, endpoint=True),
                                       np.linspace(p2[1], p4[1], 3, endpoint=True)):
                         x1, y1 = np.array([x0, y0]) + rotation @ [0, scale/2]
-                        arrow = 'last' if (beam.beta @ beam.member_loads)[2] > 0 else 'first'
+                        arrow = 'last' if (beam.beta(beam.angle) @ beam.member_loads)[2] > 0 else 'first'
                         self.canvas.create_line(x0, y0, x1, y1,
                                                 arrow=arrow)
 
@@ -573,8 +581,8 @@ class Window:
             s,c = np.sin(beam.angle), np.cos(beam.angle)
             R = np.array([[c, -s], [s, c]])
 
-            v1 = (beam.beta @ beam.forces)[1]
-            v2 = -(beam.beta @ beam.forces)[4]
+            v1 = (beam.beta(beam.angle) @ beam.forces)[1]
+            v2 = -(beam.beta(beam.angle) @ beam.forces)[4]
 
             p1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
             p2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
@@ -815,6 +823,31 @@ class Window:
                 self.problem.load_members_distr((0,0),point, load=10)
 
             self.problem.fix(self.problem.node_at((0,0)))
+
+        if loadcase == 4: # Circular arch
+            start = np.pi - np.arctan(600 / 800)
+            end = np.arctan(600 / 800)
+
+            node_angles = np.linspace(start, end, 15)
+            node_points = 1000 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + np.array([800,-1600])
+            for r1, r2 in zip(node_points, node_points[1:]):
+                self.problem.create_beam(r1, r2, E=2.1e5, I=10**3/12, A=10)
+            self.problem.pin(self.problem.node_at((0,0)))
+            self.problem.pin(self.problem.node_at((1600,0)))
+            for node in self.problem.nodes:
+                node.draw = False
+
+        if loadcase == 5: # 270 degree arch
+            start = np.deg2rad(225)
+            end = np.deg2rad(-45)
+            node_angles = np.linspace(start, end, 31)
+            node_points = 500 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + [0, 500]
+            for r1, r2 in zip(node_points, node_points[1:]):
+                self.problem.create_beam(r1, r2)
+            for node in self.problem.nodes:
+                node.draw = False
+            #self.problem.nodes[-1].boundary_condition = 'pinned'
+            #self.problem.nodes[0].boundary_condition = 'fixed'
 
         self.upd_rsmenu()
         self.autoscale()
@@ -1173,6 +1206,7 @@ class HelpBox:
 
         questions = ['Q{}: Why is this table of contents not clickable?\n',
                      'Q{}: Key bindings\n',
+                     'Q{}: What is the difference between Beam and Rod elements?\n',
                      'Q{}: Can I do truss analysis using DSSolver?\n',
                      'Q{}: Rod elements make my analysis fail\n',
                      'Q{}: What units does DSSolver use?\n' ,
@@ -1182,6 +1216,8 @@ class HelpBox:
         answers = ['A{}: It will be someday, probably.\n',
                    """A{}: Double click mouse-1 to zoom in. Double click mousewheel to zoom out. 
 Drag and drop to move the view.\n""",
+                   """A{}: A Beam element is a classical beam which can withstand normal, shearing and bending 
+forces. A Rod element is only capable of withstanding normal forces. See Q/A's below for more info on Rod elements.\n""",
                    """A{}: Yes - just use Rod elements. Due to how Rod elements work, you will have to 
 use the lock rotation boundary condition on all nodes that only connect Rod elements. 
 Use the "Auto rotation lock" (in the Edit menu) to automatically rotation lock all nodes 
@@ -1243,3 +1279,4 @@ if __name__ == '__main__':
     w = Window(root, problem=p)
 
     root.mainloop()
+
