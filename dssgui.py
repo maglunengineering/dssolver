@@ -98,7 +98,7 @@ class Window:
         menu_edit = tk.Menu(topmenu)
         topmenu.add_cascade(label='Edit', menu=menu_edit)
         menu_edit.add_command(label='Create element(s)',
-                              command=lambda: BeamInputMenu(self, self.root, self.problem))
+                              command=lambda: ElementInputMenu(self, self.root, self.problem))
         menu_edit.add_command(label='Auto rotation lock',
                               command=lambda: self.problem.auto_rotation_lock())
         menu_edit.add_separator()
@@ -108,6 +108,13 @@ class Window:
         topmenu.add_command(label='Solve',
                             command=lambda: self.problem.solve())
 
+        menu_nl = tk.Menu(topmenu)
+        topmenu.add_cascade(label='Nonlinear solution', menu=menu_nl)
+        menu_nl.add_command(label='Forward Euler solution',
+                            command=lambda: FwdEulerSolution(self, self.root, self.problem))
+        menu_nl.add_command(label='Arc length solution',
+                            command=lambda: ArcLengthSolution(self, self.root, self.problem))
+
         menu_stdcases = tk.Menu(topmenu)
         topmenu.add_cascade(label='Standard load cases', menu = menu_stdcases)
         menu_stdcases.add_command(label='Cantilever beam',
@@ -116,6 +123,10 @@ class Window:
                             command=lambda: self._selftest(2))
         menu_stdcases.add_command(label='Fanned out cantilever beams',
                             command=lambda: self._selftest(3))
+        menu_stdcases.add_command(label='Circular arch',
+                            command=lambda: self._selftest(4))
+        menu_stdcases.add_command(label='270 arch',
+                            command=lambda: self._selftest(5))
 
         show_menu = tk.Menu(topmenu)
         topmenu.add_cascade(label='Show/hide', menu=show_menu)
@@ -266,22 +277,26 @@ class Window:
                                       'At r1: \n'
                                       'Boundary condition: {} \n'
                                       'Displacements {} \n'
-                                      'Int. forces {} \n'
+                                      'Int. forces {} \n'  # Local csys! 
+                                      'Int. f. global {} \n'
                                       'Stress {} \n'
                                       'At r2: \n'
                                       'Boundary condition: {} \n'
                                       'Displacements {} \n'
                                       'Int. forces {} \n'
+                                      'Int. f. global {} \n'
                                       'Stress {} \n'
                                       'Length {}\n '.format(
                 element.number,
                 element.nodes[0].boundary_condition,
-                np.round(element.beta[0:3,0:3]@element.displacements[0:3], decimals=2),
-                np.round(element.beta[0:3,0:3]@element.forces[0:3], decimals=2),
+                np.round(element.beta(element.angle)[0:3,0:3]@element.displacements[0:3], decimals=2),
+                np.round(element.beta(element.angle)[0:3,0:3]@element.forces[0:3], decimals=2),
+                np.round(element.forces[0:3], decimals=2),
                 np.round(element.stress[0:3], decimals=2),
                 element.nodes[1].boundary_condition,
-                np.round(element.beta[3:6,3:6] @ element.displacements[3:6], decimals=2),
-                np.round(element.beta[3:6,3:6] @ element.forces[3:6], decimals=2),
+                np.round(element.beta(element.angle)[3:6,3:6] @ element.displacements[3:6], decimals=2),
+                np.round(element.beta(element.angle)[3:6,3:6] @ element.forces[3:6], decimals=2),
+                np.round(element.forces[3:6], decimals=2),
                 np.round(element.stress[3:6], decimals=2),
                 np.round(element.length, decimals=2))
                                                         )
@@ -293,11 +308,13 @@ class Window:
             node = self.problem.nodes[self.lboxdict_nodes[obj]]
             self.rsm_info.config(text='Double click object for information\n'
                                       'Node id {} \n'
+                                      'Node DOFs {} \n'
                                       'r: {} \n'
                                       'Boundary condition: {} \n'
                                       'Displacements: {} \n'
                                      .format(
                 node.number,
+                node.dofs,
                 node.r,
                 node.boundary_condition,
                 np.round(node.displacements, decimals=2),
@@ -450,7 +467,7 @@ class Window:
                     for x0,y0 in zip(np.linspace(p2[0], p4[0], 3, endpoint=True),
                                       np.linspace(p2[1], p4[1], 3, endpoint=True)):
                         x1, y1 = np.array([x0, y0]) + rotation @ [0, scale/2]
-                        arrow = 'last' if (beam.beta @ beam.member_loads)[2] > 0 else 'first'
+                        arrow = 'last' if (beam.beta(beam.angle) @ beam.member_loads)[2] > 0 else 'first'
                         self.canvas.create_line(x0, y0, x1, y1,
                                                 arrow=arrow)
 
@@ -573,8 +590,8 @@ class Window:
             s,c = np.sin(beam.angle), np.cos(beam.angle)
             R = np.array([[c, -s], [s, c]])
 
-            v1 = (beam.beta @ beam.forces)[1]
-            v2 = -(beam.beta @ beam.forces)[4]
+            v1 = (beam.beta(beam.angle) @ beam.forces)[1]
+            v2 = -(beam.beta(beam.angle) @ beam.forces)[4]
 
             p1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
             p2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
@@ -708,9 +725,9 @@ class Window:
 
         elif self.r1 is not None and self.r2 is None:  # If r1 does exist and r2 does not exist
             self.r2 = np.array(r)
-            BeamInputMenu(self, self.root, self.problem,
-                          def_r1=self.r1,
-                          def_r2=self.r2)
+            ElementInputMenu(self, self.root, self.problem,
+                             def_r1=self.r1,
+                             def_r2=self.r2)
             self.r1 = self.r2 = None
 
     def start_or_end_distr_load(self, r):
@@ -799,7 +816,7 @@ class Window:
     def _selftest(self, loadcase = 1):
         self.new_problem()
         if loadcase == 1:  # Cantilever beam, point load
-            self.problem.create_beams((0,0), (1000,0), n=4)
+            self.problem.create_beams((0,0), (1000,0), n=8)
             self.problem.fix(self.problem.node_at((0,0)))
 
 
@@ -815,6 +832,31 @@ class Window:
                 self.problem.load_members_distr((0,0),point, load=10)
 
             self.problem.fix(self.problem.node_at((0,0)))
+
+        if loadcase == 4: # Circular arch
+            start = np.pi - np.arctan(600 / 800)
+            end = np.arctan(600 / 800)
+
+            node_angles = np.linspace(start, end, 15)
+            node_points = 1000 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + np.array([800,-1600])
+            for r1, r2 in zip(node_points, node_points[1:]):
+                self.problem.create_beam(r1, r2, E=2.1e5, I=10**3/12, A=10)
+            self.problem.pin(self.problem.node_at((0,0)))
+            self.problem.pin(self.problem.node_at((1600,0)))
+            for node in self.problem.nodes:
+                node.draw = False
+
+        if loadcase == 5: # 270 degree arch
+            start = np.deg2rad(225)
+            end = np.deg2rad(-45)
+            node_angles = np.linspace(start, end, 31)
+            node_points = 500 * np.array([np.cos(node_angles), np.sin(node_angles)-1]).T
+            for r1, r2 in zip(node_points, node_points[1:]):
+                self.problem.create_beam(r1, r2)
+            for node in self.problem.nodes:
+                node.draw = False
+            #self.problem.nodes[-1].boundary_condition = 'pinned'
+            #self.problem.nodes[0].boundary_condition = 'fixed'
 
         self.upd_rsmenu()
         self.autoscale()
@@ -842,6 +884,25 @@ class DSSInputMenu:
         self.root = root
         self.problem = problem
 
+    def input_boxes(self, entrykeys, entries, default_inputs=None, starting_row=1, keycolspan=1, entrycolspan=1):
+        """
+        Adds rows of labels and entries starting at starting_row
+        :param entrykeys:  Labels for entries
+        :param entries: Variable names for entries
+        :param default_inputs: Default inputs to entries
+        :param starting_row: Starting row
+        :return:
+        """
+        if default_inputs is None:
+            default_inputs = np.zeros_like(entrykeys)
+
+        for idx, entry in enumerate(entries):
+            entry.grid(row=idx+starting_row, column=1, columnspan=entrycolspan)
+            entry.insert(0, default_inputs[idx])
+
+        for idx, key in enumerate(entrykeys):
+            tk.Label(self.top, text=key).grid(row=idx+starting_row, columnspan=keycolspan)
+
 class LoadInputMenu(DSSInputMenu):
     def __init__(self, window, root, problem):
         """
@@ -856,18 +917,9 @@ class LoadInputMenu(DSSInputMenu):
 
         entrykeys = ['Fx', 'Fy', 'M']
         entries = [self.e_fx, self.e_fy, self.e_m] = [tk.Entry(self.top) for _ in range(3)]
+        entry_default_inputs = [*self.problem.nodes[self.problem.node_at(self.window.closest_node_label)].loads]
 
-        for idx, entry in enumerate(entries):
-            entry.grid(row=idx+1, column=1)
-
-        for idx, key in enumerate(entrykeys):
-            tk.Label(self.top, text=key).grid(row=idx+1)
-
-        for idx, entry in enumerate((self.e_fx, self.e_fy, self.e_m)):
-            try:
-                entry.insert(0, self.problem.nodes[self.problem.node_at(self.window.closest_node_label)].loads[idx])
-            except:
-                entry.insert(0, 0)
+        self.input_boxes(entrykeys, entries, entry_default_inputs)
 
         self.e_fx.focus_set()
 
@@ -901,16 +953,11 @@ class DistrLoadInputMenu(DSSInputMenu):
 
         entrykeys = ['Starting node', 'Ending node', 'Load magnitude']
         entries = [self.e_r1, self.e_r2, self.e_load] = [tk.Entry(self.top) for _ in range(3)]
-
-        for idx, entry in enumerate(entries):
-            entry.grid(row=idx+1, column=1)
-
-        for idx, key in enumerate(entrykeys):
-            tk.Label(self.top, text=key).grid(row=idx+1)
-
-        self.e_r1.insert(0, '{},{}'.format(r1[0], r1[1]))
-        self.e_r2.insert(0, '{},{}'.format(r2[0], r2[1]))
-        self.e_load.insert(0, '0')
+        entry_default_inputs = ['{},{}'.format(r1[0], r1[1]),
+                                '{},{}'.format(r2[0], r2[1]),
+                                '0'
+                                ]
+        self.input_boxes(entrykeys, entries, entry_default_inputs)
 
         self.e_r2.focus_set()
 
@@ -927,7 +974,7 @@ class DistrLoadInputMenu(DSSInputMenu):
         self.window.draw_canvas()
         self.top.destroy()
 
-class BeamInputMenu(DSSInputMenu):
+class ElementInputMenu(DSSInputMenu):
     def __init__(self, window, root, problem, def_r1=np.array([0,0]), def_r2=np.array([1000,0])):
         """
         :param window: The DSSolver main window (passed as 'self' from class Window)
@@ -959,20 +1006,10 @@ class BeamInputMenu(DSSInputMenu):
                      'Half section height', 'No. of elements']
         entries = [self.e_A, self.e_E, self.e_I, self.e_z, self.e_n] = \
             [tk.Entry(self.top) for _ in range(5)]
+        default_inputs = (1e5, 2e5, 1e5, 50, 8)
 
-        for idx, entry in enumerate(entries):
-            entry.grid(row=idx+2, column=1, columnspan=2)
+        self.input_boxes(entrykeys, entries, default_inputs, starting_row=2, entrycolspan=2)
 
-        for idx, key in enumerate(entrykeys):
-            tk.Label(self.top, text=key).grid(row=idx+2)
-
-        defaults = (1e5, 2e5, 1e5, 4)
-        for value, entry in zip(defaults, (self.e_A, self.e_E, self.e_I, self.e_n)):
-            entry.insert(0,int(value))
-
-        self.e_r1.insert(0, '{},{}'.format(def_r1[0], def_r1[1]))
-        self.e_r2.insert(0, '{},{}'.format(def_r2[0], def_r2[1]))
-        self.e_z.insert(0, '158')
         self.e_r1.focus_set()
 
         self.secmgr = tk.Button(self.top,
@@ -1071,14 +1108,9 @@ class SectionManager(DSSInputMenu):
 
         entrykeys = ['DIM1', 'DIM2', 'DIM3', 'DIM4']
         entries = [self.dim1, self.dim2, self.dim3, self.dim4] = [tk.Entry(self.top) for _ in range(4)]
-        for idx, entry in enumerate(entries):
-            entry.grid(row=idx+2, column=1)
+        entry_defaults = (0,0,0,0)
 
-        for idx, key in enumerate(entrykeys):
-            tk.Label(self.top, text=key).grid(row=idx+2)
-
-        self.dim3.insert(0, 0)
-        self.dim4.insert(0, 0)
+        self.input_boxes(entrykeys, entries, entry_defaults, starting_row=2)
 
         self.valuelabel = tk.Label(self.top, text='Placeholder, area: A, I:I')
         self.valuelabel.grid(row=6, column=0, columnspan=2)
@@ -1099,6 +1131,7 @@ class SectionManager(DSSInputMenu):
         self.photolabel.configure(image=self.photo)
 
         if self.sec.get() == 'Circular':
+            self.dim2.delete(0, tk.END)
             self.dim2.insert(0, 0)
             self.dim3.config(state=tk.DISABLED)
             self.dim4.config(state=tk.DISABLED)
@@ -1107,10 +1140,10 @@ class SectionManager(DSSInputMenu):
             self.dim4.config(state=tk.NORMAL)
 
     def cleanup(self, *args):
-        dim1 = eval(self.dim1.get())
-        dim2 = eval(self.dim2.get())
-        dim3 = eval(self.dim3.get())
-        dim4 = eval(self.dim4.get())
+        dim1 = float(self.dim1.get())
+        dim2 = float(self.dim2.get())
+        dim3 = float(self.dim3.get())
+        dim4 = float(self.dim4.get())
         if self.sec.get() == 'Rectangular':
             self.I = 1/12 * (dim1 * dim2**3 - dim3 * dim4**3)
             self.A = (dim1*dim2) - (dim3*dim4)
@@ -1133,6 +1166,67 @@ class SectionManager(DSSInputMenu):
         self.bip.e_z.insert(0, str(self.z))
 
         self.top.destroy()
+
+class ArcLengthSolution(DSSInputMenu):
+    def __init__(self, window, root, problem):
+        """
+        :param window: The DSSolver main window (passed as 'self' from class Window)
+        :param root: root is the root = tkinter.Tk() (passed as 'self.root')
+        :param problem: Instance of the Problem class (passed as 'self.problem')
+        """
+        super().__init__(window, root, problem)
+        self.top.winfo_toplevel().title('Arc length solution')
+        self.label = tk.Label(self.top, text='Arc length parameters')
+        self.label.grid(row=0, column=0)
+
+        entrykeys = ['Maximum no. of increments', 'Maximum no. of iterations',
+                     'Incremental arc length', 'Total arc length'
+                     'Residual norm convergence criterion',
+                     'Update stiffness every _ iterations']
+        entries = [self.max_incr, self.max_it, self.arclength, self.res_crit,
+                   self.upd_interval] = \
+                  [tk.Entry(self.top) for _ in entrykeys]
+        defaults = [self.problem.max_increments, self.problem.max_iterations,
+                    np.linalg.norm(self.problem.loads)/self.problem.max_increments,
+
+                    self.problem.res_norm_criterion,
+                    self.problem.stiffness_upd_interval]
+        self.input_boxes(entrykeys, entries, defaults)
+
+        self.max_incr.focus_set()
+
+        self.b1 = tk.Button(self.top, text='Run solution', command=self.cleanup)
+        self.b1.grid(row=len(entries)+2, column=0)
+        self.b2 = tk.Button(self.top, text='Animate', command=self.problem.animate)
+        self.b2.grid(row=len(entries)+2, column=1)
+        
+    def cleanup(self):
+        self.problem.max_increments = int(self.max_incr.get())
+        self.problem.max_iterations = int(self.max_it.get())
+        self.problem.arclength = float(self.arclength.get())
+        self.problem.res_norm_criterion = float(self.res_crit.get())
+        self.problem.stiffness_upd_interval = int(self.upd_interval.get())
+
+        self.problem.solve_arclength()
+
+class FwdEulerSolution(DSSInputMenu):
+    def __init__(self, window, root, problem):
+        super().__init__(window, root, problem)
+        self.top.winfo_toplevel().title()
+
+        entrykeys = ['Number of increments', 'Maximum no. of iterations',
+                     'Residual norm convergence criterion']
+        entries = [self.fwde_increments, self.max_it, self.res_crit] = \
+            [tk.Entry(self.top) for _ in entrykeys]
+        defaults = [self.problem.fwde_increments, self.problem.max_iterations, self.problem.res_norm_criterion]
+        self.input_boxes(entrykeys, entries, defaults)
+
+        self.fwde_increments.focus_set()
+
+    def cleanup(self):
+        self.problem.fwde_increments = int(self.fwde_increments.get())
+        self.problem.max_iterations = int(self.max_it.get())
+        self.problem.res_norm_criterion = float(self.res_crit.get())
 
 class BeamManager:
     def __init__(self, window, root, element_id):
@@ -1173,6 +1267,7 @@ class HelpBox:
 
         questions = ['Q{}: Why is this table of contents not clickable?\n',
                      'Q{}: Key bindings\n',
+                     'Q{}: What is the difference between Beam and Rod elements?\n',
                      'Q{}: Can I do truss analysis using DSSolver?\n',
                      'Q{}: Rod elements make my analysis fail\n',
                      'Q{}: What units does DSSolver use?\n' ,
@@ -1182,6 +1277,8 @@ class HelpBox:
         answers = ['A{}: It will be someday, probably.\n',
                    """A{}: Double click mouse-1 to zoom in. Double click mousewheel to zoom out. 
 Drag and drop to move the view.\n""",
+                   """A{}: A Beam element is a classical beam which can withstand normal, shearing and bending 
+forces. A Rod element is only capable of withstanding normal forces. See Q/A's below for more info on Rod elements.\n""",
                    """A{}: Yes - just use Rod elements. Due to how Rod elements work, you will have to 
 use the lock rotation boundary condition on all nodes that only connect Rod elements. 
 Use the "Auto rotation lock" (in the Edit menu) to automatically rotation lock all nodes 
@@ -1243,3 +1340,4 @@ if __name__ == '__main__':
     w = Window(root, problem=p)
 
     root.mainloop()
+
