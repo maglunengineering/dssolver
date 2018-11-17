@@ -1,5 +1,7 @@
 # DSSolver
 
+![alt text](https://github.com/maglunengineering/dssolver/blob/master/illustration.png)
+
 DSSolver is a direct stiffness method-based solver for simple 2D linear statics problems. 
 
 To run, execute dssolver.bat (Windows) or dssolver.sh (Linux) or just execute dssgui.py with your Python interpreter. Requires Python 3 with tkinter and NumPy.
