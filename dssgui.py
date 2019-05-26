@@ -171,10 +171,10 @@ class Window:
 
         self.bm = tk.Menu(self.rcm, tearoff=0)  # Beam menu
         self.rcm.add_cascade(label='Start/end element', menu=self.bm)
-        self.bm.add_cascade(label='Start element at {}'.format((None, None)),
+        self.bm.add_command(label='Start element at {}'.format((None, None)),
                              command=lambda: self.start_or_end_beam
                              (r=(self.transformation_matrix@[self.click_x, self.click_y,1])[0:2]))
-        self.bm.add_cascade(label='Start element at closest',
+        self.bm.add_command(label='Start element at closest',
                             command=lambda: self.start_or_end_beam
                              (r=self.closest_node_label))
 
