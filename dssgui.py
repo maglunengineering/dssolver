@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import filedialog
 from solver import *
 from numpy.linalg import inv
-from extras import ResizingCanvas
+from extras import ResizingCanvas, DSSCanvas
 from sys import platform as _platform
 import os
 import pickle
@@ -32,7 +32,6 @@ class Window:
         self.r1 = None
         self.r2 = None  # For self.start_or_end_beam()
         self.closest_node_label = None
-        self.transformation_matrix = np.array([[1,0,-50],[0,-1,100],[0,0,1]], dtype=float)
         # [problem coords] = [[T]] @ [canvas coords]
         self.tx = 0; self.ty = 0  # Translation
         self.prev_x = None; self.prev_y = None
@@ -173,7 +172,7 @@ class Window:
         self.rcm.add_cascade(label='Start/end element', menu=self.bm)
         self.bm.add_command(label='Start element at {}'.format((None, None)),
                              command=lambda: self.start_or_end_beam
-                             (r=(self.transformation_matrix@[self.click_x, self.click_y,1])[0:2]))
+                             (r=(self.canvas.transformation_matrix@[self.click_x, self.click_y,1])[0:2]))
         self.bm.add_command(label='Start element at closest',
                             command=lambda: self.start_or_end_beam
                              (r=self.closest_node_label))
@@ -182,7 +181,7 @@ class Window:
                              command=lambda: self.query_node(self.closest_node_label))
 
     def build_canvas(self):
-        self.canvas = ResizingCanvas(self.mainframe, bg='white', highlightthickness=0)
+        self.canvas = DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
         self.canvas.grid(row=1, column=0, sticky='nsew')
 
         self.canvas.bind('<Button-1>', self._printcoords)
@@ -328,7 +327,7 @@ class Window:
         self.bcm.entryconfigure(3, label='Rotation lock node at {}'.format(self.closest_node_label))
         self.bcm.entryconfigure(4, label='Glider node at {}'.format(self.closest_node_label))
 
-        self.bm.entryconfigure(0, label='Start element at {}'.format((self.transformation_matrix@[event.x, event.y, 1])[0:2]))
+        self.bm.entryconfigure(0, label='Start element at {}'.format((self.canvas.transformation_matrix@[event.x, event.y, 1])[0:2]))
         self.bm.entryconfigure(1, label='Start element at closest: {}'.format(self.closest_node_label))
 
         self.lm.entryconfigure(0, label='Apply point load at {}'.format(self.closest_node_label))
@@ -337,7 +336,7 @@ class Window:
         self.rcm.entryconfigure(3, label='Query node at {}'.format(self.closest_node_label))
 
         if self.r1 is not None and np.any(self.r2) is None:  # End distr loads or elements
-            self.bm.entryconfigure(0, label='End element at {}'.format((self.transformation_matrix@[event.x, event.y, 1])[0:2]))
+            self.bm.entryconfigure(0, label='End element at {}'.format((self.canvas.transformation_matrix@[event.x, event.y, 1])[0:2]))
             self.bm.entryconfigure(1, label='End element at closest: {}'.format(self.closest_node_label))
             self.lm.entryconfigure(1, label='End distributed load at {}'.format(self.closest_node_label))
 
@@ -381,8 +380,8 @@ class Window:
         linewidth = self.linewidth
         scale = self.scale
         for element in self.problem.beams:
-            beam_r1 = (inv(self.transformation_matrix) @ np.hstack((element.r1, 1)))[0:2]
-            beam_r2 = (inv(self.transformation_matrix) @ np.hstack((element.r2, 1)))[0:2]
+            beam_r1 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r1, 1)))[0:2]
+            beam_r2 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r2, 1)))[0:2]
             if type(element) == Beam:
                 self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
                                         width=linewidth, tag = 'mech')
@@ -393,11 +392,11 @@ class Window:
 
     def draw_nodes(self):
         for node in self.problem.nodes:
-            node_r = (inv(self.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
             if node.draw or self.bv_draw['nodes_nintr'].get():
-                node_radius = self.node_radius
-                self.canvas.create_oval(*np.hstack((node_r - node_radius, node_r + node_radius)),
-                                                   fill='black', tag='mech')
+                node.draw_on_canvas(self.canvas)
+                #node_radius = self.node_radius
+                #self.canvas.create_oval(*np.hstack((node_r - node_radius, node_r + node_radius)),
+                #                                   fill='black', tag='mech')
 
     def draw_loads(self):
         linewidth = self.linewidth
@@ -407,7 +406,7 @@ class Window:
         # Draw nodal loads:
         for node in self.problem.nodes:
 
-            node_r = (inv(self.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
+            node_r = (inv(self.canvas.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
             # If lump force, draw force arrow
             if np.any(np.round(node.loads[0:2])):
 
@@ -437,8 +436,8 @@ class Window:
 
         # Draw member loads:
         for beam in self.problem.beams:
-            beam_r1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
-            beam_r2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2]
+            beam_r1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
+            beam_r2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2]
 
             if isinstance(beam, Beam):
                 if beam.distributed_load:
@@ -469,7 +468,7 @@ class Window:
         scale = self.scale / 2
         linewidth = self.linewidth 
         for node in self.problem.nodes:
-            node_r = (inv(self.transformation_matrix)@np.hstack((node.r, 1)))[0:2] 
+            node_r = (inv(self.canvas.transformation_matrix)@np.hstack((node.r, 1)))[0:2] 
 
             if node.boundary_condition == 'fixed':
                 angle_vector = sum(n.r-node.r for n in node.connected_nodes())
@@ -546,8 +545,8 @@ class Window:
         node_radius = self.node_radius
         for node in self.problem.nodes:
             if node.draw:
-                node_r = (inv(self.transformation_matrix) @ [node.r[0], node.r[1], 1])[0:2]
-                node_disp = (inv(self.transformation_matrix[0:2,0:2]) @ node.displacements[0:2])
+                node_r = (inv(self.canvas.transformation_matrix) @ [node.r[0], node.r[1], 1])[0:2]
+                node_disp = (inv(self.canvas.transformation_matrix[0:2,0:2]) @ node.displacements[0:2])
 
                 self.canvas.create_oval(*np.hstack((node_r - node_radius + node_disp,
                                                     node_r + node_radius + node_disp)),
@@ -566,10 +565,10 @@ class Window:
                                         anchor='sw', tag='mech_disp')
 
         for beam in self.problem.beams:
-            beam_r1 = (inv(self.transformation_matrix) @ [beam.r1[0], beam.r1[1], 1])[0:2]
-            beam_r2 = (inv(self.transformation_matrix) @ [beam.r2[0], beam.r2[1], 1])[0:2]
-            beam_disp1 = inv(self.transformation_matrix[0:2,0:2]) @ beam.nodes[0].displacements[0:2]
-            beam_disp2 = inv(self.transformation_matrix[0:2,0:2]) @ beam.nodes[1].displacements[0:2]
+            beam_r1 = (inv(self.canvas.transformation_matrix) @ [beam.r1[0], beam.r1[1], 1])[0:2]
+            beam_r2 = (inv(self.canvas.transformation_matrix) @ [beam.r2[0], beam.r2[1], 1])[0:2]
+            beam_disp1 = inv(self.canvas.transformation_matrix[0:2,0:2]) @ beam.nodes[0].displacements[0:2]
+            beam_disp2 = inv(self.canvas.transformation_matrix[0:2,0:2]) @ beam.nodes[1].displacements[0:2]
             self.canvas.create_line(*np.hstack((beam_r1 + beam_disp1,
                                                 beam_r2 + beam_disp2)),
                                         fill='red', tag='mech_disp', dash=(1,))
@@ -584,8 +583,8 @@ class Window:
             v1 = (beam.beta(beam.angle) @ beam.forces)[1]
             v2 = -(beam.beta(beam.angle) @ beam.forces)[4]
 
-            p1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
-            p2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
+            p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
+            p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
             self.canvas.create_line(*p1, *p2,
                                     tag='sheardiagram')
             self.canvas.create_text(*p1, text='{}'.format(np.round(v1,2)), anchor='sw')
@@ -600,8 +599,8 @@ class Window:
             v1 = beam.forces[2]
             v2 = -beam.forces[5]
 
-            p1 = (inv(self.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
-            p2 = (inv(self.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
+            p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
+            p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
             self.canvas.create_line(*p1, *p2,
                                     tag='momentdiagram')
             self.canvas.create_text(*p1, text='{}'.format(np.round(v1, 2)), anchor='sw')
@@ -626,8 +625,8 @@ class Window:
 
         if element_id is not None:
             element = self.problem.beams[element_id]
-            beam_r1 = (inv(self.transformation_matrix)@np.hstack((element.r1, 1)))[0:2]
-            beam_r2 = (inv(self.transformation_matrix)@np.hstack((element.r2, 1)))[0:2]
+            beam_r1 = (inv(self.canvas.transformation_matrix)@np.hstack((element.r1, 1)))[0:2]
+            beam_r2 = (inv(self.canvas.transformation_matrix)@np.hstack((element.r2, 1)))[0:2]
 
             self.canvas.create_text(*beam_r1, text='r1', anchor='sw')
             self.canvas.create_text(*beam_r2, text='r2', anchor='sw')
@@ -642,7 +641,7 @@ class Window:
 
         elif node_id is not None:
             node = self.problem.nodes[node_id]
-            node_r = (inv(self.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
+            node_r = (inv(self.canvas.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
             node_radius = self.node_radius * 1.5
             self.canvas.create_oval(*np.hstack((node_r - node_radius, node_r + node_radius)),
                                     fill='red', tag='mech')
@@ -655,12 +654,12 @@ class Window:
     # Scaling and moving functions
     def scaleup(self, event):
         self.zoom *= 0.8
-        self.transformation_matrix[0:2, 0:2] = self.transformation_matrix[0:2, 0:2]*0.8
+        self.canvas.transformation_matrix[0:2, 0:2] = self.canvas.transformation_matrix[0:2, 0:2]*0.8
         self.draw_canvas()
 
     def scaledown(self, event):
         self.zoom *= 1.2
-        self.transformation_matrix[0:2, 0:2] = self.transformation_matrix[0:2, 0:2]*1.2
+        self.canvas.transformation_matrix[0:2, 0:2] = self.canvas.transformation_matrix[0:2, 0:2]*1.2
         self.draw_canvas()
 
     def autoscale(self):
@@ -685,7 +684,7 @@ class Window:
         R_ = np.array([r0_, r_, r1_]).T
         # R and R_ must be invertible, or T will not be invertible
 
-        self.transformation_matrix = R@inv(R_)
+        self.canvas.transformation_matrix = R@inv(R_)
         self.draw_canvas()
 
     def move(self, event):
@@ -693,10 +692,10 @@ class Window:
             self.prev_x = event.x
             self.prev_y = event.y
 
-        self.transformation_matrix[0:,2] = self.transformation_matrix[:,2] + np.array([-self.tx, self.ty, 0])
+        self.canvas.transformation_matrix[0:,2] = self.canvas.transformation_matrix[:,2] + np.array([-self.tx, self.ty, 0])
 
-        self.tx = (event.x - self.prev_x) * self.transformation_matrix[0,0]
-        self.ty = (event.y - self.prev_y) * self.transformation_matrix[0,0]
+        self.tx = (event.x - self.prev_x) * self.canvas.transformation_matrix[0,0]
+        self.ty = (event.y - self.prev_y) * self.canvas.transformation_matrix[0,0]
         self.prev_x = event.x
         self.prev_y = event.y
         self.draw_canvas()
@@ -704,8 +703,8 @@ class Window:
     def move_to(self, xy=(50, -150)):
         # Moves the problem csys origin to canvas csys (xy)
         x,y = xy
-        self.transformation_matrix[0:3,2] = np.array([self.transformation_matrix[0,0]*(x-1),
-                                                      self.transformation_matrix[1,1]*(y-1),
+        self.canvas.transformation_matrix[0:3,2] = np.array([self.canvas.transformation_matrix[0,0]*(x-1),
+                                                      self.canvas.transformation_matrix[1,1]*(y-1),
                                                       1])
         self.draw_canvas()
 
@@ -734,7 +733,7 @@ class Window:
 
     def _closest_node(self, xy):
         event_r = np.array(xy)  # xy: Canvas coordinate
-        event_r_ = (self.transformation_matrix @ np.hstack((event_r, 1)))[0:2]  # Problem coordinate
+        event_r_ = (self.canvas.transformation_matrix @ np.hstack((event_r, 1)))[0:2]  # Problem coordinate
         event_to_node = event_r_ - self.problem.nodal_coordinates
         event_to_node_norm = np.apply_along_axis(np.linalg.norm, axis=1, arr=event_to_node)
         node_id = np.where(event_to_node_norm == np.min(event_to_node_norm))[0][0]
@@ -778,7 +777,7 @@ class Window:
         self.dy = 100
         self.kx = 1
         self.ky = -1
-        self.transformation_matrix = np.array([[self.kx, 0, self.dx], [0, self.ky, self.dy], [0, 0, 1]], dtype=float)
+        self.canvas.transformation_matrix = np.array([[self.kx, 0, self.dx], [0, self.ky, self.dy], [0, 0, 1]], dtype=float)
         self.tx = 0
         self.ty = 0  # Translation
         self.prev_x = None
@@ -800,7 +799,7 @@ class Window:
 
     def _printcoords(self, event):
         self._closest_node((event.x, event.y))
-        print("Clicked at canvas", [event.x, event.y], 'problem', (self.transformation_matrix@[event.x,event.y,1])[0:2])
+        print("Clicked at canvas", [event.x, event.y], 'problem', (self.canvas.transformation_matrix@[event.x,event.y,1])[0:2])
         print('Closest node', self.closest_node_label)
         print('r1, r2', self.r1, self.r2)
 

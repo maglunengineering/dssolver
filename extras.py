@@ -1,10 +1,12 @@
 import tkinter as tk
+import numpy as np
+from numpy.linalg import solve
 
 # a subclass of Canvas for dealing with resizing of windows
 # credit: ebarr @ StackOverflow
 class ResizingCanvas(tk.Canvas):
     def __init__(self, parent, **kwargs):
-        tk.Canvas.__init__(self, parent, **kwargs)
+        super().__init__(parent, **kwargs)
         self.bind("<Configure>", self.on_resize)
         self.height = 512  # self.winfo_reqheight()
         self.width = 768  # self.winfo_reqwidth()
@@ -23,6 +25,18 @@ class ResizingCanvas(tk.Canvas):
     #@property
     def size(self):
         return (self.height**2 + self.width**2) ** 0.5
+
+
+class DSSCanvas(ResizingCanvas):
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+
+        self.transformation_matrix = np.array([[1,0,-50],[0,-1,100],[0,0,1]], dtype=float)
+
+    def create_oval(self, pt, radius, *args, **kwargs):
+        pt_canvas = solve(self.transformation_matrix, pt)[0:2]
+        super().create_oval(*np.hstack((pt_canvas - radius, pt_canvas + radius)), *args, **kwargs)
+
 
 
 class HyperlinkManager:

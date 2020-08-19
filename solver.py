@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
+from extras import DSSCanvas
 
 
 np.set_printoptions(suppress=True)
@@ -694,6 +695,9 @@ class Node:
     def translate(self, dx, dy):
         self.x, self.y = self.x+dx, self.y+dy
         self.r = np.array([self.x, self.y])
+
+    def draw_on_canvas(self, canvas:DSSCanvas, **kwargs):
+        canvas.create_oval(np.array([*self.r, 1]), 2.5, **kwargs)
 
     def __str__(self):
         return '{},{}'.format(self.x, self.y)
