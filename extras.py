@@ -22,10 +22,6 @@ class ResizingCanvas(tk.Canvas):
         # rescale all the objects tagged with the "all" tag
         #self.scale("all",0,0,wscale,hscale)
 
-    #@property
-    def size(self):
-        return (self.height**2 + self.width**2) ** 0.5
-
 
 class DSSCanvas(ResizingCanvas):
     def __init__(self, parent, **kwargs):
@@ -33,7 +29,8 @@ class DSSCanvas(ResizingCanvas):
 
         self.transformation_matrix = np.array([[1,0,-50],[0,-1,100],[0,0,1]], dtype=float)
 
-    def create_oval(self, pt, radius, *args, **kwargs):
+    def draw_node(self, pt, radius, *args, **kwargs):
+        pt = np.array([*pt, 1])
         pt_canvas = solve(self.transformation_matrix, pt)[0:2]
         super().create_oval(*np.hstack((pt_canvas - radius, pt_canvas + radius)), *args, **kwargs)
 

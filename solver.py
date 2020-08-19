@@ -697,7 +697,7 @@ class Node:
         self.r = np.array([self.x, self.y])
 
     def draw_on_canvas(self, canvas:DSSCanvas, **kwargs):
-        canvas.create_oval(np.array([*self.r, 1]), 2.5, **kwargs)
+        canvas.draw_node(self.r, 2.5, **kwargs)
 
     def __str__(self):
         return '{},{}'.format(self.x, self.y)

@@ -394,9 +394,6 @@ class Window:
         for node in self.problem.nodes:
             if node.draw or self.bv_draw['nodes_nintr'].get():
                 node.draw_on_canvas(self.canvas)
-                #node_radius = self.node_radius
-                #self.canvas.create_oval(*np.hstack((node_r - node_radius, node_r + node_radius)),
-                #                                   fill='black', tag='mech')
 
     def draw_loads(self):
         linewidth = self.linewidth
