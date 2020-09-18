@@ -4,6 +4,8 @@ from numpy.linalg import solve
 
 # a subclass of Canvas for dealing with resizing of windows
 # credit: ebarr @ StackOverflow
+
+
 class ResizingCanvas(tk.Canvas):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)

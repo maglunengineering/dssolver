@@ -201,7 +201,6 @@ class Window:
         self.rsm_b1 = tk.Button(self.rsm, text='Element/node view', command=lambda: self.switch_resmenu())
         self.rsm_b1.grid(row=0, column=0)
 
-
         self.rsm_lbox = tk.Listbox(self.rsm)
         self.rsm_lbox.grid(row=1, column=0)
 
@@ -229,7 +228,7 @@ class Window:
         for b,v,i in zip(buttons, vars, range(len(buttons))):
             button = tk.Checkbutton(self.rsm_shm, text=b, variable=v, bg=self.color2,
                                     highlightthickness=0, justify=tk.LEFT)
-            button.grid(row = int(i/2+1), column = i%2, sticky='wns')
+            button.grid(row=int(i/2+1), column=i%2, sticky='wns')
 
     def upd_rsmenu(self, *args):
         self.rsm_lbox.delete(0, tk.END)
