@@ -110,15 +110,15 @@ class Window:
         menu_stdcases = tk.Menu(topmenu)
         topmenu.add_cascade(label='Standard load cases', menu = menu_stdcases)
         menu_stdcases.add_command(label='Cantilever beam',
-                            command=lambda: self._selftest(1))
+                                  command=lambda: self._selftest(1))
         menu_stdcases.add_command(label='Simply supported beam',
-                            command=lambda: self._selftest(2))
+                                  command=lambda: self._selftest(2))
         menu_stdcases.add_command(label='Fanned out cantilever beams',
-                            command=lambda: self._selftest(3))
+                                  command=lambda: self._selftest(3))
         menu_stdcases.add_command(label='Circular arch',
-                            command=lambda: self._selftest(4))
+                                  command=lambda: self._selftest(4))
         menu_stdcases.add_command(label='270 arch',
-                            command=lambda: self._selftest(5))
+                                  command=lambda: self._selftest(5))
 
         show_menu = tk.Menu(topmenu)
         topmenu.add_cascade(label='Show/hide', menu=show_menu)
@@ -148,6 +148,7 @@ class Window:
                 is clicked on the canvas. (See self.rightclickmenu )
                 """
         self.rcm = tk.Menu(root, tearoff=0)
+
         self.lm = tk.Menu(self.rcm, tearoff=0)  # Load menu
         self.rcm.add_cascade(label='Apply load', menu=self.lm)
         self.lm.add_command(label='Apply point load at {}'.format(self.closest_node_label),
