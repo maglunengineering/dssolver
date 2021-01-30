@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog
 from solver import *
+from elements import *
 from numpy.linalg import inv
 from extras import ResizingCanvas, DSSCanvas
 from sys import platform as _platform
@@ -68,7 +69,7 @@ class Window:
         self.build_canvas()
         self.build_bc_menu()  # Outsourced
 
-        self.problem.create_node((0,0), draw=True)
+        self.problem.get_or_create_node((0,0), draw=True)
         self.draw_canvas()
 
     # Building functions
@@ -110,15 +111,15 @@ class Window:
         menu_stdcases = tk.Menu(topmenu)
         topmenu.add_cascade(label='Standard load cases', menu = menu_stdcases)
         menu_stdcases.add_command(label='Cantilever beam',
-                            command=lambda: self._selftest(1))
+                                  command=lambda: self._selftest(1))
         menu_stdcases.add_command(label='Simply supported beam',
-                            command=lambda: self._selftest(2))
-        menu_stdcases.add_command(label='Fanned out cantilever beams',
-                            command=lambda: self._selftest(3))
+                                  command=lambda: self._selftest(2))
+        menu_stdcases.add_command(label='Fanned out cantilever elements',
+                                  command=lambda: self._selftest(3))
         menu_stdcases.add_command(label='Circular arch',
-                            command=lambda: self._selftest(4))
+                                  command=lambda: self._selftest(4))
         menu_stdcases.add_command(label='270 arch',
-                            command=lambda: self._selftest(5))
+                                  command=lambda: self._selftest(5))
 
         show_menu = tk.Menu(topmenu)
         topmenu.add_cascade(label='Show/hide', menu=show_menu)
@@ -148,6 +149,7 @@ class Window:
                 is clicked on the canvas. (See self.rightclickmenu )
                 """
         self.rcm = tk.Menu(root, tearoff=0)
+
         self.lm = tk.Menu(self.rcm, tearoff=0)  # Load menu
         self.rcm.add_cascade(label='Apply load', menu=self.lm)
         self.lm.add_command(label='Apply point load at {}'.format(self.closest_node_label),
@@ -201,7 +203,6 @@ class Window:
         self.rsm_b1 = tk.Button(self.rsm, text='Element/node view', command=lambda: self.switch_resmenu())
         self.rsm_b1.grid(row=0, column=0)
 
-
         self.rsm_lbox = tk.Listbox(self.rsm)
         self.rsm_lbox.grid(row=1, column=0)
 
@@ -229,7 +230,7 @@ class Window:
         for b,v,i in zip(buttons, vars, range(len(buttons))):
             button = tk.Checkbutton(self.rsm_shm, text=b, variable=v, bg=self.color2,
                                     highlightthickness=0, justify=tk.LEFT)
-            button.grid(row = int(i/2+1), column = i%2, sticky='wns')
+            button.grid(row=int(i/2+1), column=i%2, sticky='wns')
 
     def upd_rsmenu(self, *args):
         self.rsm_lbox.delete(0, tk.END)
@@ -237,8 +238,8 @@ class Window:
         self.lboxdict_nodes = {}
 
         if self.rsm_view_elements:
-            for element in self.problem.beams:
-                text = '{} {}-{}'.format(type(element).__name__, element.r1, element.r2)
+            for element in self.problem.elements:
+                text = '{} {}-{}'.format(type(element).__name__, element.node1.r, element.node2.r)
                 self.lboxdict_elements[text] = element.number
                 self.rsm_lbox.insert(tk.END, text)
 
@@ -263,7 +264,7 @@ class Window:
         print(obj)
 
         if self.rsm_view_elements:
-            element = self.problem.beams[self.lboxdict_elements[obj]]  # Only works for beams?
+            element = self.problem.elements[self.lboxdict_elements[obj]]  # Only works for beams?
             self.rsm_info.config(text='Double click object for information \n'
                                       'Element id {} \n '
                                       'At r1: \n'
@@ -379,7 +380,7 @@ class Window:
     def draw_elements(self):
         linewidth = self.linewidth
         scale = self.scale
-        for element in self.problem.beams:
+        for element in self.problem.elements:
             beam_r1 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r1, 1)))[0:2]
             beam_r2 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r2, 1)))[0:2]
             if type(element) == Beam:
@@ -432,7 +433,7 @@ class Window:
                                         anchor='ne', tag='mech')
 
         # Draw member loads:
-        for beam in self.problem.beams:
+        for beam in self.problem.elements:
             beam_r1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
             beam_r2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2]
 
@@ -468,7 +469,7 @@ class Window:
             node_r = (inv(self.canvas.transformation_matrix)@np.hstack((node.r, 1)))[0:2] 
 
             if node.boundary_condition == 'fixed':
-                angle_vector = sum(n.r-node.r for n in node.connected_nodes())
+                angle_vector = sum(n.r - node.r for n in node.connected_nodes())
                 angle = np.arctan2(*angle_vector[::-1])
                 c, s = np.cos(-angle), np.sin(-angle)
                 rotation = np.array([[c, -s], [s, c]])
@@ -561,7 +562,7 @@ class Window:
                                         text='{}'.format(np.round(node.displacements, 1)),
                                         anchor='sw', tag='mech_disp')
 
-        for beam in self.problem.beams:
+        for beam in self.problem.elements:
             beam_r1 = (inv(self.canvas.transformation_matrix) @ [beam.r1[0], beam.r1[1], 1])[0:2]
             beam_r2 = (inv(self.canvas.transformation_matrix) @ [beam.r2[0], beam.r2[1], 1])[0:2]
             beam_disp1 = inv(self.canvas.transformation_matrix[0:2,0:2]) @ beam.nodes[0].displacements[0:2]
@@ -573,7 +574,7 @@ class Window:
     def draw_shear_diagram(self):
         max_shear = np.max(np.abs(np.array([self.problem.forces[:, 1], self.problem.forces[:, 4]])))
         scale = 100/max_shear
-        for beam in self.problem.beams:
+        for beam in self.problem.elements:
             s,c = np.sin(beam.angle), np.cos(beam.angle)
             R = np.array([[c, -s], [s, c]])
 
@@ -589,7 +590,7 @@ class Window:
     def draw_moment_diagram(self):
         max_moment = np.max(np.abs(np.array([self.problem.forces[:,2], self.problem.forces[:,5]])))
         scale = 100/max_moment
-        for beam in self.problem.beams:
+        for beam in self.problem.elements:
             s,c = np.sin(beam.angle), np.cos(beam.angle)
             R = np.array([[c, -s], [s, c]])
 
@@ -621,7 +622,7 @@ class Window:
         self.canvas.delete('highlight')
 
         if element_id is not None:
-            element = self.problem.beams[element_id]
+            element = self.problem.elements[element_id]
             beam_r1 = (inv(self.canvas.transformation_matrix)@np.hstack((element.r1, 1)))[0:2]
             beam_r2 = (inv(self.canvas.transformation_matrix)@np.hstack((element.r2, 1)))[0:2]
 
@@ -790,7 +791,7 @@ class Window:
 
         self.displaced_plot = False
 
-        self.problem.create_node((0, 0), draw=True)
+        self.problem.get_or_create_node((0, 0), draw=True)
         self.upd_rsmenu()
         self.draw_canvas()
 
@@ -813,7 +814,7 @@ class Window:
             self.problem.roller(self.problem.node_at((1000,0)))
 
 
-        if loadcase == 3:  # Fanned out cantilever beams with load=10 distr loads
+        if loadcase == 3:  # Fanned out cantilever elements with load=10 distr loads
             for point in ((1000,0),(707,-707),(0,-1000),(-707,-707),(-1000,0)):
                 self.problem.create_beams((0,0),point, n=2)
                 self.problem.load_members_distr((0,0),point, load=10)
@@ -1182,7 +1183,7 @@ class BeamManager:
         entries = [self.e_A, self.e_E, self.e_I] = \
             [tk.Entry(top) for _ in range(3)]
 
-        self.e_A.insert(0, self.problem.beams[element_id].A)
+        self.e_A.insert(0, self.problem.elements[element_id].A)
 
 class HelpBox:
     def __init__(self, root):
