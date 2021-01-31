@@ -44,6 +44,31 @@ class Node:
     def draw_on_canvas(self, canvas:DSSCanvas, **kwargs):
         canvas.draw_node(self.r, 2.5, **kwargs)
 
+        # If lump force, draw an arrow
+        scale = 100
+        if np.any(np.round(self.loads[0:2])):
+            arrow_start = self.r - self.loads[0:2] / np.linalg.norm(self.loads[0:2]) * scale * np.array([-1, 1])
+            arrow_end = self.r
+            canvas.draw_line(arrow_start, arrow_end,
+                                    arrow='first', fill='blue', tag='mech')
+            canvas.draw_text( (arrow_start + arrow_end)/2,
+                                    '{}'.format(self.loads[0:2]),
+                                    anchor='sw', tag='mech')
+        # If moment, draw an arrow
+        if self.loads[2] != 0:
+            sign = np.sign(self.loads[2])
+            arc_start = self.r + np.array([0, -scale/2])*sign
+            arc_mid = self.r + np.array([scale/2, 0])*sign
+            arc_end = self.r + np.array([0, scale/2])*sign
+
+            arrow = 'first' if sign == 1 else 'last'
+            canvas.draw_arc(arc_start, arc_mid, arc_end,
+                                    smooth=True,
+                                    arrow=arrow, fill='blue', tag='mech')
+            canvas.draw_text(arc_start,
+                                    text='{}'.format(self.loads[2]),
+                                    anchor='ne', tag='mech')
+
     def __str__(self):
         return '{},{}'.format(self.x, self.y)
 

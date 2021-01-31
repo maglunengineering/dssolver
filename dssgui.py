@@ -341,6 +341,7 @@ class DSS:
         if self.bv_draw['nodes_intr'] or self.bv_draw['nodes_nintr'].get():
             self.draw_nodes()
 
+
         if self.bv_draw['elements'].get():
             self.draw_elements()
 
@@ -368,60 +369,16 @@ class DSS:
         self.draw_csys()
 
     def draw_elements(self):
-        linewidth = self.linewidth
-        inv = np.linalg.inv
-        for element in self.problem.elements:
-            beam_r1 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r1, 1)))[0:2]
-            beam_r2 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r2, 1)))[0:2]
-            if type(element) == Beam:
-                self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
-                                        width=linewidth, tag = 'mech')
 
-            elif type(element) == Rod:
-                self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
-                                        width=linewidth/4, tag='mech')
+        for element in self.problem.elements:
+            element.draw_on_canvas(self.canvas)
 
     def draw_nodes(self):
         for node in self.problem.nodes:
-            if node.draw or self.bv_draw['nodes_nintr'].get():
-                node.draw_on_canvas(self.canvas)
+            #if node.draw or self.bv_draw['nodes_nintr'].get():
+            node.draw_on_canvas(self.canvas)
 
     def draw_loads(self):
-        linewidth = self.linewidth
-        scale = self.scale
-        node_radius = self.node_radius
-
-        # Draw nodal loads:
-        for node in self.problem.nodes:
-
-            node_r = (np.linalg.inv(self.canvas.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
-            # If lump force, draw force arrow
-            if np.any(np.round(node.loads[0:2])):
-
-                arrow_start = node_r - node.loads[0:2] / np.linalg.norm(node.loads[0:2]) * scale * np.array([-1,1])
-                arrow_end = node_r
-                self.canvas.create_line(*arrow_start, *arrow_end,
-                                        arrow='first', fill='blue', tag='mech')
-                self.canvas.create_text(*((arrow_start+arrow_end)/2),
-                                        text='{}'.format(node.loads[0:2]),
-                                        anchor='sw', tag='mech')
-
-            # If lump moment, draw moment arrow
-            if np.alen(node.loads) >= 3 and node.loads[2] != 0:
-
-                sign = np.sign(node.loads[2])
-                arc_start = node_r + np.array([0, -scale/2]) * sign
-                arc_mid = node_r + np.array([scale/2, 0]) * sign
-                arc_end = node_r + np.array([0, scale/2]) * sign
-
-                arrow = 'first' if sign == 1 else 'last'
-                self.canvas.create_line(*arc_start, *arc_mid, *arc_end,
-                                        smooth = True,
-                                        arrow=arrow, fill='blue', tag='mech')
-                self.canvas.create_text(*arc_start,
-                                        text='{}'.format(node.loads[2]),
-                                        anchor='ne', tag='mech')
-
         # Draw member loads:
         for beam in self.problem.elements:
             beam_r1 = (np.linalg.inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
@@ -433,10 +390,10 @@ class DSS:
                     angle = beam.angle
                     c, s = np.cos(-angle), np.sin(-angle)
                     rotation = np.array([[c, -s], [s, c]])
-                    p1 = beam_r1 + rotation@[0, -scale/2]
-                    p2 = beam_r1 + rotation@[0, -scale]
-                    p3 = beam_r2 + rotation@[0, -scale/2]
-                    p4 = beam_r2 + rotation@[0, -scale]
+                    p1 = beam_r1 + rotation@[0, -self.scale/2]
+                    p2 = beam_r1 + rotation@[0, -self.scale]
+                    p3 = beam_r2 + rotation@[0, -self.scale/2]
+                    p4 = beam_r2 + rotation@[0, -self.scale]
 
                     self.canvas.create_line(*p1, *p3)
                     self.canvas.create_line(*p2, *p4)
@@ -444,7 +401,7 @@ class DSS:
                     # Drawn on every beam with a distr load
                     for x0,y0 in zip(np.linspace(p2[0], p4[0], 3, endpoint=True),
                                       np.linspace(p2[1], p4[1], 3, endpoint=True)):
-                        x1, y1 = np.array([x0, y0]) + rotation @ [0, scale/2]
+                        x1, y1 = np.array([x0, y0]) + rotation @ [0, self.scale/2]
                         arrow = 'last' if (beam.beta(beam.angle) @ beam.member_loads)[2] > 0 else 'first'
                         self.canvas.create_line(x0, y0, x1, y1,
                                                 arrow=arrow)

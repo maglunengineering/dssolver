@@ -59,27 +59,38 @@ class DSSCanvas(tk.Canvas):
         self.config(width=self.width, height=self.height)
 
     def draw_node(self, pt, radius, *args, **kwargs):
-        pt = np.array([*pt, 1])
-        pt_canvas = solve(self.transformation_matrix, pt)[0:2]
+        pt_canvas = self.transform(pt)
         super().create_oval(*np.hstack((pt_canvas - radius, pt_canvas + radius)), *args, **kwargs)
 
     def draw_point(self, pt, radius, *args, **kwargs):
-        pt = np.array([*pt.flatten(), 1])
-        pt_canvas = np.linalg.solve(self.transformation_matrix, pt)[0:2]
+        pt_canvas = self.transform(pt)
         super().create_oval(*np.hstack((pt_canvas - radius, pt_canvas + radius)), *args, **kwargs)
 
     def draw_line(self, pt1, pt2, *args, **kwargs):
-        r1 = np.linalg.solve(self.transformation_matrix, np.array([*pt1, 1]))[0:2]
-        r2 = np.linalg.solve(self.transformation_matrix, np.array([*pt2, 1]))[0:2]
+        r1 = self.transform(pt1)
+        r2 = self.transform(pt2)
         linewidth = 0.5
         super().create_line(*np.hstack((r1, r2)), width=linewidth, *args, **kwargs)
+
+    def draw_arc(self, arc_start, arc_mid, arc_end, **kwargs):
+        arc_start = self.transform(arc_start)
+        arc_mid = self.transform(arc_mid)
+        arc_end = self.transform(arc_end)
+        super().create_line(*arc_start, *arc_mid, *arc_end, **kwargs)
 
     def draw_polygon(self, pts, *args, **kwargs):
         canvas_pts = []
         for pt in pts:
             canvas_pt = np.linalg.solve(self.transformation_matrix, np.array([*pt, 1]))[:2]
             canvas_pts.extend(canvas_pt)
-        self.create_polygon(canvas_pts, *args, **kwargs)
+        self.create_polygon(*canvas_pts, *args, **kwargs)
+
+    def draw_text(self, pt, text, *args, **kwargs):
+        canvas_pt = self.transform(pt)
+        self.create_text(*canvas_pt, text=text, *args, **kwargs)
+
+    def transform(self, pt):
+        return np.linalg.solve(self.transformation_matrix, np.array([*pt, 1]))[0:2]
 
     def redraw(self):
         self.delete('all')
