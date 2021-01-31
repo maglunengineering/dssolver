@@ -1,20 +1,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
-from extras import DSSCanvas
-
+from elements import *
+from results import *
 
 np.set_printoptions(suppress=True)
 
 
 class Problem:
-
     def __init__(self):
         self.nodes = list()
-        self.beams = list()
+        self.elements = list()
 
         self.constrained_dofs = []
-        self.loads = np.array([])  # Joint loads
         self.member_loads = np.array([])  # Member loads, for distr loads and such
         self.forces = None  # Forces (at all nodes, incl removed dofs)
         self.displacements = None  # Assigned at solution ( self.solve() )
@@ -24,7 +22,7 @@ class Problem:
         self.incremental_loads = None
         self.incremental_displacements = None
 
-    def create_beam(self, r1, r2, E=2e5, A=1e5, I=1e5, z=None, drawnodes=3):
+    def create_beam(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None, drawnodes=3):
         """
         drawnode:
         0 - Don't draw any nodes
@@ -32,80 +30,54 @@ class Problem:
         2 - Draw node at r2
         3 - Draw nodes at r1 and r2
         """
-        beam = Beam(r1, r2, E, A, I, z)
+        element = Beam(node1, node2, E, A, I, z)
+        self.elements.append(element)
 
-        if beam not in self.beams:
-            for r in (r1, r2):
-                node = self.create_node(r)  # Create (or identify) node
-                beam.nodes.append(node)  # Add node to beam node list
-                node.beams.append(beam)  # Add beam to node beam list
+        return element
 
-            self.beams.append(beam)
-            beam.number = self.beams.index(beam)
-            print('Beam created between', r1, r2)
+    def create_rod(self, node1, node2, E=2e5, A=1e5, *args, **kwargs):
+        rod = Rod(node1, node2, E, A)
 
-            if drawnodes == 1:
-                beam.nodes[0].draw = True
-            elif drawnodes == 2:
-                beam.nodes[1].draw = True
-            elif drawnodes == 3:
-                beam.nodes[0].draw = beam.nodes[1].draw = True
-
-        else:  # Beam already exists between r1 and r2
-            print('NO BEAM CREATED, already exists between', r1, r2)
-            return self.beams[self.beams.index(beam)]
-
-    def create_rod(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):
-        rod = Rod(r1, r2, E, A)
-
-        for r in (r1, r2):
-            node = self.create_node(r)  # Create (or identify) node
+        for r in (node1, node2):
+            node = self.get_or_create_node(r)  # Create (or identify) node
             rod.nodes.append(node)  # Add node to beam node list
-            node.beams.append(rod)  # Add beam to node beam list
+            node.elements.append(rod)  # Add beam to node beam list
 
-        self.beams.append(rod)
-        rod.number = self.beams.index(rod)
-        print('Rod created between', r1, r2)
+        self.elements.append(rod)
+        rod.number = self.elements.index(rod)
+        print('Rod created between', node1.r, node2.r)
 
     def create_beams(self, r1, r2, E=2e5, A=1e5, I=1e5, z=None, n=4):
-        nodes = np.array([ np.linspace(r1[0], r2[0], n+1),
-                           np.linspace(r1[1], r2[1], n+1)])
+        rr = np.linspace(r1, r2, int(n+1))
 
-        for ri, rj in zip(nodes.T, nodes.T[1:]):
-            if np.all(ri == r1):
-                self.create_beam(ri, rj, E, A, I, z, drawnodes=1)
-            elif np.all(rj == r2):
-                self.create_beam(ri, rj, E, A, I, z, drawnodes=2)
-            else:
-                self.create_beam(ri, rj, E, A, I, z, drawnodes=0)
+        for ri, rj in zip(rr, rr[1:]):
+            node1 = self.get_or_create_node(ri)
+            node2 = self.get_or_create_node(rj)
+            self.create_beam(node1, node2, E, A, I, z)
 
-    def create_node(self, r, draw=False):
-        node = Node(r, draw=draw)
-        if node not in self.nodes:  # Node does not exist, i.e. this is a new node
-            self.nodes.append(node)
-            self.loads = np.append(self.loads, np.zeros(3))  # Append three zeroes to global load vector
-
-            node.number = self.nodes.index(node)  # Give node a unique number/id
-            node.dofs = (node.number * 3, 1 + node.number * 3, 2 + node.number * 3)
-                # Assign dofs (3 pr node)
-
-            print('Node created at {} (id {})'.format(r, node.number))
-            return node
-        else:  # Node already exists at r
-            return self.nodes[self.nodes.index(node)] # Return the node which already exists
+    def get_or_create_node(self, r, draw=False):
+        for node in self.nodes:
+            if np.allclose(r, node.r):
+                return node
+        else:
+            new_node = Node(r, draw)
+            new_node.number = len(self.nodes) - 1  # Give node a unique number/id
+            new_node.dofs = (new_node.number*3, 1 + new_node.number*3, 2 + new_node.number*3)
+            self.nodes.append(new_node)
+            return new_node
 
     def remove_orphan_nodes(self):
         for node in self.nodes.copy():
-            if len(node.beams) == 0:
+            if len(node.elements) == 0:
                 self.nodes.remove(node)
         self.reassign_dofs()
 
     def remove_element(self, r1, r2):
         try:
-            element = self.beams[self.beam_at(r1, r2)]
+            element = self.elements[self.beam_at(r1, r2)]
             for node in element.nodes:
-                node.beams.remove(element)
-            self.beams.remove(self.beams[self.beam_at(r1, r2)])
+                node.elements.remove(element)
+            self.elements.remove(self.elements[self.beam_at(r1, r2)])
             print('Removed element at', r1, r2)
             self.remove_orphan_nodes()
         except:
@@ -114,35 +86,25 @@ class Problem:
     def node_at(self, r):
         r = np.asarray(r)
         for node in self.nodes:
-            if node == Node(r):
-                node_id = node.number  # node_id: int
-                return node_id
-        print('No node at {}'.format(r))
-
-    def nodeobj_at(self, r):
-        r = np.asarray(r)
-        for node in self.nodes:
-            if node == Node(r):
+            if np.allclose(node.r, r):
                 return node
         print('No node at {}'.format(r))
 
     def beam_at(self, r1, r2):
         r1, r2 = np.asarray(r1), np.asarray(r2)
-        for beam in self.beams:
+        for beam in self.elements:
             if beam == Beam(r1, r2) or beam == Beam(r2, r1):
-                return self.beams.index(beam)
+                return self.elements.index(beam)
 
         print('No beam at', r1, r2)
 
     def reassign_dofs(self):
-        self.loads = np.array([])
         for i,node in enumerate(self.nodes):
             node.number = i
-            node.dofs = (3*i, 3*i+1, 3*i+2)
-            self.loads = np.append(self.loads, node.loads)
+            node.dofs = np.array((3*i, 3*i+1, 3*i+2))
 
     def reform_geometry(self):
-        for element in self.beams:
+        for element in self.elements:
             new_r1 = element.r1 + element.displacements[0:2]
             new_r2 = element.r2 + element.displacements[3:5]
 
@@ -153,8 +115,8 @@ class Problem:
 
     def upd_obj_displacements(self):
         for node in self.nodes:
-            node.displacements = self.displacements[np.array(node.dofs)]
-        for beam in self.beams:
+            node.displacements = self.displacements[node.dofs]
+        for beam in self.elements:
             beam.displacements = np.hstack((beam.nodes[0].displacements,
                                             beam.nodes[1].displacements))
             beam.forces = beam.k @ beam.displacements + beam.member_loads
@@ -179,37 +141,37 @@ class Problem:
         elif bctype == 'glider':
             self.glider(self.node_at(r))
 
-    def fix(self, node_id):
-        self.nodes[node_id].draw = True
-        self.nodes[node_id].boundary_condition = 'fixed'
+    def fix(self, node):
+        node.draw = True
+        node.boundary_condition = 'fixed'
 
-    def pin(self, node_id):
-        self.nodes[node_id].draw = True
-        self.nodes[node_id].boundary_condition = 'pinned'
+    def pin(self, node):
+        node.draw = True
+        node.boundary_condition = 'pinned'
 
-    def roller(self, node_id):
-        self.nodes[node_id].draw = True
-        self.nodes[node_id].boundary_condition = 'roller'
+    def roller(self, node):
+        node.draw = True
+        node.boundary_condition = 'roller'
 
-    def lock(self, node_id):
-        self.nodes[node_id].draw = True
-        self.nodes[node_id].boundary_condition = 'locked'
+    def lock(self, node):
+        node.draw = True
+        node.boundary_condition = 'locked'
 
-    def glider(self, node_id):
-        self.nodes[node_id].draw = True
-        self.nodes[node_id].boundary_condition = 'glider'
+    def glider(self, node):
+        node.draw = True
+        node.boundary_condition = 'glider'
 
-    def custom(self, node_id, dofs):
+    def custom(self, node, dofs):
         dofs = np.array(dofs)
-        self.constrained_dofs += tuple(np.array(self.nodes[node_id].dofs)[dofs])
-        self.nodes[node_id].draw = True
+        self.constrained_dofs += tuple(node.dofs[dofs])
+        node.draw = True
 
     def auto_rotation_lock(self):
         """
         Rotation locks all nodes where only Rod elements meet. Useful for truss analysis.
         """
         for node in self.nodes:
-            if np.all([type(element)==Rod for element in node.beams])\
+            if np.all([type(element)==Rod for element in node.elements])\
                     and node.boundary_condition is None:
                 self.lock(node.number)
 
@@ -227,16 +189,14 @@ class Problem:
             elif node.boundary_condition == 'glider':
                 self.constrained_dofs.extend((node.dofs[0], node.dofs[2]))
 
-    def load_node(self, node_id, load):
+    def load_node(self, node, load):
         # Load : global (Nx, Ny, M)
-        dofs = list(self.nodes[node_id].dofs)
-        self.nodes[node_id].loads = np.array(load)
-        self.loads[dofs] = load
-        self.nodes[node_id].draw = True
+        node.loads = np.array(load)
+        node.draw = True
 
     def load_member_distr(self, member_id, load):
         # Distributed load
-        beam = self.beams[member_id]  # Beam object
+        beam = self.elements[member_id]  # Beam object
         beam.member_loads = -beam.beta(beam.angle).T @ np.array([0,
                                       load * beam.length/2,
                                       load * beam.length**2 / 12,
@@ -247,9 +207,9 @@ class Problem:
         # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
 
     def load_members_distr(self, r1, r2, load):
-        # Distributed load on colinear beams from r1 to r2
-        starting_node = self.nodes[self.node_at(r1)]
-        ending_node = self.nodes[self.node_at(r2)]
+        # Distributed load on colinear elements from r1 to r2
+        starting_node = self.node_at(r1)
+        ending_node = self.node_at(r2)
         r1 = np.array(r1); r2 = np.array(r2)
         dir = (r2 - r1) / np.linalg.norm(r2 - r1)
 
@@ -278,7 +238,7 @@ class Problem:
     def K(self, reduced=False):
         self.remove_dofs()
         dofs = 3 * len(self.nodes)  # int: Number of system dofs
-        K = sum(beam.Ki(dofs) for beam in self.beams)
+        K = sum(beam.Ki(dofs) for beam in self.elements)
         if not reduced:
             return K
         else:
@@ -289,10 +249,10 @@ class Problem:
     def Qf(self):  # Member force vector for distr loads
         dofs = 3*len(self.nodes)
         self.member_loads = np.zeros(dofs)
-        for beam in self.beams:
+        for beam in self.elements:
             self.member_loads += beam.Qfi(dofs)
 
-    def solve(self):
+    def solve(self) -> ResultsStaticLinear:
         self.reassign_dofs()
         self.remove_dofs()
         free_dofs = np.delete(np.arange(3 * len(self.nodes)), self.constrained_dofs)
@@ -305,8 +265,10 @@ class Problem:
         print('Reduced stiffness matrix size', np.shape(Kr))
         dr = np.linalg.solve(Kr, Fr)
 
-        self.displacements = np.zeros(3 * len(self.nodes))
-        self.displacements[free_dofs] = dr
+        displacements = np.zeros(3 * len(self.nodes))
+        displacements[free_dofs] = dr
+
+        self.displacements = displacements
         #self.ext_forces = self.K() @ self.displacements
 
         self.upd_obj_displacements()
@@ -315,11 +277,11 @@ class Problem:
         print('Nodal loads', self.loads)
         print('Member loads', self.member_loads)
 
-        self.forces = np.array([beam.forces for beam in self.beams])
-        # forces.shape == (n, 6), n: no. of beams
+        self.forces = np.array([beam.forces for beam in self.elements])
+        # forces.shape == (n, 6), n: no. of elements
 
         self.solved = True
-        return dr
+        return ResultsStaticLinear(self.nodes, self.elements, displacements)
 
     def solve_nlgeom(self, k):
         self.reassign_dofs()
@@ -346,7 +308,7 @@ class Problem:
             displ = displ + ddispl
             self.displacements[free_dofs] = displ
             self.upd_obj_displacements()
-            self.track_elm.append(self.beams[3].displacements)
+            self.track_elm.append(self.elements[3].displacements)
 
             i = 1
             self.repr_residual.append(np.linalg.norm(ext_force - int_force))
@@ -524,7 +486,7 @@ class Problem:
             delta_displacements = np.zeros_like(self.displacements)
             # OBS! self.displacements is initialized as None, and created at solution start
 
-        return sum(element.strain_energy(delta_displacements[element.dofs]) for element in self.beams)
+        return sum(element.strain_energy(delta_displacements[element.dofs]) for element in self.elements)
 
     def strain_energy_gradient(self, dui=1e-10):
         j = len(self.displacements)
@@ -540,7 +502,7 @@ class Problem:
     
     def internal_forces(self, reduced=True):
         f_int = np.zeros(3*len(self.nodes))
-        for beam in self.beams:
+        for beam in self.elements:
             f_beam = beam.Ex(3*len(self.nodes)) @ beam.k @ beam.displacements
             f_int = f_int + f_beam
         if reduced:
@@ -560,7 +522,7 @@ class Problem:
                 plt.plot(node.r[0], node.r[1], 'ko')
 
 
-        for beam in self.beams:
+        for beam in self.elements:
             plt.plot(*np.array([beam.r1, beam.r2]).T, color='b')
 
         k = 10
@@ -593,7 +555,7 @@ class Problem:
                            head_width = 20
                           )
 
-        for beam in self.beams:
+        for beam in self.elements:
             pos = np.array([beam.r1, beam.r2])
             disp = np.array([beam.nodes[0].displacements[0:2]*scale,
                              beam.nodes[1].displacements[0:2]*scale])
@@ -649,198 +611,15 @@ class Problem:
         nodal_coordinates = np.array([node.r for node in self.nodes])
         return nodal_coordinates
 
+    @property
+    def loads(self):
+        return np.hstack(tuple(node.loads for node in self.nodes))
+
     def __copy__(self):
         cls = self.__class__
         result = cls.__new__(cls)
         result.__dict__.update(self.__dict__)
         return result
-
-class Node:
-    def __init__(self, xy, draw=False):
-        self.x, self.y = xy
-        self.r = np.array(xy)
-
-        self.beams = list()
-        self.loads = np.array([0,0,0]) # self.loads (global Fx, Fy, M) assigned on loading
-        #self.forces = np.array([0,0,0])  # self.forces (Fx, Fy, M) calculated by self.abs_force
-
-        self.number = None  # (node id) assigned on creation
-        self.dofs = None  # self.dofs (dof1, dof2, dof3) assigned on creation
-        self.displacements = np.array([0,0,0])  # self.displacement (d1, d2, d3) asssigned on solution
-        self.boundary_condition = None  # 'fixed', 'pinned', 'roller', 'locked', 'glider'
-
-        self.draw = draw  # Node is not drawn unless it is interesting
-
-    def add_beam(self, beam):
-        self.beams.append(beam)
-
-    @property
-    def abs_forces(self):
-        self.forces = np.array([0,0,0])
-        for element in self.beams:
-            if np.array_equal(element.r1, self.r):
-                self.forces = self.forces + np.abs(element.forces[0:3]) / 2
-            elif np.array_equal(element.r2, self.r):
-                self.forces = self.forces + np.abs(element.forces[3:6]) / 2
-        return self.forces + np.abs(self.loads/2)
-
-    def connected_nodes(self):
-        other_nodes = []
-        for beam in self.beams:
-            for node in beam.nodes:
-                if not node == self:
-                    other_nodes.append(node)
-        return other_nodes
-
-    def translate(self, dx, dy):
-        self.x, self.y = self.x+dx, self.y+dy
-        self.r = np.array([self.x, self.y])
-
-    def draw_on_canvas(self, canvas:DSSCanvas, **kwargs):
-        canvas.draw_node(self.r, 2.5, **kwargs)
-
-    def __str__(self):
-        return '{},{}'.format(self.x, self.y)
-
-    def __eq__(self, other):
-        return np.allclose(self.r, other.r)
-
-class Beam:
-
-    def __init__(self, r1, r2, E=2e5, A=1e5, I=1e5, z=None):
-        self.nodes = list()
-
-        self.E = E
-        self.A = A
-        self.I = I
-        self.z = z if z else np.sqrt(I/A)/3
-
-        self.r1, self.r2 = np.asarray(r1), np.asarray(r2)
-        self.angle = np.arctan2( *(self.r2 - self.r1)[::-1] )
-        self.length = np.sqrt( np.dot(self.r2 - self.r1, self.r2 - self.r1) )
-
-        self.number = None  # (beam id) assigned on creation
-        self.displacements = np.zeros(6)  # global csys (1x6) assigned on solution
-        self.forces = np.zeros(6)  # global csys (1x6) assigned on solution
-        self.stress = np.zeros(6)  # local csys(1x6) assigned on solution
-        # Stress given as sigma_x (top), sigma_x (bottom), tau_xy (average!)
-        self.member_loads = np.zeros(6)  # local csys distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
-        self.distributed_load = 0
-        # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
-
-
-        self.kn = A*E/self.length * (E*I/self.length**3)**(-1)
-        self.ke = E*I/self.length**3 * np.array(
-             [[self.kn, 0, 0, -self.kn, 0, 0],
-              [0, 12, 6*self.length, 0, -12, 6*self.length],
-              [0, 6*self.length, 4*self.length**2, 0, -6*self.length, 2*self.length**2],
-              [-self.kn, 0, 0, self.kn, 0, 0],
-              [0, -12, -6*self.length, 0, 12, -6*self.length],
-              [0, 6*self.length, 2*self.length**2, 0, -6*self.length, 4*self.length**2]])
-
-        self.k = self.beta(self.angle).T @ self.ke @ self.beta(self.angle)
-
-        self.cpl = np.zeros((6,6))
-        self.cpl_ = np.array([[1/self.A, 0, -self.z/self.I],
-                             [1/self.A, 0, self.z/self.I],
-                             [0,     1/self.A,   0]])
-        self.cpl[0:3, 0:3] = self.cpl[3:6, 3:6] = self.cpl_
-
-    def beta(self, angle):
-        s, c = np.sin(angle), np.cos(angle)
-        return np.array([[c, s, 0, 0, 0, 0],
-                         [-s, c, 0, 0, 0, 0],
-                         [0, 0, 1, 0, 0, 0],
-                         [0, 0, 0, c, s, 0],
-                         [0, 0, 0, -s, c, 0],
-                         [0, 0, 0, 0, 0, 1]])
-
-    def Ki(self, newdim):
-        dofs = self.nodes[0].dofs + self.nodes[1].dofs
-        E = np.zeros((newdim, len(dofs)))
-        for i, j in enumerate(dofs):
-            E[j, i] = 1
-        return E @ self.k @ E.T
-
-    def Qfi(self, newdim):
-        dofs = self.nodes[0].dofs + self.nodes[1].dofs
-        E = np.zeros((newdim, len(dofs)))
-        for i, j in enumerate(dofs):
-            E[j, i] = 1
-        return E@self.member_loads
-
-    def Ex(self, newdim):
-        dofs = self.nodes[0].dofs + self.nodes[1].dofs
-        E = np.zeros((newdim, len(dofs)))
-        for i, j in enumerate(dofs):
-            E[j, i] = 1
-        return E
-
-    def translate(self, translation, loaded=True):
-        # translation: global vector [u1,v1,theta1, u2,v2,theta2]
-        self.nodes[0].translate(translation[0], translation[1])
-        self.nodes[1].translate(translation[3], translation[4])
-        if loaded:
-            self.forces = self.forces + self.k @ translation
-            self.displacements = self.displacements + translation
-        tr_local = beta(self.angle).T @ translation
-        angle_change = np.arcsin((tr_local[4] - tr_local[1]) / self.length)
-        self.k = beta(angle_change).T @ self.k @ beta(angle_change)
-
-    def strain_energy(self, delta_displacements=np.zeros(6)):
-        """
-        :param delta_displacements: Additional displacements for strain energy calculations.
-        The derivative of strain_energy wrt. displacement 2 is thus (strain_energy([0,0,dd,0,0,0])-strain_energy)/dd
-        """
-        N1,V1,M1,N2,V2,M2 = self.ke @ beta(self.angle) @ (self.displacements + delta_displacements)
-        L = self.length
-        return 1/(2*self.E*self.I) * (M1**2*L - M1*V1*L**2 + V1**2 * L**3/3) + \
-               (N2**2 * L)/(2*self.E*self.A)
-
-    def strain_energy_gradient(self, dui=1e-10):
-        p = np.zeros(6)
-        for k in range(6):
-            delta_disp = np.zeros(6)
-            delta_disp[k] = dui
-            p[k] = (self.strain_energy(delta_disp) - self.strain_energy()) / dui
-        return p
-
-    @property
-    def dofs(self):
-        return np.array(self.nodes[0].dofs + self.nodes[1].dofs)
-
-    def __eq__(self, other):
-        return np.allclose(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
-
-class Rod(Beam):
-    """
-    A beam element with no bending or shear stiffness.
-    However, the endnodes of this element must have stiffness against bending and shear, or the stiffness
-     matrix will be singular.
-    This means both endnodes must either be connected to a beam element or be restrained (e.g. fixed).
-    """
-
-    def __init__(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):
-        super().__init__(r1=r1, r2=r2, E=E, A=A)
-
-        self.kn = A*E/self.length
-        self.ke = np.array(      [[self.kn, 0, 0, -self.kn, 0, 0],
-                                  [0, 0, 0, 0, 0, 0],
-                                  [0, 0, 0, 0, 0, 0],
-                                  [-self.kn, 0, 0, self.kn, 0, 0],
-                                  [0, 0, 0, 0, 0, 0],
-                                  [0, 0, 0, 0, 0, 0]])
-
-        self.k = self.beta(self.angle).T @ self.ke @ self.beta(self.angle)
-
-def beta(angle):
-    s, c = np.sin(angle), np.cos(angle)
-    return np.array([[c, s, 0, 0, 0, 0],
-                     [-s, c, 0, 0, 0, 0],
-                     [0, 0, 1, 0, 0, 0],
-                     [0, 0, 0, c, s, 0],
-                     [0, 0, 0, -s, c, 0],
-                     [0, 0, 0, 0, 0, 1]])
 
 
 if __name__ == '__main__':
