@@ -281,7 +281,7 @@ class Problem:
         # forces.shape == (n, 6), n: no. of elements
 
         self.solved = True
-        results = ResultsStaticLinear(self.nodes, self.elements, displacements)
+        return ResultsStaticLinear(self.nodes, self.elements, displacements)
 
     def solve_nlgeom(self, k):
         self.reassign_dofs()

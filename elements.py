@@ -59,6 +59,9 @@ class FiniteElement:
         for node in self.nodes:
             node.add_beam(self)
 
+    def draw_on_canvas(self, canvas, *args, **kwargs):
+        canvas.draw_line(self.node1.r, self.node2.r, *args, **kwargs)
+
 class Beam(FiniteElement):
     def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
         super().__init__(node1, node2)
@@ -147,14 +150,6 @@ class Beam(FiniteElement):
         return 1/(2*self.E*self.I) * (M1**2*L - M1*V1*L**2 + V1**2 * L**3/3) + \
                (N2**2 * L)/(2*self.E*self.A)
 
-    def strain_energy_gradient(self, dui=1e-10):
-        p = np.zeros(6)
-        for k in range(6):
-            delta_disp = np.zeros(6)
-            delta_disp[k] = dui
-            p[k] = (self.strain_energy(delta_disp) - self.strain_energy()) / dui
-        return p
-
     @property
     def dofs(self):
         return np.hstack((self.nodes[0].dofs, self.nodes[1].dofs))
@@ -164,7 +159,6 @@ class Beam(FiniteElement):
 
     def get_forces(self):
         return self.k @ self.get_displacements()
-
 
     @property
     def r1(self):
@@ -178,12 +172,6 @@ class Beam(FiniteElement):
         return np.allclose(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
 
 class Rod(Beam):
-    """
-    A beam element with no bending or shear stiffness.
-    However, the endnodes of this element must have stiffness against bending and shear, or the stiffness
-     matrix will be singular.
-    This means both endnodes must either be connected to a beam element or be restrained (e.g. fixed).
-    """
 
     def __init__(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):
         super().__init__(r1=r1, r2=r2, E=E, A=A)

@@ -1,27 +1,32 @@
-import tkinter as tk
-from tkinter import filedialog
-from solver import *
-from elements import *
-from numpy.linalg import inv
-from extras import ResizingCanvas, DSSCanvas
-from sys import platform as _platform
+import sys
 import os
 import pickle
+import tkinter as tk
+from tkinter import filedialog
+
+
+from solver import *
+from elements import *
+from extras import *
+import plugins
 
 np.set_printoptions(precision=2, suppress=True)
+inv = np.linalg.inv
 
-class Window:
+class DSS:
     def __init__(self, root, problem=None, *args, **kwargs):
         self.root = root
         self.root.minsize(width=1024, height=640)
         self.icon = icon if icon else None
         self.root.iconbitmap(self.icon)
         self.problem = problem
+        self.plugins:Dict[str, object] = {}
 
         self.mainframe = tk.Frame(self.root, bg='white')
         self.mainframe.pack(fill=tk.BOTH, expand=True)
         #self.mainframe.grid(row=0, column=0, sticky='nsew')
         self.mainframe.winfo_toplevel().title('DSSolver')
+        self.topmenu = None
         self.canvas = None  # Changed later on
         self.rcm = None
         self.bcm = None
@@ -85,7 +90,8 @@ class Window:
         self.banner.grid(row=0, column=0)
 
     def build_menu(self):
-        topmenu = tk.Menu(self.root)
+        self.topmenu = tk.Menu(self.root)
+        topmenu = self.topmenu
         self.root.config(menu=topmenu)
 
         menu_file = tk.Menu(topmenu)
@@ -107,19 +113,6 @@ class Window:
 
         topmenu.add_command(label='Solve',
                             command=lambda: self.problem.solve())
-
-        menu_stdcases = tk.Menu(topmenu)
-        topmenu.add_cascade(label='Standard load cases', menu = menu_stdcases)
-        menu_stdcases.add_command(label='Cantilever beam',
-                                  command=lambda: self._selftest(1))
-        menu_stdcases.add_command(label='Simply supported beam',
-                                  command=lambda: self._selftest(2))
-        menu_stdcases.add_command(label='Fanned out cantilever elements',
-                                  command=lambda: self._selftest(3))
-        menu_stdcases.add_command(label='Circular arch',
-                                  command=lambda: self._selftest(4))
-        menu_stdcases.add_command(label='270 arch',
-                                  command=lambda: self._selftest(5))
 
         show_menu = tk.Menu(topmenu)
         topmenu.add_cascade(label='Show/hide', menu=show_menu)
@@ -184,14 +177,11 @@ class Window:
 
     def build_canvas(self):
         self.canvas = DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
+        self.canvas.dss = self # TODO: Remove
         self.canvas.grid(row=1, column=0, sticky='nsew')
 
         self.canvas.bind('<Button-1>', self._printcoords)
         self.canvas.bind('<Button-3>', self.rightclickmenu)
-        self.canvas.bind('<Double-Button-1>', self.scaleup)
-        self.canvas.bind('<Double-Button-2>', self.scaledown)
-        self.canvas.bind('<B1-Motion>', self.move)
-        self.canvas.bind('<ButtonRelease-1>', self.reset_prev)
 
     def build_rsmenu(self):
         self.color1 = 'gray74'
@@ -379,7 +369,7 @@ class Window:
 
     def draw_elements(self):
         linewidth = self.linewidth
-        scale = self.scale
+        inv = np.linalg.inv
         for element in self.problem.elements:
             beam_r1 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r1, 1)))[0:2]
             beam_r2 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r2, 1)))[0:2]
@@ -404,7 +394,7 @@ class Window:
         # Draw nodal loads:
         for node in self.problem.nodes:
 
-            node_r = (inv(self.canvas.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
+            node_r = (np.linalg.inv(self.canvas.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
             # If lump force, draw force arrow
             if np.any(np.round(node.loads[0:2])):
 
@@ -434,8 +424,8 @@ class Window:
 
         # Draw member loads:
         for beam in self.problem.elements:
-            beam_r1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
-            beam_r2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2]
+            beam_r1 = (np.linalg.inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
+            beam_r2 = (np.linalg.inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2]
 
             if isinstance(beam, Beam):
                 if beam.distributed_load:
@@ -685,19 +675,6 @@ class Window:
         self.canvas.transformation_matrix = R@inv(R_)
         self.draw_canvas()
 
-    def move(self, event):
-        if self.prev_x is None or self.prev_y is None:
-            self.prev_x = event.x
-            self.prev_y = event.y
-
-        self.canvas.transformation_matrix[0:,2] = self.canvas.transformation_matrix[:,2] + np.array([-self.tx, self.ty, 0])
-
-        self.tx = (event.x - self.prev_x) * self.canvas.transformation_matrix[0,0]
-        self.ty = (event.y - self.prev_y) * self.canvas.transformation_matrix[0,0]
-        self.prev_x = event.x
-        self.prev_y = event.y
-        self.draw_canvas()
-
     def move_to(self, xy=(50, -150)):
         # Moves the problem csys origin to canvas csys (xy)
         x,y = xy
@@ -801,63 +778,16 @@ class Window:
         print('Closest node', self.closest_node_label)
         print('r1, r2', self.r1, self.r2)
 
-    def _selftest(self, loadcase = 1):
-        self.new_problem()
-        if loadcase == 1:  # Cantilever beam, point load
-            self.problem.create_beams((0,0), (1000,0), n=4)
-            self.problem.fix(self.problem.node_at((0,0)))
-
-
-        if loadcase == 2:  # Simply supported beam, no load
-            self.problem.create_beams((0,0), (1000,0))
-            self.problem.pin(self.problem.node_at((0,0)))
-            self.problem.roller(self.problem.node_at((1000,0)))
-
-
-        if loadcase == 3:  # Fanned out cantilever elements with load=10 distr loads
-            for point in ((1000,0),(707,-707),(0,-1000),(-707,-707),(-1000,0)):
-                self.problem.create_beams((0,0),point, n=2)
-                self.problem.load_members_distr((0,0),point, load=10)
-
-            self.problem.fix(self.problem.node_at((0,0)))
-
-        if loadcase == 4: # Circular arch
-            start = np.pi - np.arctan(600 / 800)
-            end = np.arctan(600 / 800)
-
-            node_angles = np.linspace(start, end, 15)
-            node_points = 1000 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + np.array([800,-1600])
-            for r1, r2 in zip(node_points, node_points[1:]):
-                self.problem.create_beam(r1, r2, E=2.1e5, I=10**3/12, A=10)
-            self.problem.pin(self.problem.node_at((0,0)))
-            self.problem.pin(self.problem.node_at((1600,0)))
-            for node in self.problem.nodes:
-                node.draw = False
-
-        if loadcase == 5: # 270 degree arch
-            start = np.deg2rad(225)
-            end = np.deg2rad(-45)
-            node_angles = np.linspace(start, end, 31)
-            node_points = 500 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + [0, 500]
-            for r1, r2 in zip(node_points, node_points[1:]):
-                self.problem.create_beam(r1, r2)
-            for node in self.problem.nodes:
-                node.draw = False
-            #self.problem.nodes[-1].boundary_condition = 'pinned'
-            #self.problem.nodes[0].boundary_condition = 'fixed'
-
-        self.upd_rsmenu()
-        self.autoscale()
-
     # Open and save
     def save_problem(self):
-        filename = filedialog.asksaveasfilename()
+        filename = tk.filedialog.asksaveasfilename()
         with open(filename, 'wb') as file:
             pickle.dump(self.problem, file, pickle.HIGHEST_PROTOCOL)
 
     def open_problem(self):
         self.new_problem()
-        filename = filedialog.askopenfilename()
+        filename = tk.filedialog.askopenfilename()
+
         with open(filename, 'rb') as file:
             self.problem = pickle.load(file)
 
@@ -1266,14 +1196,22 @@ case.
 
 if __name__ == '__main__':
     #self.icon = 'dss_icon.ico' if _platform == 'win32' or _platform == 'win64' else '@dss_icon.xbm'
-    if _platform == 'win32' or _platform == 'win64':
+    if sys.platform == 'win32' or sys.platform == 'win64':
         icon = os.getcwd() + '/gfx/dss_icon.ico'
     else:
         icon = '@' + os.getcwd() + 'dss_icon.xbm'
 
     p = Problem()
     root = tk.Tk()
-    w = Window(root, problem=p)
+    dss = DSS(root, problem=p)
+
+    # Load plugins
+    plugin_classes = (cls for cls in plugins.__dict__.values() if
+                      isinstance(cls, type) and issubclass(cls, plugins.DSSPlugin))
+    for cls in plugin_classes:
+        instance = cls.create_instance(dss)
+        instance.init()
+
 
     root.mainloop()
 
