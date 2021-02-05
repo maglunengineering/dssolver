@@ -47,20 +47,12 @@ class DSS:
         self.scale = 50
         self.node_radius = 2.5
 
-        self.settings = {'elements': tk.BooleanVar(),
-                        'boundary_conditions': tk.BooleanVar(),
-                        'loads': tk.BooleanVar(),
-                        'nodes_intr': tk.BooleanVar(),
-                        'nodes_nintr': tk.BooleanVar(),
-                        'displaced': tk.BooleanVar(),
+        self.settings = {
                         'shear': tk.BooleanVar(),
                         'moment': tk.BooleanVar(),
                         'highlight':tk.IntVar()}
 
-        for var in ('elements', 'boundary_conditions', 'loads', 'nodes_intr'):
-            self.settings[var].set(True)
-
-        for var in ('displaced', 'shear', 'moment', 'nodes_nintr'):
+        for var in ('shear', 'moment'):
             self.settings[var].set(False)
 
         for var in self.settings.keys():
@@ -120,24 +112,7 @@ class DSS:
         topmenu.add_command(label='Solve',
                             command=lambda: self.problem.solve())
 
-        show_menu = tk.Menu(topmenu)
-        topmenu.add_cascade(label='Show/hide', menu=show_menu)
-        show_menu.add_checkbutton(label='Elements',
-                                  onvalue=True, offvalue=False, variable=self.settings['elements'])
-        show_menu.add_checkbutton(label='Loads',
-                                  onvalue=True, offvalue=False, variable=self.settings['loads'])
-        show_menu.add_checkbutton(label='Boundary conditions',
-                                  onvalue=True, offvalue=False, variable=self.settings['boundary_conditions'])
-        show_menu.add_separator()
-        show_menu.add_checkbutton(label='Displaced shape',
-                                  onvalue=True, offvalue=False, variable=self.settings['displaced'])
-        show_menu.add_checkbutton(label='Shear force diagram',
-                                  onvalue=True, offvalue=False, variable=self.settings['shear'])
-        show_menu.add_checkbutton(label='Moment diagram',
-                                  onvalue=True, offvalue=False, variable=self.settings['moment'])
-
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale() )
-
         topmenu.add_command(label='Help', command=lambda: HelpBox(self.root))
 
         #topmenu.add_command(label='Func', command=lambda: self.upd_rsmenu())
@@ -213,15 +188,9 @@ class DSS:
         rsm_shm_label = tk.Label(rsm_settings, text='Show/hide', bg=color2)
         rsm_shm_label.grid(row=0, column=0, columnspan=2, sticky='ew')
 
-        buttons = [     'Elements', 'Nodes \n (interesting)',
-                        'Loads', 'Nodes (all)',
-                        'Boundary \n conditions', 'Displaced \n shape',
-                        'Shear \n diagram', 'Moment \n diagram']
+        buttons = ['Shear \n diagram', 'Moment \n diagram']
 
-        vars = [self.settings['elements'], self.settings['nodes_intr'],
-                self.settings['loads'], self.settings['nodes_nintr'],
-                self.settings['boundary_conditions'], self.settings['displaced'],
-                self.settings['shear'], self.settings['moment']]
+        vars = [self.settings['shear'], self.settings['moment']]
 
         i = 0
         for b,v in zip(buttons, vars):
@@ -233,6 +202,12 @@ class DSS:
         # Have all class booleans of plugin_types get a checkbox
         #i = 0
         used_names = set()
+
+        # We can't pass the classmethod directly as lambda would be bound to this scope
+        # We'll use a factory method to make a new scope
+        def callback_factory(cls, name, bv):
+            return lambda *args: cls.set_setting(name, bv.get())
+
         for cls in self.plugin_types.values():
             for name, boolean in cls.get_settings().items():
                 if name in used_names:
@@ -246,7 +221,7 @@ class DSS:
 
                 # Add a trace to a lambda function that updates the setting
                 bv.set(boolean)
-                bv.trace_add("write", lambda *args: cls.set_setting(name, bv.get()))
+                bv.trace_add("write", callback = callback_factory(cls, name, bv))
                 button = tk.Checkbutton(rsm_settings, text=name, variable=bv,
                                         bg=color2, highlightthickness=0, justify=tk.LEFT)
                 button.grid(row=int(i/2+1), column=i%2, sticky='wns')
@@ -368,22 +343,13 @@ class DSS:
     def draw_canvas(self, *args, **kwargs):
         self.canvas.delete('all')  # Clear the canvas
 
-        if self.settings['nodes_intr'] or self.settings['nodes_nintr'].get():
-            self.draw_nodes()
-
-        if self.settings['elements'].get():
-            self.draw_elements()
-
-        if self.settings['loads'].get():
-            self.draw_loads()
+        self.draw_nodes()
+        self.draw_elements()
 
         if self.settings['highlight'].get() and self.rsm_view_elements:
             self.draw_highlight(element_id =self.settings['highlight'].get() - 1)
         elif self.settings['highlight'].get() and not self.rsm_view_elements:
             self.draw_highlight(node_id =self.settings['highlight'].get() - 1)
-
-        if self.settings['boundary_conditions'].get():
-            self.draw_boundary_conditions()
 
         if self.problem.solved:
             if self.settings['shear'].get():
@@ -395,122 +361,12 @@ class DSS:
         self.draw_csys()
 
     def draw_elements(self):
-
         for element in self.problem.elements:
             element.draw_on_canvas(self.canvas)
 
     def draw_nodes(self):
         for node in self.problem.nodes:
-            #if node.draw or self.settings['nodes_nintr'].get():
             node.draw_on_canvas(self.canvas)
-
-    def draw_loads(self):
-        # Draw member loads:
-        for beam in self.problem.elements:
-            beam_r1 = (np.linalg.inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2]
-            beam_r2 = (np.linalg.inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2]
-
-            if isinstance(beam, Beam):
-                if beam.distributed_load:
-                    # If distributed load, draw a distributed load
-                    angle = beam.angle
-                    c, s = np.cos(-angle), np.sin(-angle)
-                    rotation = np.array([[c, -s], [s, c]])
-                    p1 = beam_r1 + rotation@[0, -self.scale/2]
-                    p2 = beam_r1 + rotation@[0, -self.scale]
-                    p3 = beam_r2 + rotation@[0, -self.scale/2]
-                    p4 = beam_r2 + rotation@[0, -self.scale]
-
-                    self.canvas.create_line(*p1, *p3)
-                    self.canvas.create_line(*p2, *p4)
-                    self.canvas.create_text(*p4, text='{}'.format(beam.distributed_load), anchor='sw')
-                    # Drawn on every beam with a distr load
-                    for x0,y0 in zip(np.linspace(p2[0], p4[0], 3, endpoint=True),
-                                      np.linspace(p2[1], p4[1], 3, endpoint=True)):
-                        x1, y1 = np.array([x0, y0]) + rotation @ [0, self.scale/2]
-                        arrow = 'last' if (beam.beta(beam.angle) @ beam.member_loads)[2] > 0 else 'first'
-                        self.canvas.create_line(x0, y0, x1, y1,
-                                                arrow=arrow)
-
-    def draw_boundary_conditions(self):
-        """
-        :param bc_type: 'fixed', 'pinned', 'roller', 'locked', 'fix', 'pin', 'locked', 'glider'
-        """
-        scale = self.scale / 2
-        linewidth = self.linewidth 
-        for node in self.problem.nodes:
-            node_r = (inv(self.canvas.transformation_matrix)@np.hstack((node.r, 1)))[0:2] 
-
-            if node.boundary_condition == 'fixed':
-                angle_vector = sum(n.r - node.r for n in node.connected_nodes())
-                angle = np.arctan2(*angle_vector[::-1])
-                c, s = np.cos(-angle), np.sin(-angle)
-                rotation = np.array([[c, -s], [s, c]])
-
-                self.canvas.create_line(*(node_r + rotation@[0, scale]), *(node_r + rotation@[0, -scale]),
-                                                              width=linewidth, fill='black', tag='bc')
-                for offset in np.linspace(0, 2*scale, 6):
-                    self.canvas.create_line(*(node_r + rotation@[0, -scale+offset]),
-                                            *(node_r + rotation@[0, -scale+offset] + rotation@[-scale/2, scale/2]),
-                                            width=linewidth, fill='black', tag='bc')
-
-            elif node.boundary_condition == 'pinned' or node.boundary_condition == 'roller':
-                k = 1.5  # constant - triangle diameter
-
-                self.canvas.create_oval(*(node_r - scale/4), *(node_r + scale/5))
-                self.canvas.create_line(*node_r, *(node_r + np.array([-np.sin(np.deg2rad(30)),
-                                                              np.cos(np.deg2rad(30))]) * k*scale),
-                                        width=linewidth, fill='black', tag='bc')
-                self.canvas.create_line(*node_r, *(node_r + np.array([np.sin(np.deg2rad(30)),
-                                                              np.cos(np.deg2rad(30))])*k*scale),
-                                        width=linewidth, fill='black', tag='bc')
-
-                self.canvas.create_line(*(node_r + (np.array([-np.sin(np.deg2rad(30)),
-                                                              np.cos(np.deg2rad(30))])
-                                                + np.array([-1.4/(k*scale), 0])
-                                                ) * k * scale),
-                                        *(node_r + (np.array([np.sin(np.deg2rad(30)),
-                                                         np.cos(np.deg2rad(30))])
-                                                + np.array([1.4/(k*scale), 0])
-                                                ) * k * scale),
-                                        width=linewidth, fill='black', tag='bc')
-                if node.boundary_condition == 'roller':
-                    self.canvas.create_line(*(node_r + np.array([-np.sin(np.deg2rad(30)),
-                                                             np.cos(np.deg2rad(30))])*k*scale
-                                                            + np.array([-scale/2, scale/4])),
-                                            *(node_r + np.array([np.sin(np.deg2rad(30)),
-                                                             np.cos(np.deg2rad(30))])*k*scale)
-                                                            + np.array([scale/2, scale/4]),
-                                            width=linewidth, fill='black', tag='bc')
-
-
-            elif node.boundary_condition == 'locked':
-                self.canvas.create_oval(*(node_r + np.array([-scale, -scale])),
-                                        *(node_r - np.array([-scale, -scale])),
-                                        width=linewidth, tag='bc')
-                self.canvas.create_line(*node_r, *(node_r + np.array([scale/2, -scale])*1.4),
-                                        width=linewidth, fill='black', tag='bc')
-
-            elif node.boundary_condition == 'glider':
-                angle_vector = sum(n.r - node.r for n in node.connected_nodes())
-                angle = np.arctan2(*angle_vector[::-1])
-                angle = 0 # Could be pi
-                c, s = np.cos(-angle), np.sin(-angle)
-                rotation = np.array([[c, -s], [s, c]])
-
-                self.canvas.create_line(*(node_r + rotation@[0, scale]), *(node_r + rotation@[0, -scale]),
-                                        width=linewidth, fill='black', tag='bc')
-                self.canvas.create_oval(*(node_r + rotation@[0,-scale/4]), *(node_r + rotation@[scale/2,-3*scale/4]))
-                self.canvas.create_oval(*(node_r + rotation@[0, scale/4]), *(node_r + rotation@[scale/2, 3*scale/4]))
-                self.canvas.create_line(*(node_r + rotation@[scale/2,0] + rotation@[0,scale]),
-                                        *(node_r + rotation@[scale/2,0] + rotation@[0,-scale]),
-                                        width=linewidth, fill='black', tag='bc')
-
-                for offset in np.linspace(0, 2*scale, 6):
-                    self.canvas.create_line(*(node_r + rotation@[scale/2, -scale + offset]),
-                                            *(node_r + rotation@[scale/2, -scale + offset]
-                                              + rotation@[scale/2, scale/2]),
-                                            width=linewidth, fill='black', tag='bc')
 
     def draw_shear_diagram(self):
         max_shear = np.max(np.abs(np.array([self.problem.forces[:, 1], self.problem.forces[:, 4]])))

@@ -11,6 +11,9 @@ class DSSModelObject(DSSPlugin):
         raise NotImplementedError
 
 class Node(DSSModelObject):
+    settings = {'Loads': True,
+                'Boundary conditions': True}
+
     def __init__(self, xy, draw=False):
         self.x, self.y = xy
         self.r = np.array(xy)
@@ -54,16 +57,24 @@ class Node(DSSModelObject):
         canvas.draw_node(self.r, 2.5, **kwargs)
 
         # If lump force, draw an arrow
+        if self.settings['Loads']:
+            self.draw_loads(canvas, **kwargs)
+
+        if self.settings['Boundary conditions']:
+            self.draw_boundary_condition(canvas, **kwargs)
+
+    def draw_loads(self, canvas:DSSCanvas, **kwargs):
         scale = 100
         if np.any(np.round(self.loads[0:2])):
-            arrow_start = self.r - self.loads[0:2] / np.linalg.norm(self.loads[0:2]) * scale * np.array([-1, 1])
-            arrow_end = self.r
+            arrow_start = self.r
+            arrow_end = self.r + self.loads[0:2]/np.linalg.norm(self.loads[0:2])*scale
             canvas.draw_line(arrow_start, arrow_end,
-                                    arrow='first', fill='blue', tag='mech')
-            canvas.draw_text( (arrow_start + arrow_end)/2,
-                                    '{}'.format(self.loads[0:2]),
-                                    anchor='sw', tag='mech')
-        # If moment, draw an arrow
+                             arrow='last', fill='blue', tag='mech')
+            canvas.draw_text((arrow_start + arrow_end)/2,
+                             '{}'.format(self.loads[0:2]),
+                             anchor='sw', tag='mech')
+
+        # If moment, draw a circular arrow
         if self.loads[2] != 0:
             sign = np.sign(self.loads[2])
             arc_start = self.r + np.array([0, -scale/2])*sign
@@ -72,11 +83,84 @@ class Node(DSSModelObject):
 
             arrow = 'first' if sign == 1 else 'last'
             canvas.draw_arc(arc_start, arc_mid, arc_end,
-                                    smooth=True,
-                                    arrow=arrow, fill='blue', tag='mech')
+                            smooth=True,
+                            arrow=arrow, fill='blue', tag='mech')
             canvas.draw_text(arc_start,
-                                    text='{}'.format(self.loads[2]),
-                                    anchor='ne', tag='mech')
+                             text='{}'.format(self.loads[2]),
+                             anchor='ne', tag='mech')
+            
+    def draw_boundary_condition(self, canvas:DSSCanvas, **kwargs):
+        scale = 50
+        linewidth = 2
+
+        if self.boundary_condition == 'fixed':
+            angle_vector = sum(n.r - self.r for n in self.connected_nodes())
+            angle = np.arctan2(*angle_vector[::-1])
+            c, s = np.cos(-angle), np.sin(-angle)
+            rotation = np.array([[c, -s], [s, c]])
+
+            canvas.draw_line((self.r + rotation@[0, scale]), (self.r + rotation@[0, -scale]),
+                                    width=linewidth, fill='black', tag='bc')
+            for offset in np.linspace(0, 2*scale, 6):
+                canvas.draw_line((self.r + rotation@[0, -scale + offset]),
+                                        (self.r + rotation@[0, -scale + offset] + rotation@[-scale/2, scale/2]),
+                                        width=linewidth, fill='black', tag='bc')
+
+        elif self.boundary_condition == 'pinned' or self.boundary_condition == 'roller':
+            k = 1.5  # constant - triangle diameter
+
+            canvas.draw_oval((self.r - scale/4), (self.r + scale/5))
+            canvas.draw_line(self.r, (self.r + np.array([-np.sin(np.deg2rad(30)),
+                                                                  np.cos(np.deg2rad(30))])*k*scale),
+                                    width=linewidth, fill='black', tag='bc')
+            canvas.draw_line(self.r, (self.r + np.array([np.sin(np.deg2rad(30)),
+                                                                  np.cos(np.deg2rad(30))])*k*scale),
+                                    width=linewidth, fill='black', tag='bc')
+
+            canvas.draw_line((self.r + (np.array([-np.sin(np.deg2rad(30)),
+                                                          np.cos(np.deg2rad(30))])
+                                                + np.array([-1.4/(k*scale), 0])
+                                                )*k*scale),
+                                    (self.r + (np.array([np.sin(np.deg2rad(30)),
+                                                          np.cos(np.deg2rad(30))])
+                                                + np.array([1.4/(k*scale), 0])
+                                                )*k*scale),
+                                    width=linewidth, fill='black', tag='bc')
+            if self.boundary_condition == 'roller':
+                canvas.draw_line((self.r + np.array([-np.sin(np.deg2rad(30)),
+                                                             np.cos(np.deg2rad(30))])*k*scale
+                                          + np.array([-scale/2, scale/4])),
+                                        (self.r + np.array([np.sin(np.deg2rad(30)),
+                                                             np.cos(np.deg2rad(30))])*k*scale)
+                                         + np.array([scale/2, scale/4]),
+                                        width=linewidth, fill='black', tag='bc')
+
+
+        elif self.boundary_condition == 'locked':
+            canvas.draw_oval((self.r + np.array([-scale, -scale])),
+                                    (self.r - np.array([-scale, -scale])),
+                                    width=linewidth, tag='bc')
+            canvas.draw_line(self.r, (self.r + np.array([scale/2, -scale])*1.4),
+                                    width=linewidth, fill='black', tag='bc')
+
+        elif self.boundary_condition == 'glider':
+            angle = 0  # Could be pi
+            c, s = np.cos(-angle), np.sin(-angle)
+            rotation = np.array([[c, -s], [s, c]])
+
+            canvas.draw_line((self.r + rotation@[0, scale]), (self.r + rotation@[0, -scale]),
+                                    width=linewidth, fill='black', tag='bc')
+            canvas.draw_oval((self.r + rotation@[0, -scale/4]), (self.r + rotation@[scale/2, -3*scale/4]))
+            canvas.draw_oval((self.r + rotation@[0, scale/4]), (self.r + rotation@[scale/2, 3*scale/4]))
+            canvas.draw_line((self.r + rotation@[scale/2, 0] + rotation@[0, scale]),
+                                    (self.r + rotation@[scale/2, 0] + rotation@[0, -scale]),
+                                    width=linewidth, fill='black', tag='bc')
+
+            for offset in np.linspace(0, 2*scale, 6):
+                canvas.draw_line((self.r + rotation@[scale/2, -scale + offset]),
+                                        (self.r + rotation@[scale/2, -scale + offset]
+                                          + rotation@[scale/2, scale/2]),
+                                        width=linewidth, fill='black', tag='bc')
 
     def __str__(self):
         return '{},{}'.format(self.x, self.y)
@@ -85,7 +169,7 @@ class Node(DSSModelObject):
         return id(self)
 
 class FiniteElement(DSSModelObject):
-    settings = {'Draw displaced': False}
+    settings = {'Displaced': False}
 
     def __init__(self, node1:Node, node2:Node):
         self.nodes = [node1, node2]
@@ -97,7 +181,7 @@ class FiniteElement(DSSModelObject):
 
     def draw_on_canvas(self, canvas, **kwargs):
         canvas.draw_line(self.node1.r, self.node2.r, **kwargs)
-        if self.settings['Draw displaced']:
+        if self.settings['Displaced']:
             canvas.draw_line(self.node1.r + self.node1.displacements[0:2],
                              self.node2.r + self.node2.displacements[0:2],
                              fill='red', dash=(1,), **kwargs)

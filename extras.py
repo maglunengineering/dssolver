@@ -66,11 +66,15 @@ class DSSCanvas(tk.Canvas):
         pt_canvas = self.transform(pt)
         super().create_oval(*np.hstack((pt_canvas - radius, pt_canvas + radius)), *args, **kwargs)
 
+    def draw_oval(self, pt1, pt2, *args, **kwargs):
+        pt1_canvas = self.transform(pt1)
+        pt2_canvas = self.transform(pt2)
+        super().create_oval(*np.hstack((pt1_canvas, pt2_canvas)), *args, **kwargs)
+
     def draw_line(self, pt1, pt2, *args, **kwargs):
         r1 = self.transform(pt1)
         r2 = self.transform(pt2)
-        linewidth = 0.5
-        super().create_line(*np.hstack((r1, r2)), width=linewidth, *args, **kwargs)
+        super().create_line(*np.hstack((r1, r2)), *args, **kwargs)
 
     def draw_arc(self, arc_start, arc_mid, arc_end, **kwargs):
         arc_start = self.transform(arc_start)
