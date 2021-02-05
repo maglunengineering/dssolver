@@ -1,7 +1,16 @@
-import numpy as np
-from extras import DSSCanvas
+from typing import Dict
 
-class Node:
+import numpy as np
+import tkinter as tk
+
+from extras import DSSCanvas
+from plugins import DSSPlugin
+
+class DSSModelObject(DSSPlugin):
+    def draw_on_canvas(self, canvas, **kwargs):
+        raise NotImplementedError
+
+class Node(DSSModelObject):
     def __init__(self, xy, draw=False):
         self.x, self.y = xy
         self.r = np.array(xy)
@@ -75,7 +84,9 @@ class Node:
     def __hash__(self):
         return id(self)
 
-class FiniteElement:
+class FiniteElement(DSSModelObject):
+    settings = {'Draw displaced': False}
+
     def __init__(self, node1:Node, node2:Node):
         self.nodes = [node1, node2]
         self.node1 = node1
@@ -84,8 +95,14 @@ class FiniteElement:
         for node in self.nodes:
             node.add_beam(self)
 
-    def draw_on_canvas(self, canvas, *args, **kwargs):
-        canvas.draw_line(self.node1.r, self.node2.r, *args, **kwargs)
+    def draw_on_canvas(self, canvas, **kwargs):
+        canvas.draw_line(self.node1.r, self.node2.r, **kwargs)
+        if self.settings['Draw displaced']:
+            canvas.draw_line(self.node1.r + self.node1.displacements[0:2],
+                             self.node2.r + self.node2.displacements[0:2],
+                             fill='red', dash=(1,), **kwargs)
+
+
 
 class Beam(FiniteElement):
     def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):

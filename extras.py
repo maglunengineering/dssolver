@@ -43,7 +43,7 @@ class DSSCanvas(tk.Canvas):
         self.prev_x = None
         self.prev_y = None
 
-        # Transforms from canvas/screen coordinates to problem space coordinates, or the sender way
+        # Transforms from canvas/screen coordinates to problem space coordinates
         self.transformation_matrix = np.array([[1, 0, -50], [0, -1, 100], [0, 0, 1]], dtype=float)
 
         self.dss = None
@@ -114,7 +114,6 @@ class DSSCanvas(tk.Canvas):
         self.prev_x = None
         self.prev_y = None
 
-
     #def get_by_coordinates(self, x, y):
     #    xyz = self.transformation_matrix@np.array([x, y, 1])
     #    for obj in self.objects:
@@ -132,7 +131,6 @@ class DSSCanvas(tk.Canvas):
     def scaledown(self, event):
         self.transformation_matrix[0:2, 0:2] = self.transformation_matrix[0:2, 0:2]*1.2
         self.redraw()
-
 
 
 

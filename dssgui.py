@@ -1,11 +1,10 @@
 import sys
 import os
 import pickle
-import tkinter as tk
 from tkinter import filedialog
 
-
 from solver import *
+import elements
 from elements import *
 from extras import *
 import plugins
@@ -20,7 +19,6 @@ class DSS:
         self.icon = icon if icon else None
         self.root.iconbitmap(self.icon)
         self.problem = problem
-        self.plugins:Dict[str, object] = {}
 
         self.mainframe = tk.Frame(self.root, bg='white')
         self.mainframe.pack(fill=tk.BOTH, expand=True)
@@ -29,6 +27,7 @@ class DSS:
         self.topmenu = None
         self.canvas = None  # Changed later on
         self.rcm = None
+        self.rsm_lbox = None
         self.bcm = None
         self.bm = None
         self.lm = None
@@ -48,7 +47,7 @@ class DSS:
         self.scale = 50
         self.node_radius = 2.5
 
-        self.bv_draw = {'elements': tk.BooleanVar(),
+        self.settings = {'elements': tk.BooleanVar(),
                         'boundary_conditions': tk.BooleanVar(),
                         'loads': tk.BooleanVar(),
                         'nodes_intr': tk.BooleanVar(),
@@ -59,13 +58,20 @@ class DSS:
                         'highlight':tk.IntVar()}
 
         for var in ('elements', 'boundary_conditions', 'loads', 'nodes_intr'):
-            self.bv_draw[var].set(True)
+            self.settings[var].set(True)
 
         for var in ('displaced', 'shear', 'moment', 'nodes_nintr'):
-            self.bv_draw[var].set(False)
+            self.settings[var].set(False)
 
-        for var in self.bv_draw.keys():
-            self.bv_draw[var].trace('w', self.draw_canvas)
+        for var in self.settings.keys():
+            self.settings[var].trace_add('write', self.draw_canvas)
+
+        self.plugin_types: Dict[str, type] = {}
+        self.plugin_instances: Dict[type, object] = {}
+        if 'plugins' in kwargs:
+            plugins: Iterable[DSSPlugin] = kwargs['plugins']
+            for plugin in plugins:
+                plugin.load_plugin(self)
 
         self.build_grid()
         self.build_menu()
@@ -117,18 +123,18 @@ class DSS:
         show_menu = tk.Menu(topmenu)
         topmenu.add_cascade(label='Show/hide', menu=show_menu)
         show_menu.add_checkbutton(label='Elements',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw['elements'])
+                                  onvalue=True, offvalue=False, variable=self.settings['elements'])
         show_menu.add_checkbutton(label='Loads',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw['loads'])
+                                  onvalue=True, offvalue=False, variable=self.settings['loads'])
         show_menu.add_checkbutton(label='Boundary conditions',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw['boundary_conditions'])
+                                  onvalue=True, offvalue=False, variable=self.settings['boundary_conditions'])
         show_menu.add_separator()
         show_menu.add_checkbutton(label='Displaced shape',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw['displaced'])
+                                  onvalue=True, offvalue=False, variable=self.settings['displaced'])
         show_menu.add_checkbutton(label='Shear force diagram',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw['shear'])
+                                  onvalue=True, offvalue=False, variable=self.settings['shear'])
         show_menu.add_checkbutton(label='Moment diagram',
-                                  onvalue=True, offvalue=False, variable=self.bv_draw['moment'])
+                                  onvalue=True, offvalue=False, variable=self.settings['moment'])
 
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale() )
 
@@ -184,14 +190,14 @@ class DSS:
         self.canvas.bind('<Button-3>', self.rightclickmenu)
 
     def build_rsmenu(self):
-        self.color1 = 'gray74'
-        self.color2 = 'gray82'
-        self.rsm = tk.Frame(self.mainframe, bg=self.color1, width=256)
+        color1 = 'gray74'
+        color2 = 'gray82'
+        self.rsm = tk.Frame(self.mainframe, bg=color1, width=256)
         self.rsm.grid(row=1, column=1, sticky='nsew')
 
         self.rsm_view_elements = True
-        self.rsm_b1 = tk.Button(self.rsm, text='Element/node view', command=lambda: self.switch_resmenu())
-        self.rsm_b1.grid(row=0, column=0)
+        rsm_b1 = tk.Button(self.rsm, text='Element/node view', command=lambda: self.switch_resmenu())
+        rsm_b1.grid(row=0, column=0)
 
         self.rsm_lbox = tk.Listbox(self.rsm)
         self.rsm_lbox.grid(row=1, column=0)
@@ -199,28 +205,52 @@ class DSS:
         self.rsm_lbox.bind('<Double-Button-1>', self.rs_click)
         self.rsm_lbox.bind('<Button-3>', self.upd_rsmenu)
 
-        self.rsm_info = tk.Label(self.rsm, text='Double click object for information', bg=self.color1)
-        self.rsm_info.grid(row=2, column=0, sticky='ew')
+        rsm_info = tk.Label(self.rsm, text='Double click object for information', bg=color1)
+        rsm_info.grid(row=2, column=0, sticky='ew')
 
-        self.rsm_shm = tk.Frame(self.rsm, bg=self.color2, width=255)
-        self.rsm_shm.grid(row=3, column=0, sticky='nw')
-        self.rsm_shm_label = tk.Label(self.rsm_shm, text='Show/hide', bg=self.color2)
-        self.rsm_shm_label.grid(row=0, column=0, columnspan=2, sticky='ew')
+        rsm_settings = tk.Frame(self.rsm, bg=color2, width=255)
+        rsm_settings.grid(row=3, column=0, sticky='nw')
+        rsm_shm_label = tk.Label(rsm_settings, text='Show/hide', bg=color2)
+        rsm_shm_label.grid(row=0, column=0, columnspan=2, sticky='ew')
 
         buttons = [     'Elements', 'Nodes \n (interesting)',
                         'Loads', 'Nodes (all)',
                         'Boundary \n conditions', 'Displaced \n shape',
                         'Shear \n diagram', 'Moment \n diagram']
 
-        vars = [self.bv_draw['elements'],              self.bv_draw['nodes_intr'],
-                self.bv_draw['loads'],                 self.bv_draw['nodes_nintr'],
-                self.bv_draw['boundary_conditions'],   self.bv_draw['displaced'],
-                self.bv_draw['shear'],                 self.bv_draw['moment']]
+        vars = [self.settings['elements'], self.settings['nodes_intr'],
+                self.settings['loads'], self.settings['nodes_nintr'],
+                self.settings['boundary_conditions'], self.settings['displaced'],
+                self.settings['shear'], self.settings['moment']]
 
-        for b,v,i in zip(buttons, vars, range(len(buttons))):
-            button = tk.Checkbutton(self.rsm_shm, text=b, variable=v, bg=self.color2,
+        i = 0
+        for b,v in zip(buttons, vars):
+            button = tk.Checkbutton(rsm_settings, text=b, variable=v, bg=color2,
                                     highlightthickness=0, justify=tk.LEFT)
             button.grid(row=int(i/2+1), column=i%2, sticky='wns')
+            i += 1
+
+        # Have all class booleans of plugin_types get a checkbox
+        #i = 0
+        used_names = set()
+        for cls in self.plugin_types.values():
+            for name, boolean in cls.get_settings().items():
+                if name in used_names:
+                    continue
+                used_names.add(name)
+
+                bv = tk.BooleanVar()
+
+                # Bug in Tkinter? This reference is somehow needed
+                self.settings[name] = bv
+
+                # Add a trace to a lambda function that updates the setting
+                bv.set(boolean)
+                bv.trace_add("write", lambda *args: cls.set_setting(name, bv.get()))
+                button = tk.Checkbutton(rsm_settings, text=name, variable=bv,
+                                        bg=color2, highlightthickness=0, justify=tk.LEFT)
+                button.grid(row=int(i/2+1), column=i%2, sticky='wns')
+                i += 1
 
     def upd_rsmenu(self, *args):
         self.rsm_lbox.delete(0, tk.END)
@@ -239,7 +269,7 @@ class DSS:
                 self.lboxdict_nodes[text] = node.number
                 self.rsm_lbox.insert(tk.END, text)
 
-        self.bv_draw['highlight'].set(0)
+        self.settings['highlight'].set(0)
         self.draw_canvas()
         pass
 
@@ -284,7 +314,7 @@ class DSS:
                 np.round(element.length, decimals=2))
                                                         )
             # Superimpose in red
-            self.bv_draw['highlight'].set(element.number + 1)
+            self.settings['highlight'].set(element.number + 1)
 
 
         elif not self.rsm_view_elements:
@@ -301,7 +331,7 @@ class DSS:
                 np.round(node.displacements, decimals=2),
                 )
             )
-            self.bv_draw['highlight'].set(node.number + 1)
+            self.settings['highlight'].set(node.number + 1)
 
         self.draw_canvas()
         self.canvas.resize(width=self.canvas.width, height=self.canvas.height)
@@ -338,32 +368,28 @@ class DSS:
     def draw_canvas(self, *args, **kwargs):
         self.canvas.delete('all')  # Clear the canvas
 
-        if self.bv_draw['nodes_intr'] or self.bv_draw['nodes_nintr'].get():
+        if self.settings['nodes_intr'] or self.settings['nodes_nintr'].get():
             self.draw_nodes()
 
-
-        if self.bv_draw['elements'].get():
+        if self.settings['elements'].get():
             self.draw_elements()
 
-        if self.bv_draw['loads'].get():
+        if self.settings['loads'].get():
             self.draw_loads()
 
-        if self.bv_draw['highlight'].get() and self.rsm_view_elements:
-            self.draw_highlight(element_id = self.bv_draw['highlight'].get() - 1)
-        elif self.bv_draw['highlight'].get() and not self.rsm_view_elements:
-            self.draw_highlight(node_id = self.bv_draw['highlight'].get() - 1)
+        if self.settings['highlight'].get() and self.rsm_view_elements:
+            self.draw_highlight(element_id =self.settings['highlight'].get() - 1)
+        elif self.settings['highlight'].get() and not self.rsm_view_elements:
+            self.draw_highlight(node_id =self.settings['highlight'].get() - 1)
 
-        if self.bv_draw['boundary_conditions'].get():
+        if self.settings['boundary_conditions'].get():
             self.draw_boundary_conditions()
 
         if self.problem.solved:
-            if self.bv_draw['displaced'].get():
-                self.draw_displaced()
-
-            if self.bv_draw['shear'].get():
+            if self.settings['shear'].get():
                 self.draw_shear_diagram()
 
-            if self.bv_draw['moment'].get():
+            if self.settings['moment'].get():
                 self.draw_moment_diagram()
 
         self.draw_csys()
@@ -375,7 +401,7 @@ class DSS:
 
     def draw_nodes(self):
         for node in self.problem.nodes:
-            #if node.draw or self.bv_draw['nodes_nintr'].get():
+            #if node.draw or self.settings['nodes_nintr'].get():
             node.draw_on_canvas(self.canvas)
 
     def draw_loads(self):
@@ -486,38 +512,6 @@ class DSS:
                                               + rotation@[scale/2, scale/2]),
                                             width=linewidth, fill='black', tag='bc')
 
-    def draw_displaced(self):
-        node_radius = self.node_radius
-        for node in self.problem.nodes:
-            if node.draw:
-                node_r = (inv(self.canvas.transformation_matrix) @ [node.r[0], node.r[1], 1])[0:2]
-                node_disp = (inv(self.canvas.transformation_matrix[0:2,0:2]) @ node.displacements[0:2])
-
-                self.canvas.create_oval(*np.hstack((node_r - node_radius + node_disp,
-                                                    node_r + node_radius + node_disp)),
-                                        fill='red', tag='mech_disp')
-
-                if np.any(np.round(node.loads[0:2])) and False:  # If node is loaded, draw load arrow
-                    scale = 50
-                    arrow_start = node_r - node.loads[0:2]/np.linalg.norm(node.loads[0:2])*scale*[1, 1]
-                    arrow_end = node_r
-                    self.canvas.create_line(*arrow_start + node_disp,
-                                            *arrow_end + node_disp,
-                                            arrow='first', fill='blue', tag='mech_disp')
-
-                self.canvas.create_text(*node_r + node_disp,
-                                        text='{}'.format(np.round(node.displacements, 1)),
-                                        anchor='sw', tag='mech_disp')
-
-        for beam in self.problem.elements:
-            beam_r1 = (inv(self.canvas.transformation_matrix) @ [beam.r1[0], beam.r1[1], 1])[0:2]
-            beam_r2 = (inv(self.canvas.transformation_matrix) @ [beam.r2[0], beam.r2[1], 1])[0:2]
-            beam_disp1 = inv(self.canvas.transformation_matrix[0:2,0:2]) @ beam.nodes[0].displacements[0:2]
-            beam_disp2 = inv(self.canvas.transformation_matrix[0:2,0:2]) @ beam.nodes[1].displacements[0:2]
-            self.canvas.create_line(*np.hstack((beam_r1 + beam_disp1,
-                                                beam_r2 + beam_disp2)),
-                                        fill='red', tag='mech_disp', dash=(1,))
-
     def draw_shear_diagram(self):
         max_shear = np.max(np.abs(np.array([self.problem.forces[:, 1], self.problem.forces[:, 4]])))
         scale = 100/max_shear
@@ -597,16 +591,6 @@ class DSS:
         pass
 
     # Scaling and moving functions
-    def scaleup(self, event):
-        self.zoom *= 0.8
-        self.canvas.transformation_matrix[0:2, 0:2] = self.canvas.transformation_matrix[0:2, 0:2]*0.8
-        self.draw_canvas()
-
-    def scaledown(self, event):
-        self.zoom *= 1.2
-        self.canvas.transformation_matrix[0:2, 0:2] = self.canvas.transformation_matrix[0:2, 0:2]*1.2
-        self.draw_canvas()
-
     def autoscale(self):
         x_ = (np.max(self.problem.nodal_coordinates[:, 0]) + np.min(self.problem.nodal_coordinates[:, 0]))/2
         y_ = (np.max(self.problem.nodal_coordinates[:, 1]) + np.min(self.problem.nodal_coordinates[:, 1]))/2
@@ -1158,16 +1142,23 @@ if __name__ == '__main__':
     else:
         icon = '@' + os.getcwd() + 'dss_icon.xbm'
 
+    # Load plugin_types
+    plugin_list = []
+    for module in (plugins, elements):
+        plugin_classes = (cls for cls in module.__dict__.values() if
+                          isinstance(cls, type) and issubclass(cls, plugins.DSSPlugin))
+        for cls in plugin_classes:
+            plugin_list.append(cls)
+            #cls.load_plugin(dss)
+            # instance = cls.create_instance(dss)
+            # instance.load_plugin()
+
+
     p = Problem()
     root = tk.Tk()
-    dss = DSS(root, problem=p)
+    dss = DSS(root, problem=p, plugins=plugin_list)
 
-    # Load plugins
-    plugin_classes = (cls for cls in plugins.__dict__.values() if
-                      isinstance(cls, type) and issubclass(cls, plugins.DSSPlugin))
-    for cls in plugin_classes:
-        instance = cls.create_instance(dss)
-        instance.init()
+
 
 
     root.mainloop()
