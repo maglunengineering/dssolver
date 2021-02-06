@@ -2,6 +2,7 @@ import sys
 import os
 import pickle
 from tkinter import filedialog
+import typing
 
 from solver import *
 import elements
@@ -28,6 +29,9 @@ class DSS:
         self.canvas = None  # Changed later on
         self.rcm = None
         self.rsm_lbox = None
+        self.rsm_view_elements = True
+        self.lboxdict_elements = None
+        self.lboxdict_nodes = None
         self.bcm = None
         self.bm = None
         self.lm = None
@@ -47,10 +51,9 @@ class DSS:
         self.scale = 50
         self.node_radius = 2.5
 
-        self.settings = {
-                        'shear': tk.BooleanVar(),
-                        'moment': tk.BooleanVar(),
-                        'highlight':tk.IntVar()}
+        self.settings = {'shear': tk.BooleanVar(),
+                         'moment': tk.BooleanVar(),
+                         'highlight':tk.IntVar()}
 
         for var in ('shear', 'moment'):
             self.settings[var].set(False)
@@ -59,11 +62,13 @@ class DSS:
             self.settings[var].trace_add('write', self.draw_canvas)
 
         self.plugin_types: Dict[str, type] = {}
-        self.plugin_instances: Dict[type, object] = {}
+        self.plugin_instances: Dict[type, typing.List[object]] = {}
         if 'plugins' in kwargs:
             plugins: Iterable[DSSPlugin] = kwargs['plugins']
             for plugin in plugins:
                 plugin.load_plugin(self)
+
+        self.menus = {}
 
         self.build_grid()
         self.build_menu()
@@ -93,6 +98,7 @@ class DSS:
         self.root.config(menu=topmenu)
 
         menu_file = tk.Menu(topmenu)
+        self.menus['File'] = menu_file
         topmenu.add_cascade(label='File', menu=menu_file)
         menu_file.add_command(label='Open', command=lambda: self.open_problem())
         menu_file.add_command(label='Save as', command=lambda: self.save_problem())
@@ -100,6 +106,7 @@ class DSS:
         menu_file.add_command(label='New problem ', command=lambda: self.new_problem())
 
         menu_edit = tk.Menu(topmenu)
+        self.menus['Edit'] = menu_edit
         topmenu.add_cascade(label='Edit', menu=menu_edit)
         menu_edit.add_command(label='Create element(s)',
                               command=lambda: BeamInputMenu(self, self.root, self.problem))
@@ -109,8 +116,21 @@ class DSS:
         menu_edit.add_command(label='Redraw canvas',
                               command=lambda: self.draw_canvas())
 
-        topmenu.add_command(label='Solve',
-                            command=lambda: self.problem.solve())
+        menu_solve = tk.Menu(topmenu)
+        self.menus['Solve'] = menu_solve
+        topmenu.add_cascade(label='Solve', menu=menu_solve)
+        menu_solve.add_command(label='Linear',
+                               command=lambda: self.problem.solve())
+
+        menu_plugins = tk.Menu(topmenu)
+        self.topmenu.add_cascade(label='Plugins', menu=menu_plugins)
+        self.menus['Plugins'] = menu_plugins
+        for instances in self.plugin_instances.values():
+            for instance in instances:
+                for key,value in instance.get_functions().items():
+                    menu_plugins.add_command(label=key, command=value)
+
+        topmenu.add_separator()
 
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale() )
         topmenu.add_command(label='Help', command=lambda: HelpBox(self.root))

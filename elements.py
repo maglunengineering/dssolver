@@ -63,7 +63,7 @@ class Node(DSSModelObject):
         if self.settings['Boundary conditions']:
             self.draw_boundary_condition(canvas, **kwargs)
 
-    def draw_loads(self, canvas:DSSCanvas, **kwargs):
+    def draw_loads(self, canvas:DSSCanvas):
         scale = 100
         if np.any(np.round(self.loads[0:2])):
             arrow_start = self.r
@@ -89,7 +89,7 @@ class Node(DSSModelObject):
                              text='{}'.format(self.loads[2]),
                              anchor='ne', tag='mech')
             
-    def draw_boundary_condition(self, canvas:DSSCanvas, **kwargs):
+    def draw_boundary_condition(self, canvas:DSSCanvas):
         scale = 50
         linewidth = 2
 

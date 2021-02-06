@@ -2,11 +2,13 @@ from typing import Dict, Iterable, Callable
 import tkinter as tk
 import numpy as np
 
+from dssgui import DSS
+
 class DSSPlugin:
     settings = {}
 
     @classmethod
-    def load_plugin(cls, owner):
+    def load_plugin(cls, owner:DSS):
         owner.plugin_types[cls.__name__] = cls
 
     @classmethod
@@ -22,7 +24,7 @@ class DSSPlugin:
         return {}
 
 class StandardProblemMenu(DSSPlugin):
-    def __init__(self, owner):
+    def __init__(self, owner:DSS):
         self.dss = owner
 
         self.menu_stdcases:tk.Menu
@@ -54,6 +56,7 @@ class StandardProblemMenu(DSSPlugin):
                                   command=lambda: self.get_model(4))
         menu_stdcases.add_command(label='270 arch',
                                   command=lambda: self.get_model(5))
+
     @classmethod
     def get_model(cls, caller, model = 1):
         caller.new_problem()
@@ -102,3 +105,23 @@ class StandardProblemMenu(DSSPlugin):
 
         caller.upd_rsmenu()
         caller.autoscale()
+
+class NonLinearSolver(DSSPlugin):
+    def __init__(self, owner:DSS):
+        self.owner:DSS = owner
+
+    @classmethod
+    def load_plugin(cls, owner:DSS):
+        super().load_plugin(owner)
+
+        instance = cls(owner)
+        if not cls in owner.plugin_instances:
+            owner.plugin_instances[cls] = []
+        owner.plugin_instances[cls].append(instance)
+
+    def solve_nonlinear(self):
+        pass
+
+    def get_functions(self) -> Dict[str, Callable]:
+        return {'Nonlinear': self.solve_nonlinear}
+
