@@ -1,3 +1,5 @@
+import collections
+from typing import *
 import tkinter as tk
 import numpy as np
 from numpy.linalg import solve
@@ -30,7 +32,6 @@ class DSSCanvas(tk.Canvas):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
 
-        self.bind("<Configure>", self.on_resize)
         self.bind('<B1-Motion>', self.move)
         self.bind('<Double-Button-1>', self.scaleup)
         self.bind('<Double-Button-2>', self.scaledown)
@@ -51,6 +52,13 @@ class DSSCanvas(tk.Canvas):
             self.dss = kwargs['dss']
 
         self.objects = []
+        self.bind_on_resize()
+
+    def bind_on_resize(self):
+        self.bind("<Configure>", self.on_resize)
+
+    def unbind_on_resize(self):
+        self.unbind("<Configure>")
 
     def on_resize(self, event):
         self.width = event.width
@@ -112,17 +120,55 @@ class DSSCanvas(tk.Canvas):
         self.ty = (event.y - self.prev_y) * self.transformation_matrix[0,0]
         self.prev_x = event.x
         self.prev_y = event.y
-        self.dss.draw_canvas()
+
+        self.redraw()
+
+        if self.dss:
+            self.dss.draw_canvas()
 
     def on_lbuttonup(self, event):
         self.prev_x = None
         self.prev_y = None
 
-    #def get_by_coordinates(self, x, y):
-    #    xyz = self.transformation_matrix@np.array([x, y, 1])
-    #    for obj in self.objects:
-    #        if obj.canvas_highlight(self, xyz[:2]):
-    #            return obj
+    def autoscale(self):
+        xmin = np.inf
+        xmax = -np.inf
+        ymin = np.inf
+        ymax = -np.inf
+
+        nodes = (obj for obj in self.objects if obj.__class__.__name__ == 'Node') # Whatever
+        for node in nodes:
+            if node.r[0] < xmin:
+                xmin = node.r[0]
+            if node.r[0] > xmax:
+                xmax = node.r[0]
+            if node.r[1] < ymin:
+                ymin = node.r[1]
+            if node.r[1] > ymax:
+                ymax = node.r[1]
+
+        w = self.width
+        h = self.height
+
+        x_ = (xmin + xmax) / 2
+        y_ = (ymin + ymax) / 2
+        a = np.sqrt((xmax - xmin)**2 + (ymax - ymin)**2)
+
+        r0 = np.array([x_, y_, 1]) - np.array([a/2, a/2, 0])  # Problem bounding square SW corner
+        r0_ = np.array([w/5, 4*h/5, 1])  # Canvas subsquare SW corner
+
+        r = np.array([x_, y_, 1])  # Problem midpoint
+        r_ = np.array([w/5, 4*h/5, 1]) + np.array([h/3, -h/3, 0])  # Canvas subsquare midpoint
+
+        r1 = np.array([x_, y_, 1]) + np.array([0, a/2, 0])  # Problem bounding square N centerpoint
+        r1_ = r_ + np.array([0, -h/3, 0])  # Canvas subsquare N centerpoint
+
+        R = np.array([r0, r, r1]).T
+        R_ = np.array([r0_, r_, r1_]).T
+        # R and R_ must be invertible, or T will not be invertible
+
+        self.transformation_matrix = R@np.linalg.inv(R_)
+        self.redraw()
 
     def add_object(self, obj):
         self.objects.append(obj)
@@ -173,3 +219,53 @@ class HyperlinkManager:
             if tag[:6] == "hyper-":
                 self.links[tag]()
                 return
+
+
+
+class SettingsFrame(tk.Frame):
+    def __init__(self, master, cnf={}, **kwargs):
+        kwargs['bg'] = 'gray82'
+        super().__init__(master, cnf, **kwargs)
+
+        self.settings = {}
+        self.counter = 0
+
+
+    def add_settings(self, cls):
+        def callback_factory(cls, name, bv):
+            return lambda *args: cls.set_setting(name, bv.get())
+
+        settings = cls.get_settings()
+        for name,value in settings.items():
+            if name in self.settings:
+                continue
+
+            bv = tk.BooleanVar()
+            bv.set(value)
+            self.settings[name] = bv # Bug in Tkinter? This reference is somehow needed
+
+            # Add a trace to a lambda function that updates the setting
+            bv.trace_add("write", callback = callback_factory(cls, name, bv))
+            button = tk.Checkbutton(self, text=name, variable=bv,
+                                    bg='gray82', highlightthickness=0, justify=tk.LEFT)
+            button.grid(row=int(self.counter/2+1), column=self.counter % 2, sticky='wns')
+            self.counter += 1
+
+record = collections.defaultdict(list)
+
+def log(func):
+    def func_wrapper(*args, **kwargs):
+        return_value = func(*args, **kwargs)
+        record[func_wrapper].append(return_value)
+        return return_value
+
+
+
+    return func_wrapper
+
+
+def R(angle):
+    s, c = np.sin(angle), np.cos(angle)
+    return np.array([[c, -s],
+                     [s, c]])
+

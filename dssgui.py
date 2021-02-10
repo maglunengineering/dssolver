@@ -4,17 +4,19 @@ import pickle
 from tkinter import filedialog
 import typing
 
-from solver import *
+from problem import *
 import elements
 from elements import *
 from extras import *
 import plugins
+import solvers
+from results import ResultsViewer
 
 np.set_printoptions(precision=2, suppress=True)
 inv = np.linalg.inv
 
 class DSS:
-    def __init__(self, root, problem=None, *args, **kwargs):
+    def __init__(self, root:tk.Tk, problem=None, *args, **kwargs):
         self.root = root
         self.root.minsize(width=1024, height=640)
         self.icon = icon if icon else None
@@ -23,7 +25,7 @@ class DSS:
 
         self.mainframe = tk.Frame(self.root, bg='white')
         self.mainframe.pack(fill=tk.BOTH, expand=True)
-        #self.mainframe.grid(row=0, column=0, sticky='nsew')
+        #self.mainframe.grid(row=0, column=0, sticky='NSEW')
         self.mainframe.winfo_toplevel().title('DSSolver')
         self.topmenu = None
         self.canvas = None  # Changed later on
@@ -77,7 +79,8 @@ class DSS:
         self.build_canvas()
         self.build_bc_menu()  # Outsourced
 
-        self.problem.get_or_create_node((0,0), draw=True)
+        if not self.problem.nodes:
+            self.problem.get_or_create_node((0,0), draw=True)
         self.draw_canvas()
 
     # Building functions
@@ -119,16 +122,25 @@ class DSS:
         menu_solve = tk.Menu(topmenu)
         self.menus['Solve'] = menu_solve
         topmenu.add_cascade(label='Solve', menu=menu_solve)
-        menu_solve.add_command(label='Linear',
-                               command=lambda: self.problem.solve())
+        #menu_solve.add_command(label='Linear',
+        #                       command=lambda: self.problem.solve())
+
+        def callback_factory(this, *args):
+            return lambda : this.call_and_add_to_results(*args)
 
         menu_plugins = tk.Menu(topmenu)
         self.topmenu.add_cascade(label='Plugins', menu=menu_plugins)
         self.menus['Plugins'] = menu_plugins
-        for instances in self.plugin_instances.values():
+        for cls, instances in self.plugin_instances.items():
+            menu = menu_plugins if not issubclass(cls, solvers.Solver) else menu_solve
             for instance in instances:
                 for key,value in instance.get_functions().items():
-                    menu_plugins.add_command(label=key, command=value)
+                    menu.add_command(label = key,
+                                     command = callback_factory(self, value))
+
+        menu_results = tk.Menu(topmenu)
+        self.topmenu.add_cascade(label='Results', menu=menu_results)
+        self.menus['Results'] = menu_results
 
         topmenu.add_separator()
 
@@ -136,6 +148,12 @@ class DSS:
         topmenu.add_command(label='Help', command=lambda: HelpBox(self.root))
 
         #topmenu.add_command(label='Func', command=lambda: self.upd_rsmenu())
+
+    def call_and_add_to_results(self, func:Callable):
+        results = func()
+        menu_results = self.menus['Results']
+        menu_results.add_command(label=results.__class__.__name__,
+                         command = lambda : ResultsViewer(self.root, results, icon=self.icon))
 
     def build_bc_menu(self):
         """
@@ -191,7 +209,7 @@ class DSS:
         self.rsm.grid(row=1, column=1, sticky='nsew')
 
         self.rsm_view_elements = True
-        rsm_b1 = tk.Button(self.rsm, text='Element/node view', command=lambda: self.switch_resmenu())
+        rsm_b1 = tk.Button(self.rsm, text='Results', command=lambda: self.switch_resmenu())
         rsm_b1.grid(row=0, column=0)
 
         self.rsm_lbox = tk.Listbox(self.rsm)
@@ -219,33 +237,10 @@ class DSS:
             button.grid(row=int(i/2+1), column=i%2, sticky='wns')
             i += 1
 
-        # Have all class booleans of plugin_types get a checkbox
-        #i = 0
-        used_names = set()
-
-        # We can't pass the classmethod directly as lambda would be bound to this scope
-        # We'll use a factory method to make a new scope
-        def callback_factory(cls, name, bv):
-            return lambda *args: cls.set_setting(name, bv.get())
-
+        plugin_settings_frame = SettingsFrame(rsm_settings)
+        plugin_settings_frame.grid(row=3, columnspan=2, sticky='ew')
         for cls in self.plugin_types.values():
-            for name, boolean in cls.get_settings().items():
-                if name in used_names:
-                    continue
-                used_names.add(name)
-
-                bv = tk.BooleanVar()
-
-                # Bug in Tkinter? This reference is somehow needed
-                self.settings[name] = bv
-
-                # Add a trace to a lambda function that updates the setting
-                bv.set(boolean)
-                bv.trace_add("write", callback = callback_factory(cls, name, bv))
-                button = tk.Checkbutton(rsm_settings, text=name, variable=bv,
-                                        bg=color2, highlightthickness=0, justify=tk.LEFT)
-                button.grid(row=int(i/2+1), column=i%2, sticky='wns')
-                i += 1
+            plugin_settings_frame.add_settings(cls)
 
     def upd_rsmenu(self, *args):
         self.rsm_lbox.delete(0, tk.END)
@@ -297,13 +292,13 @@ class DSS:
                                       'Length {}\n '.format(
                 element.number,
                 element.nodes[0].boundary_condition,
-                np.round(element.beta(element.angle)[0:3,0:3]@element.displacements[0:3], decimals=2),
-                np.round(element.beta(element.angle)[0:3,0:3]@element.forces[0:3], decimals=2),
+                np.round(element.transform(element.angle)[0:3, 0:3]@element.displacements[0:3], decimals=2),
+                np.round(element.transform(element.angle)[0:3, 0:3]@element.forces[0:3], decimals=2),
                 np.round(element.forces[0:3], decimals=2),
                 np.round(element.stress[0:3], decimals=2),
                 element.nodes[1].boundary_condition,
-                np.round(element.beta(element.angle)[3:6,3:6] @ element.displacements[3:6], decimals=2),
-                np.round(element.beta(element.angle)[3:6,3:6] @ element.forces[3:6], decimals=2),
+                np.round(element.transform(element.angle)[3:6, 3:6]@element.displacements[3:6], decimals=2),
+                np.round(element.transform(element.angle)[3:6, 3:6]@element.forces[3:6], decimals=2),
                 np.round(element.forces[3:6], decimals=2),
                 np.round(element.stress[3:6], decimals=2),
                 np.round(element.length, decimals=2))
@@ -395,8 +390,8 @@ class DSS:
             s,c = np.sin(beam.angle), np.cos(beam.angle)
             R = np.array([[c, -s], [s, c]])
 
-            v1 = (beam.beta(beam.angle) @ beam.forces)[1]
-            v2 = -(beam.beta(beam.angle) @ beam.forces)[4]
+            v1 = (beam.transform(beam.angle)@beam.forces)[1]
+            v2 = -(beam.transform(beam.angle)@beam.forces)[4]
 
             p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
             p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
@@ -468,6 +463,7 @@ class DSS:
 
     # Scaling and moving functions
     def autoscale(self):
+        # TODO: Replace with DSSCanvas.autoscale when objects are added to the canvas
         x_ = (np.max(self.problem.nodal_coordinates[:, 0]) + np.min(self.problem.nodal_coordinates[:, 0]))/2
         y_ = (np.max(self.problem.nodal_coordinates[:, 1]) + np.min(self.problem.nodal_coordinates[:, 1]))/2
 
@@ -1011,6 +1007,32 @@ case.
             self.textbox.insert(tk.INSERT, '\n\n')
 
 
+def arch_half():
+    global dofs, p
+    p = Problem()
+    N = 16
+    # n = int(np.floor(N/2))
+
+    dofs = 2*(3*N - 2,)
+    start = np.pi - np.arctan(600/800)
+    end = np.pi/2
+
+    node_angles = np.linspace(start, end, N)
+    node_points = 1000*np.array([np.cos(node_angles), np.sin(node_angles)]).T
+    for r in node_points:
+        p.get_or_create_node(r)
+    for n1, n2 in zip(p.nodes, p.nodes[1:]):
+        p.create_beam(n1, n2, E=2.1e5, A=10, I=10**3/12)
+
+    p.reassign_dofs()
+    p.constrained_dofs = np.array([0, 1, 3*N - 3, 3*N - 1])
+    p.load_node(p.nodes[-1], np.array([0, -3600, 0]))
+
+    p.pin(p.nodes[0])
+    p.glider(p.nodes[-1])
+
+    return p
+
 if __name__ == '__main__':
     #self.icon = 'dss_icon.ico' if _platform == 'win32' or _platform == 'win64' else '@dss_icon.xbm'
     if sys.platform == 'win32' or sys.platform == 'win64':
@@ -1020,7 +1042,7 @@ if __name__ == '__main__':
 
     # Load plugin_types
     plugin_list = []
-    for module in (plugins, elements):
+    for module in (plugins, elements, solvers):
         plugin_classes = (cls for cls in module.__dict__.values() if
                           isinstance(cls, type) and issubclass(cls, plugins.DSSPlugin))
         for cls in plugin_classes:
@@ -1030,12 +1052,20 @@ if __name__ == '__main__':
             # instance.load_plugin()
 
 
-    p = Problem()
+
+
+
+    #p = Problem()
+    p = arch_half()
     root = tk.Tk()
     dss = DSS(root, problem=p, plugins=plugin_list)
-
-
-
+    #p.get_or_create_node((1000, 0))
+    #p.create_beams(np.array([0,0]), np.array([1000,0]), n=5)
+    #p.fix(p.nodes[0])
+    dss.autoscale()
+    #dss.canvas.transformation_matrix = np.array([[1.69628, 0, -125.137],
+    #                                             [0, -1.69628, 490],
+    #                                             [0, 0, 1]])
 
     root.mainloop()
 

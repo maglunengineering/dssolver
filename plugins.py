@@ -2,13 +2,14 @@ from typing import Dict, Iterable, Callable
 import tkinter as tk
 import numpy as np
 
-from dssgui import DSS
 
 class DSSPlugin:
     settings = {}
+    def __init__(self, owner:'DSS'):
+        self.owner:'DSS' = owner
 
     @classmethod
-    def load_plugin(cls, owner:DSS):
+    def load_plugin(cls, owner:'DSS'):
         owner.plugin_types[cls.__name__] = cls
 
     @classmethod
@@ -19,26 +20,19 @@ class DSSPlugin:
     def set_setting(cls, key, value):
         cls.settings[key] = value
 
-    @classmethod
-    def get_functions(cls) -> Dict[str, Callable]:
+    def get_functions(self) -> Dict[str, Callable]:
         return {}
 
 class StandardProblemMenu(DSSPlugin):
-    def __init__(self, owner:DSS):
-        self.dss = owner
+    def __init__(self, owner:'DSS'):
+        super().__init__(owner)
 
         self.menu_stdcases:tk.Menu
 
     #@classmethod
-    #def load_plugin(cls, dss):
-    #    dss.plugin_instances[cls] = []
-    #    instance = cls(dss)
-    #    instance.load_instance()
-
-    @classmethod
-    def get_functions(cls, caller) -> Dict[str, Callable]:
-        return {'Cantilever beam': lambda: cls.get_model(caller, 1),
-                'Circular arch' : lambda: cls.get_model(caller, 4)}
+    #def get_functions(cls, caller) -> Dict[str, Callable]:
+    #    return {'Cantilever beam': lambda: cls.get_model(caller, 1),
+    #            'Circular arch' : lambda: cls.get_model(caller, 4)}
 
     def load_instance(self):
         self.dss.plugin_instances[self.__class__].append(self)
@@ -105,23 +99,3 @@ class StandardProblemMenu(DSSPlugin):
 
         caller.upd_rsmenu()
         caller.autoscale()
-
-class NonLinearSolver(DSSPlugin):
-    def __init__(self, owner:DSS):
-        self.owner:DSS = owner
-
-    @classmethod
-    def load_plugin(cls, owner:DSS):
-        super().load_plugin(owner)
-
-        instance = cls(owner)
-        if not cls in owner.plugin_instances:
-            owner.plugin_instances[cls] = []
-        owner.plugin_instances[cls].append(instance)
-
-    def solve_nonlinear(self):
-        pass
-
-    def get_functions(self) -> Dict[str, Callable]:
-        return {'Nonlinear': self.solve_nonlinear}
-

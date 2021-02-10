@@ -3,7 +3,7 @@ from typing import Dict
 import numpy as np
 import tkinter as tk
 
-from extras import DSSCanvas
+from extras import *
 from plugins import DSSPlugin
 
 class DSSModelObject(DSSPlugin):
@@ -28,7 +28,7 @@ class Node(DSSModelObject):
 
         self.draw = draw  # Node is not drawn unless it is interesting
 
-    def add_beam(self, beam):
+    def add_element(self, beam):
         self.elements.append(beam)
 
     @property
@@ -162,13 +162,18 @@ class Node(DSSModelObject):
                                           + rotation@[scale/2, scale/2]),
                                         width=linewidth, fill='black', tag='bc')
 
+    def copy(self):
+        new_node = Node(self.r)
+        new_node.dofs = self.dofs
+        return new_node
+
     def __str__(self):
         return '{},{}'.format(self.x, self.y)
 
     def __hash__(self):
         return id(self)
 
-class FiniteElement(DSSModelObject):
+class FiniteElement2Node(DSSModelObject):
     settings = {'Displaced': False}
 
     def __init__(self, node1:Node, node2:Node):
@@ -177,104 +182,7 @@ class FiniteElement(DSSModelObject):
         self.node2 = node2
 
         for node in self.nodes:
-            node.add_beam(self)
-
-    def draw_on_canvas(self, canvas, **kwargs):
-        canvas.draw_line(self.node1.r, self.node2.r, **kwargs)
-        if self.settings['Displaced']:
-            canvas.draw_line(self.node1.r + self.node1.displacements[0:2],
-                             self.node2.r + self.node2.displacements[0:2],
-                             fill='red', dash=(1,), **kwargs)
-
-
-
-class Beam(FiniteElement):
-    def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
-        super().__init__(node1, node2)
-
-        self.E = E
-        self.A = A
-        self.I = I
-        self.z = z if z else np.sqrt(I/A)/3
-
-        self.angle = np.arctan2( *(self.node2.r - self.node1.r)[::-1] )
-        self.length = np.linalg.norm(node2.r - node1.r)
-
-        self.number = None  # (beam id) assigned on creation
-        self.stress = np.zeros(6)  # local csys(1x6) assigned on solution
-        # Stress given as sigma_x (top), sigma_x (bottom), tau_xy (average!)
-        self.member_loads = np.zeros(6)  # local csys distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
-        self.distributed_load = 0
-        # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
-
-
-        self.kn = A*E/self.length * (E*I/self.length**3)**(-1)
-        self.ke = E*I/self.length**3 * np.array(
-             [[self.kn, 0, 0, -self.kn, 0, 0],
-              [0, 12, 6*self.length, 0, -12, 6*self.length],
-              [0, 6*self.length, 4*self.length**2, 0, -6*self.length, 2*self.length**2],
-              [-self.kn, 0, 0, self.kn, 0, 0],
-              [0, -12, -6*self.length, 0, 12, -6*self.length],
-              [0, 6*self.length, 2*self.length**2, 0, -6*self.length, 4*self.length**2]])
-
-        self.k = self.beta(self.angle).T @ self.ke @ self.beta(self.angle)
-
-        self.cpl = np.zeros((6,6))
-        self.cpl_ = np.array([[1/self.A, 0, -self.z/self.I],
-                             [1/self.A, 0, self.z/self.I],
-                             [0,     1/self.A,   0]])
-        self.cpl[0:3, 0:3] = self.cpl[3:6, 3:6] = self.cpl_
-
-    def beta(self, angle):
-        s, c = np.sin(angle), np.cos(angle)
-        return np.array([[c, s, 0, 0, 0, 0],
-                         [-s, c, 0, 0, 0, 0],
-                         [0, 0, 1, 0, 0, 0],
-                         [0, 0, 0, c, s, 0],
-                         [0, 0, 0, -s, c, 0],
-                         [0, 0, 0, 0, 0, 1]])
-
-    def Ki(self, newdim):
-        dofs = np.hstack((self.nodes[0].dofs, self.nodes[1].dofs))
-        E = np.zeros((newdim, len(dofs)))
-        for i, j in enumerate(dofs):
-            E[j, i] = 1
-        return E @ self.k @ E.T
-
-    def Qfi(self, newdim):
-        dofs = np.hstack((self.nodes[0].dofs, self.nodes[1].dofs))
-        E = np.zeros((newdim, len(dofs)))
-        for i, j in enumerate(dofs):
-            E[j, i] = 1
-        return E @ self.member_loads
-
-    def Ex(self, newdim):
-        dofs = np.hstack((self.nodes[0].dofs, self.nodes[1].dofs))
-        E = np.zeros((newdim, len(dofs)))
-        for i, j in enumerate(dofs):
-            E[j, i] = 1
-        return E
-
-    def translate(self, translation, loaded=True):
-        # translation: global vector [u1,v1,theta1, u2,v2,theta2]
-        self.nodes[0].translate(translation[0], translation[1])
-        self.nodes[1].translate(translation[3], translation[4])
-        if loaded:
-            self.forces = self.forces + self.k @ translation
-            self.displacements = self.displacements + translation
-        tr_local = beta(self.angle).T @ translation
-        angle_change = np.arcsin((tr_local[4] - tr_local[1]) / self.length)
-        self.k = beta(angle_change).T @ self.k @ beta(angle_change)
-
-    def strain_energy(self, delta_displacements=np.zeros(6)):
-        """
-        :param delta_displacements: Additional displacements for strain energy calculations.
-        The derivative of strain_energy wrt. displacement 2 is thus (strain_energy([0,0,dd,0,0,0])-strain_energy)/dd
-        """
-        N1,V1,M1,N2,V2,M2 = self.ke @ beta(self.angle) @ (self.displacements + delta_displacements)
-        L = self.length
-        return 1/(2*self.E*self.I) * (M1**2*L - M1*V1*L**2 + V1**2 * L**3/3) + \
-               (N2**2 * L)/(2*self.E*self.A)
+            node.add_element(self)
 
     @property
     def dofs(self):
@@ -284,7 +192,118 @@ class Beam(FiniteElement):
         return np.hstack((self.nodes[0].displacements, self.nodes[1].displacements))
 
     def get_forces(self):
-        return self.k @ self.get_displacements()
+        return self.stiffness_matrix_global() @ self.get_displacements()
+
+    def draw_on_canvas(self, canvas, **kwargs):
+        canvas.draw_line(self.node1.r, self.node2.r, **kwargs)
+        if self.settings['Displaced']:
+            canvas.draw_line(self.node1.r + self.node1.displacements[0:2],
+                             self.node2.r + self.node2.displacements[0:2],
+                             fill='red', dash=(1,), **kwargs)
+
+
+class Beam(FiniteElement2Node):
+    def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
+        super().__init__(node1, node2)
+
+        self.E = E
+        self.A = A
+        self.I = I
+        self.z = z if z else np.sqrt(I/A)/3
+
+        angle = np.arctan2( *(self.node2.r - self.node1.r)[::-1] )
+        length = np.linalg.norm(node2.r - node1.r)
+
+        self.number = None
+        self.stress = np.zeros(6)
+
+        # Stress given as sigma_x (top), sigma_x (bottom), tau_xy (average!)
+        self.member_loads = np.zeros(6)  # local csys distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
+        self.distributed_load = 0
+        # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
+
+        kn = A*E/length * (E*I/length**3)**(-1)
+        self.stiffness_matrix_local = E*I/length**3 * np.array(
+             [[kn, 0, 0, -kn, 0, 0],
+              [0, 12, 6*length, 0, -12, 6*length],
+              [0, 6*length, 4*length**2, 0, -6*length, 2*length**2],
+              [-kn, 0, 0, kn, 0, 0],
+              [0, -12, -6*length, 0, 12, -6*length],
+              [0, 6*length, 2*length**2, 0, -6*length, 4*length**2]])
+
+        self.cpl = np.zeros((6,6))
+        self.cpl_ = np.array([[1/self.A, 0, -self.z/self.I],
+                             [1/self.A, 0, self.z/self.I],
+                             [0,     1/self.A,   0]])
+        self.cpl[0:3, 0:3] = self.cpl[3:6, 3:6] = self.cpl_
+
+    def transform(self):
+        e1 = ((self.node2.r + self.node2.displacements[:2]) -
+              (self.node1.r + self.node1.displacements[0:2])) / self._deformed_length()
+        e2 = R(np.deg2rad(90)) @ e1 # TODO: Just make it like [-e2, e1] or whatever
+        T = np.array([[*e1, 0, *np.zeros(3)],
+                      [*e2, 0, *np.zeros(3)],
+                      [0, 0, 1,*np.zeros(3)],
+                      [*np.zeros(3), *e1, 0],
+                      [*np.zeros(3), *e2, 0],
+                      [*np.zeros(3), 0, 0, 1]])
+        return T
+
+    def _get_forces_local(self):
+        undeformed_length = np.linalg.norm(self.node2.r - self.node1.r)
+        dl = self._deformed_length() - undeformed_length
+
+        tan_e = (self.node2.r - self.node1.r)/undeformed_length
+        tan_ed = (self.node2.r + self.node2.displacements[0:2] -
+                  self.node1.r - self.node1.displacements[0:2])/self._deformed_length()
+        tan_1 = R(self.node1.displacements[2])@tan_e
+        tan_2 = R(self.node2.displacements[2])@tan_e
+
+        th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
+        th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])
+
+        displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2])
+        forces_local = self.stiffness_matrix_local @ displacements_local
+        return forces_local
+
+    def get_forces(self):
+        return self.transform().T @ self._get_forces_local()
+
+    #@log
+    def stiffness_matrix_global(self):
+        T = self.transform()
+        return T.T @ (self.stiffness_matrix_local ) @ T + self.stiffness_matrix_geometric()
+
+    #@Logger.log
+    def stiffness_matrix_geometric(self):
+        fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local()
+        deformed_length = self._deformed_length()
+
+        forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
+        G = np.array([0, -1/deformed_length, 0, 0, 1/deformed_length, 0])
+        T = self.transform()
+        return T.T @ np.outer(forces_permuted, G) @ T
+
+    def member_loads_expanded(self, newdim):
+        return self._Ex(newdim) @ self.member_loads
+
+    def _Ex(self, newdim):
+        dofs = np.hstack((self.nodes[0].dofs, self.nodes[1].dofs))
+        E = np.zeros((newdim, len(dofs)))
+        for i, j in enumerate(dofs):
+            E[j, i] = 1
+        return E
+
+    def expand(self, arr, newdim):
+        E = self._Ex(newdim)
+        if len(arr.shape) == 1:
+            return E @ arr
+        elif len(arr.shape) == 2:
+            return E @ arr @ E.T
+
+    def _deformed_length(self):
+        return np.linalg.norm((self.node2.r + self.node2.displacements[:2] -
+                               self.node1.r - self.node1.displacements[:2]))
 
     @property
     def r1(self):
@@ -300,7 +319,7 @@ class Beam(FiniteElement):
 class Rod(Beam):
 
     def __init__(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):
-        super().__init__(r1=r1, r2=r2, E=E, A=A)
+        super().__init__(node1=r1, node2=r2, E=E, A=A)
 
         self.kn = A*E/self.length
         self.ke = np.array(      [[self.kn, 0, 0, -self.kn, 0, 0],
@@ -310,7 +329,7 @@ class Rod(Beam):
                                   [0, 0, 0, 0, 0, 0],
                                   [0, 0, 0, 0, 0, 0]])
 
-        self.k = self.beta(self.angle).T @ self.ke @ self.beta(self.angle)
+        self.k = self.transform(self.angle).T@self.ke@self.transform(self.angle)
 
 def beta(angle):
     s, c = np.sin(angle), np.cos(angle)
