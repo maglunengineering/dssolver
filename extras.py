@@ -183,6 +183,28 @@ class DSSCanvas(tk.Canvas):
         self.redraw()
 
 
+class DSSListbox(tk.Listbox):
+    def __init__(self, master=None, cnf=None, **kwargs):
+        if cnf is None:
+            cnf = {}
+        super().__init__(master, cnf, **kwargs)
+
+        self.string_map = dict()
+
+    def add(self, obj):
+        k = str(obj)
+        self.string_map[k] = obj
+
+        self.insert(tk.END, k)
+
+    def get_selected(self):
+        k = self.get(self.curselection())
+        return self.string_map[k]
+
+    def update_from_notifier(self, items):
+        self.delete(0, tk.END)
+        for item in items:
+            self.append(item)
 
 class HyperlinkManager:
 
@@ -221,7 +243,6 @@ class HyperlinkManager:
                 return
 
 
-
 class SettingsFrame(tk.Frame):
     def __init__(self, master, cnf={}, **kwargs):
         kwargs['bg'] = 'gray82'
@@ -229,7 +250,6 @@ class SettingsFrame(tk.Frame):
 
         self.settings = {}
         self.counter = 0
-
 
     def add_settings(self, cls):
         def callback_factory(cls, name, bv):

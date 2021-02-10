@@ -21,23 +21,10 @@ class ElementNodeMap:
 
 
 class Results:
-    def __init__(self):
-        self.nodes = []
-        self.elements = []
-
-    def clone_model(self, nodes:Iterable[Node], elements:Iterable[FiniteElement2Node]):
-        clones = {}
-        for node in nodes:
-            copy = node.copy()
-            self.nodes.append(copy)
-            clones[node] = copy
-
-
-        for element in elements:
-            node1 = clones[element.node1]
-            node2 = clones[element.node2]
-            el = FiniteElement2Node(node1, node2)
-            self.elements.append(el)
+    def __init__(self, problem):
+        self.problem = problem
+        self.nodes = problem.nodes
+        self.elements = problem.elements
 
     def get_objects(self) -> Iterable[DSSModelObject]:
         yield from self.nodes
@@ -53,20 +40,15 @@ class Results:
         pass
 
 class ResultsStaticLinear(Results):
-    def __init__(self, nodes:Iterable[Node], elements:Iterable[FiniteElement2Node],
-                 displacements:np.ndarray):
-        super().__init__()
-
-        self.clone_model(nodes, elements)
+    def __init__(self, problem, displacements:np.ndarray):
+        super().__init__(problem)
 
         for node in self.nodes:
             node.displacements = displacements[node.dofs]
 
 class ResultsStaticNonlinear(Results):
-    def __init__(self, nodes:Iterable[Node], elements:Iterable[FiniteElement2Node],
-                 displacements:Sized):
-        super().__init__()
-        self.clone_model(nodes, elements)
+    def __init__(self, problem, displacements:Sized):
+        super().__init__(problem)
 
         self.displacements = displacements
         self.num_steps = len(displacements)

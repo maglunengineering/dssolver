@@ -30,10 +30,7 @@ class DSS:
         self.topmenu = None
         self.canvas = None  # Changed later on
         self.rcm = None
-        self.rsm_lbox = None
-        self.rsm_view_elements = True
-        self.lboxdict_elements = None
-        self.lboxdict_nodes = None
+        self.listbox_results = None
         self.bcm = None
         self.bm = None
         self.lm = None
@@ -122,8 +119,6 @@ class DSS:
         menu_solve = tk.Menu(topmenu)
         self.menus['Solve'] = menu_solve
         topmenu.add_cascade(label='Solve', menu=menu_solve)
-        #menu_solve.add_command(label='Linear',
-        #                       command=lambda: self.problem.solve())
 
         def callback_factory(this, *args):
             return lambda : this.call_and_add_to_results(*args)
@@ -151,9 +146,10 @@ class DSS:
 
     def call_and_add_to_results(self, func:Callable):
         results = func()
-        menu_results = self.menus['Results']
-        menu_results.add_command(label=results.__class__.__name__,
-                         command = lambda : ResultsViewer(self.root, results, icon=self.icon))
+        #menu_results = self.menus['Results']
+        #menu_results.add_command(label=results.__class__.__name__,
+        #                 command = lambda : ResultsViewer(self.root, results, icon=self.icon))
+        self.listbox_results.add(results)
 
     def build_bc_menu(self):
         """
@@ -208,18 +204,9 @@ class DSS:
         self.rsm = tk.Frame(self.mainframe, bg=color1, width=256)
         self.rsm.grid(row=1, column=1, sticky='nsew')
 
-        self.rsm_view_elements = True
-        rsm_b1 = tk.Button(self.rsm, text='Results', command=lambda: self.switch_resmenu())
-        rsm_b1.grid(row=0, column=0)
-
-        self.rsm_lbox = tk.Listbox(self.rsm)
-        self.rsm_lbox.grid(row=1, column=0)
-
-        self.rsm_lbox.bind('<Double-Button-1>', self.rs_click)
-        self.rsm_lbox.bind('<Button-3>', self.upd_rsmenu)
-
-        rsm_info = tk.Label(self.rsm, text='Double click object for information', bg=color1)
-        rsm_info.grid(row=2, column=0, sticky='ew')
+        self.listbox_results = DSSListbox(self.rsm)
+        self.listbox_results.grid(row=1, column=0)
+        self.listbox_results.bind('<Double-Button-1>', self.view_results)
 
         rsm_settings = tk.Frame(self.rsm, bg=color2, width=255)
         rsm_settings.grid(row=3, column=0, sticky='nw')
@@ -241,91 +228,6 @@ class DSS:
         plugin_settings_frame.grid(row=3, columnspan=2, sticky='ew')
         for cls in self.plugin_types.values():
             plugin_settings_frame.add_settings(cls)
-
-    def upd_rsmenu(self, *args):
-        self.rsm_lbox.delete(0, tk.END)
-        self.lboxdict_elements = {}
-        self.lboxdict_nodes = {}
-
-        if self.rsm_view_elements:
-            for element in self.problem.elements:
-                text = '{} {}-{}'.format(type(element).__name__, element.node1.r, element.node2.r)
-                self.lboxdict_elements[text] = element.number
-                self.rsm_lbox.insert(tk.END, text)
-
-        elif not self.rsm_view_elements:
-            for node in self.problem.nodes:
-                text = 'Node {}'.format(node.r)
-                self.lboxdict_nodes[text] = node.number
-                self.rsm_lbox.insert(tk.END, text)
-
-        self.settings['highlight'].set(0)
-        self.draw_canvas()
-        pass
-
-    def switch_resmenu(self):
-        self.rsm_view_elements = not self.rsm_view_elements
-        self.upd_rsmenu()
-
-    def rs_click(self, *args):
-        curselection = self.rsm_lbox.curselection()
-        print(curselection)
-        obj = self.rsm_lbox.get(curselection)
-        print(obj)
-
-        if self.rsm_view_elements:
-            element = self.problem.elements[self.lboxdict_elements[obj]]  # Only works for beams?
-            self.rsm_info.config(text='Double click object for information \n'
-                                      'Element id {} \n '
-                                      'At r1: \n'
-                                      'Boundary condition: {} \n'
-                                      'Displacements {} \n'
-                                      'Int. forces {} \n'  # Local csys! 
-                                      'Int. f. global {} \n'
-                                      'Stress {} \n'
-                                      'At r2: \n'
-                                      'Boundary condition: {} \n'
-                                      'Displacements {} \n'
-                                      'Int. forces {} \n'
-                                      'Int. f. global {} \n'
-                                      'Stress {} \n'
-                                      'Length {}\n '.format(
-                element.number,
-                element.nodes[0].boundary_condition,
-                np.round(element.transform(element.angle)[0:3, 0:3]@element.displacements[0:3], decimals=2),
-                np.round(element.transform(element.angle)[0:3, 0:3]@element.forces[0:3], decimals=2),
-                np.round(element.forces[0:3], decimals=2),
-                np.round(element.stress[0:3], decimals=2),
-                element.nodes[1].boundary_condition,
-                np.round(element.transform(element.angle)[3:6, 3:6]@element.displacements[3:6], decimals=2),
-                np.round(element.transform(element.angle)[3:6, 3:6]@element.forces[3:6], decimals=2),
-                np.round(element.forces[3:6], decimals=2),
-                np.round(element.stress[3:6], decimals=2),
-                np.round(element.length, decimals=2))
-                                                        )
-            # Superimpose in red
-            self.settings['highlight'].set(element.number + 1)
-
-
-        elif not self.rsm_view_elements:
-            node = self.problem.nodes[self.lboxdict_nodes[obj]]
-            self.rsm_info.config(text='Double click object for information\n'
-                                      'Node id {} \n'
-                                      'r: {} \n'
-                                      'Boundary condition: {} \n'
-                                      'Displacements: {} \n'
-                                     .format(
-                node.number,
-                node.r,
-                node.boundary_condition,
-                np.round(node.displacements, decimals=2),
-                )
-            )
-            self.settings['highlight'].set(node.number + 1)
-
-        self.draw_canvas()
-        self.canvas.resize(width=self.canvas.width, height=self.canvas.height)
-        #self.draw_highlight(element_id = element.number)
 
     def rightclickmenu(self, event):
         self.click_x = event.x  # Canvas coordinates
@@ -353,6 +255,10 @@ class DSS:
 
         self.rcm.grab_release()
         self.rcm.tk_popup(event.x_root, event.y_root, 0)
+
+    def view_results(self, *args):
+        result = self.listbox_results.get_selected()
+        ResultsViewer(self.root, result, icon=self.icon)
 
     # Drawing functions
     def draw_canvas(self, *args, **kwargs):

@@ -600,6 +600,23 @@ class Problem:
     def save_problem(self):
         pass
 
+    def clone(self):
+        node_clones = {}
+        for node in self.nodes:
+            copy = node.copy()
+            node_clones[node] = copy
+
+        cloned_elements = []
+        for element in self.elements:
+            node1 = node_clones[element.node1]
+            node2 = node_clones[element.node2]
+            cloned_elements.append(element.clone(node1, node2))
+
+        clone = Problem()
+        clone.elements = cloned_elements
+        clone.nodes = list(node_clones.values())
+        return clone
+
     @property
     def nodal_coordinates(self):
         nodal_coordinates = np.array([node.r for node in self.nodes])

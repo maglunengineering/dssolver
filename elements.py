@@ -16,7 +16,7 @@ class Node(DSSModelObject):
 
     def __init__(self, xy, draw=False):
         self.x, self.y = xy
-        self.r = np.array(xy)
+        self._r = np.array(xy)
 
         self.elements = list()
         self.loads = np.zeros(3) # self.loads (global Fx, Fy, M) assigned on loading
@@ -30,6 +30,14 @@ class Node(DSSModelObject):
 
     def add_element(self, beam):
         self.elements.append(beam)
+
+    @property
+    def r(self):
+        return self._r
+
+    @property
+    def rr(self):
+        return self._r + self.displacements[0:2]
 
     @property
     def abs_forces(self):
@@ -65,9 +73,10 @@ class Node(DSSModelObject):
 
     def draw_loads(self, canvas:DSSCanvas):
         scale = 100
+        pos = self.r
         if np.any(np.round(self.loads[0:2])):
-            arrow_start = self.r
-            arrow_end = self.r + self.loads[0:2]/np.linalg.norm(self.loads[0:2])*scale
+            arrow_start = pos
+            arrow_end = pos + self.loads[0:2]/np.linalg.norm(self.loads[0:2])*scale
             canvas.draw_line(arrow_start, arrow_end,
                              arrow='last', fill='blue', tag='mech')
             canvas.draw_text((arrow_start + arrow_end)/2,
@@ -77,9 +86,9 @@ class Node(DSSModelObject):
         # If moment, draw a circular arrow
         if self.loads[2] != 0:
             sign = np.sign(self.loads[2])
-            arc_start = self.r + np.array([0, -scale/2])*sign
-            arc_mid = self.r + np.array([scale/2, 0])*sign
-            arc_end = self.r + np.array([0, scale/2])*sign
+            arc_start = pos + np.array([0, -scale/2])*sign
+            arc_mid = pos + np.array([scale/2, 0])*sign
+            arc_end = pos + np.array([0, scale/2])*sign
 
             arrow = 'first' if sign == 1 else 'last'
             canvas.draw_arc(arc_start, arc_mid, arc_end,
@@ -92,6 +101,7 @@ class Node(DSSModelObject):
     def draw_boundary_condition(self, canvas:DSSCanvas):
         scale = 50
         linewidth = 2
+        pos = self.r
 
         if self.boundary_condition == 'fixed':
             angle_vector = sum(n.r - self.r for n in self.connected_nodes())
@@ -99,48 +109,48 @@ class Node(DSSModelObject):
             c, s = np.cos(-angle), np.sin(-angle)
             rotation = np.array([[c, -s], [s, c]])
 
-            canvas.draw_line((self.r + rotation@[0, scale]), (self.r + rotation@[0, -scale]),
+            canvas.draw_line((pos + rotation@[0, scale]), (self.r + rotation@[0, -scale]),
                                     width=linewidth, fill='black', tag='bc')
             for offset in np.linspace(0, 2*scale, 6):
-                canvas.draw_line((self.r + rotation@[0, -scale + offset]),
-                                        (self.r + rotation@[0, -scale + offset] + rotation@[-scale/2, scale/2]),
+                canvas.draw_line((pos + rotation@[0, -scale + offset]),
+                                        (pos + rotation@[0, -scale + offset] + rotation@[-scale/2, scale/2]),
                                         width=linewidth, fill='black', tag='bc')
 
         elif self.boundary_condition == 'pinned' or self.boundary_condition == 'roller':
             k = 1.5  # constant - triangle diameter
 
-            canvas.draw_oval((self.r - scale/4), (self.r + scale/5))
-            canvas.draw_line(self.r, (self.r + np.array([-np.sin(np.deg2rad(30)),
+            canvas.draw_oval((pos - scale/4), (self.r + scale/5))
+            canvas.draw_line(pos, (pos + np.array([-np.sin(np.deg2rad(30)),
                                                                   np.cos(np.deg2rad(30))])*k*scale),
                                     width=linewidth, fill='black', tag='bc')
-            canvas.draw_line(self.r, (self.r + np.array([np.sin(np.deg2rad(30)),
+            canvas.draw_line(pos, (pos + np.array([np.sin(np.deg2rad(30)),
                                                                   np.cos(np.deg2rad(30))])*k*scale),
                                     width=linewidth, fill='black', tag='bc')
 
-            canvas.draw_line((self.r + (np.array([-np.sin(np.deg2rad(30)),
+            canvas.draw_line((pos + (np.array([-np.sin(np.deg2rad(30)),
                                                           np.cos(np.deg2rad(30))])
                                                 + np.array([-1.4/(k*scale), 0])
                                                 )*k*scale),
-                                    (self.r + (np.array([np.sin(np.deg2rad(30)),
+                                    (pos + (np.array([np.sin(np.deg2rad(30)),
                                                           np.cos(np.deg2rad(30))])
                                                 + np.array([1.4/(k*scale), 0])
                                                 )*k*scale),
                                     width=linewidth, fill='black', tag='bc')
             if self.boundary_condition == 'roller':
-                canvas.draw_line((self.r + np.array([-np.sin(np.deg2rad(30)),
+                canvas.draw_line((pos + np.array([-np.sin(np.deg2rad(30)),
                                                              np.cos(np.deg2rad(30))])*k*scale
                                           + np.array([-scale/2, scale/4])),
-                                        (self.r + np.array([np.sin(np.deg2rad(30)),
+                                        (pos + np.array([np.sin(np.deg2rad(30)),
                                                              np.cos(np.deg2rad(30))])*k*scale)
                                          + np.array([scale/2, scale/4]),
                                         width=linewidth, fill='black', tag='bc')
 
 
         elif self.boundary_condition == 'locked':
-            canvas.draw_oval((self.r + np.array([-scale, -scale])),
-                                    (self.r - np.array([-scale, -scale])),
+            canvas.draw_oval((pos + np.array([-scale, -scale])),
+                                    (pos - np.array([-scale, -scale])),
                                     width=linewidth, tag='bc')
-            canvas.draw_line(self.r, (self.r + np.array([scale/2, -scale])*1.4),
+            canvas.draw_line(pos, (pos + np.array([scale/2, -scale])*1.4),
                                     width=linewidth, fill='black', tag='bc')
 
         elif self.boundary_condition == 'glider':
@@ -148,23 +158,25 @@ class Node(DSSModelObject):
             c, s = np.cos(-angle), np.sin(-angle)
             rotation = np.array([[c, -s], [s, c]])
 
-            canvas.draw_line((self.r + rotation@[0, scale]), (self.r + rotation@[0, -scale]),
+            canvas.draw_line((pos + rotation@[0, scale]), (pos + rotation@[0, -scale]),
                                     width=linewidth, fill='black', tag='bc')
-            canvas.draw_oval((self.r + rotation@[0, -scale/4]), (self.r + rotation@[scale/2, -3*scale/4]))
-            canvas.draw_oval((self.r + rotation@[0, scale/4]), (self.r + rotation@[scale/2, 3*scale/4]))
-            canvas.draw_line((self.r + rotation@[scale/2, 0] + rotation@[0, scale]),
-                                    (self.r + rotation@[scale/2, 0] + rotation@[0, -scale]),
+            canvas.draw_oval((pos + rotation@[0, -scale/4]), (pos + rotation@[scale/2, -3*scale/4]))
+            canvas.draw_oval((pos + rotation@[0, scale/4]), (pos + rotation@[scale/2, 3*scale/4]))
+            canvas.draw_line((pos + rotation@[scale/2, 0] + rotation@[0, scale]),
+                                    (pos + rotation@[scale/2, 0] + rotation@[0, -scale]),
                                     width=linewidth, fill='black', tag='bc')
 
             for offset in np.linspace(0, 2*scale, 6):
-                canvas.draw_line((self.r + rotation@[scale/2, -scale + offset]),
-                                        (self.r + rotation@[scale/2, -scale + offset]
+                canvas.draw_line((pos + rotation@[scale/2, -scale + offset]),
+                                        (pos + rotation@[scale/2, -scale + offset]
                                           + rotation@[scale/2, scale/2]),
                                         width=linewidth, fill='black', tag='bc')
 
     def copy(self):
         new_node = Node(self.r)
         new_node.dofs = self.dofs
+        new_node.loads = self.loads
+        new_node.boundary_condition = self.boundary_condition
         return new_node
 
     def __str__(self):
@@ -200,6 +212,9 @@ class FiniteElement2Node(DSSModelObject):
             canvas.draw_line(self.node1.r + self.node1.displacements[0:2],
                              self.node2.r + self.node2.displacements[0:2],
                              fill='red', dash=(1,), **kwargs)
+
+    def clone(self, newnode1, newnode2):
+        return FiniteElement2Node(newnode1, newnode2)
 
 
 class Beam(FiniteElement2Node):
@@ -269,12 +284,10 @@ class Beam(FiniteElement2Node):
     def get_forces(self):
         return self.transform().T @ self._get_forces_local()
 
-    #@log
     def stiffness_matrix_global(self):
         T = self.transform()
         return T.T @ (self.stiffness_matrix_local ) @ T + self.stiffness_matrix_geometric()
 
-    #@Logger.log
     def stiffness_matrix_geometric(self):
         fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local()
         deformed_length = self._deformed_length()
@@ -304,6 +317,9 @@ class Beam(FiniteElement2Node):
     def _deformed_length(self):
         return np.linalg.norm((self.node2.r + self.node2.displacements[:2] -
                                self.node1.r - self.node1.displacements[:2]))
+
+    def clone(self, newnode1, newnode2):
+        return Beam(newnode1, newnode2, self.E, self.A, self.I, self.z)
 
     @property
     def r1(self):
