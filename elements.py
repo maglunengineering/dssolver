@@ -145,6 +145,32 @@ class Node(DSSModelObject):
                                          + np.array([scale/2, scale/4]),
                                         width=linewidth, fill='black', tag='bc')
 
+        elif self.boundary_condition == 'roller90':
+            k = 1.5  # constant - triangle diameter
+
+            canvas.draw_oval((pos - scale/4), (self.r + scale/5))
+            canvas.draw_line(pos, (pos + np.array([np.cos(np.deg2rad(30)), np.sin(np.deg2rad(30))])*k*scale),
+                                    width=linewidth, fill='black', tag='bc')
+            canvas.draw_line(pos, (pos + np.array([np.cos(np.deg2rad(30)), -np.sin(np.deg2rad(30))])*k*scale),
+                                    width=linewidth, fill='black', tag='bc')
+
+            canvas.draw_line((pos + (np.array([np.cos(np.deg2rad(30)), np.sin(np.deg2rad(30))])
+                                                + np.array([-1.4/(k*scale), 0])
+                                                )*k*scale),
+                                    (pos + (np.array([np.cos(np.deg2rad(30)),
+                                                          -np.sin(np.deg2rad(30))])
+                                                + np.array([1.4/(k*scale), 0])
+                                                )*k*scale),
+                                    width=linewidth, fill='black', tag='bc')
+
+            canvas.draw_line((pos + np.array([np.cos(np.deg2rad(30)),
+                                                         -np.sin(np.deg2rad(30))])*k*scale
+                                      + np.array([scale/4, 2*scale])),
+                                    (pos + np.array([np.cos(np.deg2rad(30)),
+                                                         -np.sin(np.deg2rad(30))])*k*scale)
+                                     + np.array([scale/4, -scale/2]),
+                                    width=linewidth, fill='black', tag='bc')
+
 
         elif self.boundary_condition == 'locked':
             canvas.draw_oval((pos + np.array([-scale, -scale])),
@@ -187,7 +213,6 @@ class Node(DSSModelObject):
 
 class FiniteElement2Node(DSSModelObject):
     settings = {'Displaced': False}
-
     def __init__(self, node1:Node, node2:Node):
         self.nodes = [node1, node2]
         self.node1 = node1
@@ -195,6 +220,8 @@ class FiniteElement2Node(DSSModelObject):
 
         for node in self.nodes:
             node.add_element(self)
+
+        self.stiffness_matrix_local = np.zeros((6,6))
 
     @property
     def dofs(self):
@@ -204,7 +231,67 @@ class FiniteElement2Node(DSSModelObject):
         return np.hstack((self.nodes[0].displacements, self.nodes[1].displacements))
 
     def get_forces(self):
-        return self.stiffness_matrix_global() @ self.get_displacements()
+        return self.transform().T @ self._get_forces_local()
+
+    def stiffness_matrix_geometric(self):
+        fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local()
+        deformed_length = self._deformed_length()
+
+        forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
+        G = np.array([0, -1/deformed_length, 0, 0, 1/deformed_length, 0])
+        T = self.transform()
+        return T.T @ np.outer(forces_permuted, G) @ T
+
+    def transform(self):
+        e1 = ((self.node2.r + self.node2.displacements[:2]) -
+              (self.node1.r + self.node1.displacements[0:2])) / self._deformed_length()
+        e2 = R(np.deg2rad(90)) @ e1 # TODO: Just make it like [-e2, e1] or whatever
+        T = np.array([[*e1, 0, *np.zeros(3)],
+                      [*e2, 0, *np.zeros(3)],
+                      [0, 0, 1,*np.zeros(3)],
+                      [*np.zeros(3), *e1, 0],
+                      [*np.zeros(3), *e2, 0],
+                      [*np.zeros(3), 0, 0, 1]])
+        return T
+
+    def stiffness_matrix_global(self):
+        T = self.transform()
+        return T.T @ self.stiffness_matrix_local @ T + self.stiffness_matrix_geometric()
+
+    def expand(self, arr, newdim):
+        E = self._Ex(newdim)
+        if len(arr.shape) == 1:
+            return E @ arr
+        elif len(arr.shape) == 2:
+            return E @ arr @ E.T
+
+    def _deformed_length(self):
+        return np.linalg.norm((self.node2.r + self.node2.displacements[:2] -
+                               self.node1.r - self.node1.displacements[:2]))
+
+    def _get_forces_local(self):
+        undeformed_length = np.linalg.norm(self.node2.r - self.node1.r)
+        dl = self._deformed_length() - undeformed_length
+
+        tan_e = (self.node2.r - self.node1.r)/undeformed_length
+        tan_ed = (self.node2.r + self.node2.displacements[0:2] -
+                  self.node1.r - self.node1.displacements[0:2])/self._deformed_length()
+        tan_1 = R(self.node1.displacements[2])@tan_e
+        tan_2 = R(self.node2.displacements[2])@tan_e
+
+        th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
+        th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])
+
+        displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2])
+        forces_local = self.stiffness_matrix_local @ displacements_local
+        return forces_local
+
+    def _Ex(self, newdim):
+        dofs = np.hstack((self.nodes[0].dofs, self.nodes[1].dofs))
+        E = np.zeros((newdim, len(dofs)))
+        for i, j in enumerate(dofs):
+            E[j, i] = 1
+        return E
 
     def draw_on_canvas(self, canvas, **kwargs):
         canvas.draw_line(self.node1.r, self.node2.r, **kwargs)
@@ -214,7 +301,12 @@ class FiniteElement2Node(DSSModelObject):
                              fill='red', dash=(1,), **kwargs)
 
     def clone(self, newnode1, newnode2):
-        return FiniteElement2Node(newnode1, newnode2)
+        new_element = FiniteElement2Node(newnode1, newnode2)
+        this_dict = self.__dict__
+        for attr in this_dict:
+            setattr(new_element, attr, this_dict[attr])
+        return new_element
+
 
 
 class Beam(FiniteElement2Node):
@@ -226,7 +318,6 @@ class Beam(FiniteElement2Node):
         self.I = I
         self.z = z if z else np.sqrt(I/A)/3
 
-        angle = np.arctan2( *(self.node2.r - self.node1.r)[::-1] )
         length = np.linalg.norm(node2.r - node1.r)
 
         self.number = None
@@ -252,71 +343,8 @@ class Beam(FiniteElement2Node):
                              [0,     1/self.A,   0]])
         self.cpl[0:3, 0:3] = self.cpl[3:6, 3:6] = self.cpl_
 
-    def transform(self):
-        e1 = ((self.node2.r + self.node2.displacements[:2]) -
-              (self.node1.r + self.node1.displacements[0:2])) / self._deformed_length()
-        e2 = R(np.deg2rad(90)) @ e1 # TODO: Just make it like [-e2, e1] or whatever
-        T = np.array([[*e1, 0, *np.zeros(3)],
-                      [*e2, 0, *np.zeros(3)],
-                      [0, 0, 1,*np.zeros(3)],
-                      [*np.zeros(3), *e1, 0],
-                      [*np.zeros(3), *e2, 0],
-                      [*np.zeros(3), 0, 0, 1]])
-        return T
-
-    def _get_forces_local(self):
-        undeformed_length = np.linalg.norm(self.node2.r - self.node1.r)
-        dl = self._deformed_length() - undeformed_length
-
-        tan_e = (self.node2.r - self.node1.r)/undeformed_length
-        tan_ed = (self.node2.r + self.node2.displacements[0:2] -
-                  self.node1.r - self.node1.displacements[0:2])/self._deformed_length()
-        tan_1 = R(self.node1.displacements[2])@tan_e
-        tan_2 = R(self.node2.displacements[2])@tan_e
-
-        th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
-        th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])
-
-        displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2])
-        forces_local = self.stiffness_matrix_local @ displacements_local
-        return forces_local
-
-    def get_forces(self):
-        return self.transform().T @ self._get_forces_local()
-
-    def stiffness_matrix_global(self):
-        T = self.transform()
-        return T.T @ (self.stiffness_matrix_local ) @ T + self.stiffness_matrix_geometric()
-
-    def stiffness_matrix_geometric(self):
-        fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local()
-        deformed_length = self._deformed_length()
-
-        forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
-        G = np.array([0, -1/deformed_length, 0, 0, 1/deformed_length, 0])
-        T = self.transform()
-        return T.T @ np.outer(forces_permuted, G) @ T
-
     def member_loads_expanded(self, newdim):
         return self._Ex(newdim) @ self.member_loads
-
-    def _Ex(self, newdim):
-        dofs = np.hstack((self.nodes[0].dofs, self.nodes[1].dofs))
-        E = np.zeros((newdim, len(dofs)))
-        for i, j in enumerate(dofs):
-            E[j, i] = 1
-        return E
-
-    def expand(self, arr, newdim):
-        E = self._Ex(newdim)
-        if len(arr.shape) == 1:
-            return E @ arr
-        elif len(arr.shape) == 2:
-            return E @ arr @ E.T
-
-    def _deformed_length(self):
-        return np.linalg.norm((self.node2.r + self.node2.displacements[:2] -
-                               self.node1.r - self.node1.displacements[:2]))
 
     def clone(self, newnode1, newnode2):
         return Beam(newnode1, newnode2, self.E, self.A, self.I, self.z)
@@ -332,20 +360,21 @@ class Beam(FiniteElement2Node):
     def __eq__(self, other):
         return np.allclose(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
 
-class Rod(Beam):
+class Rod(FiniteElement2Node):
 
     def __init__(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):
-        super().__init__(node1=r1, node2=r2, E=E, A=A)
+        super().__init__(node1=r1, node2=r2)
 
-        self.kn = A*E/self.length
-        self.ke = np.array(      [[self.kn, 0, 0, -self.kn, 0, 0],
-                                  [0, 0, 0, 0, 0, 0],
-                                  [0, 0, 0, 0, 0, 0],
-                                  [-self.kn, 0, 0, self.kn, 0, 0],
-                                  [0, 0, 0, 0, 0, 0],
-                                  [0, 0, 0, 0, 0, 0]])
-
-        self.k = self.transform(self.angle).T@self.ke@self.transform(self.angle)
+        self.E = E
+        self.A = A
+        length = np.linalg.norm(self.node2.r - self.node1.r)
+        self.kn = A*E/length
+        self.stiffness_matrix_local = np.array([  [self.kn, 0, 0, -self.kn, 0, 0],
+                                                  [0, 0, 0, 0, 0, 0],
+                                                  [0, 0, 0, 0, 0, 0],
+                                                  [-self.kn, 0, 0, self.kn, 0, 0],
+                                                  [0, 0, 0, 0, 0, 0],
+                                                  [0, 0, 0, 0, 0, 0]])
 
 def beta(angle):
     s, c = np.sin(angle), np.cos(angle)

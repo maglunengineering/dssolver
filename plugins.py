@@ -55,6 +55,8 @@ class StandardProblemMenu(DSSPlugin):
                                   command = self.cantilever_beam)
         menu_stdcases.add_command(label='Deep arch',
                                   command = self.deep_arch_half)
+        menu_stdcases.add_command(label='von Mises truss',
+                                  command = self.von_mises_truss)
         #menu_stdcases.add_command(label='Simply supported beam',
         #                          command=lambda: self.get_model(2))
         #menu_stdcases.add_command(label='Fanned out cantilever elements',
@@ -94,6 +96,16 @@ class StandardProblemMenu(DSSPlugin):
 
         self.dss.autoscale()
 
+    def von_mises_truss(self):
+        self.dss.new_problem()
+        p = self.dss.problem
+        n1 = p.get_or_create_node((0,0))
+        n2 = p.get_or_create_node((1000,200))
+        p.create_beam(n1, n2, A=10)
+        p.pin(n1)
+        p.roller90(n2)
+        p.load_node(n2, np.array([0, -10000, 0]))
+        self.dss.autoscale()
 
     def get_model(self, caller, model = 1):
         caller.new_problem()

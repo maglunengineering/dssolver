@@ -881,33 +881,6 @@ case.
             self.textbox.insert(tk.INSERT, A.format(idx).replace('\n', '').replace('/n','\n'))
             self.textbox.insert(tk.INSERT, '\n\n')
 
-
-def arch_half():
-    global dofs, p
-    p = Problem()
-    N = 16
-    # n = int(np.floor(N/2))
-
-    dofs = 2*(3*N - 2,)
-    start = np.pi - np.arctan(600/800)
-    end = np.pi/2
-
-    node_angles = np.linspace(start, end, N)
-    node_points = 1000*np.array([np.cos(node_angles), np.sin(node_angles)]).T
-    for r in node_points:
-        p.get_or_create_node(r)
-    for n1, n2 in zip(p.nodes, p.nodes[1:]):
-        p.create_beam(n1, n2, E=2.1e5, A=10, I=10**3/12)
-
-    p.reassign_dofs()
-    p.constrained_dofs = np.array([0, 1, 3*N - 3, 3*N - 1])
-    p.load_node(p.nodes[-1], np.array([0, -3600, 0]))
-
-    p.pin(p.nodes[0])
-    p.glider(p.nodes[-1])
-
-    return p
-
 if __name__ == '__main__':
     #self.icon = 'dss_icon.ico' if _platform == 'win32' or _platform == 'win64' else '@dss_icon.xbm'
     if sys.platform == 'win32' or sys.platform == 'win64':
@@ -930,17 +903,10 @@ if __name__ == '__main__':
 
 
 
-    #p = Problem()
-    p = arch_half()
+    p = Problem()
     root = tk.Tk()
     dss = DSS(root, problem=p, plugins=plugin_list)
-    #p.get_or_create_node((1000, 0))
-    #p.create_beams(np.array([0,0]), np.array([1000,0]), n=5)
-    #p.fix(p.nodes[0])
     dss.autoscale()
-    #dss.canvas.transformation_matrix = np.array([[1.69628, 0, -125.137],
-    #                                             [0, -1.69628, 490],
-    #                                             [0, 0, 1]])
 
     root.mainloop()
 

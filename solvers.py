@@ -2,7 +2,6 @@ from typing import *
 import numpy as np
 
 from plugins import DSSPlugin
-from dssgui import DSS
 from problem import Problem
 import results
 import extras
@@ -45,12 +44,11 @@ class LinearSolver(Solver):
 
 class NonLinearSolver(Solver):
     def solve(self, problem:'Problem') -> results.ResultsStaticNonlinear:
-        steps = 200
+        steps = 300
         arclength = 35
         A = 0
         max_it = 35
 
-        @extras.log
         def get_residual(q, a):
             return self.get_internal_forces(problem)[free_dofs] - q*a
 
@@ -61,8 +59,11 @@ class NonLinearSolver(Solver):
         max_A = np.linalg.norm(problem.loads[free_dofs])
         q = problem.loads[free_dofs] / max_A
         displacements = np.zeros(len(problem.nodes) * 3)
+        loads = np.zeros_like(displacements)
 
-        displ_storage = np.zeros((steps, 3 * len(problem.nodes)))
+        #displ_storage = np.zeros((steps, 3 * len(problem.nodes)))
+        displ_storage = []
+        force_storage = []
 
         i = 0
         while i < steps and A < max_A:
@@ -97,7 +98,10 @@ class NonLinearSolver(Solver):
 
                 residual = get_residual(q, A)
 
-            displ_storage[i] = displacements
+            #displ_storage[i] = displacements
+            displ_storage.append(np.array(displacements))
+            loads[free_dofs] = q*A
+            force_storage.append(A)
             i += 1
 
             print(f"Finished in {k} corrector steps (stepped {dA}, arclength {arclength})")
@@ -108,10 +112,11 @@ class NonLinearSolver(Solver):
             else:
                 arclength *= 0.85
 
-        print(displ_storage)
+        print(np.asarray(displ_storage))
         print("Ended at A = {}".format(A))
 
-        return results.ResultsStaticNonlinear(problem, displ_storage)
+        return results.ResultsStaticNonlinear(problem, np.asarray(displ_storage),
+                                              np.asarray(force_storage))
 
     def get_internal_forces(self, problem):
         ndofs = 3 * len(problem.nodes)

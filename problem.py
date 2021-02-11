@@ -36,14 +36,7 @@ class Problem:
     def create_rod(self, node1, node2, E=2e5, A=1e5, *args, **kwargs):
         rod = Rod(node1, node2, E, A)
 
-        for r in (node1, node2):
-            node = self.get_or_create_node(r)  # Create (or identify) node
-            rod.nodes.append(node)  # Add node to beam node list
-            node.elements.append(rod)  # Add beam to node beam list
-
         self.elements.append(rod)
-        rod.number = self.elements.index(rod)
-        print('Rod created between', node1.r, node2.r)
 
     def create_beams(self, r1, r2, E=2e5, A=1e5, I=1e5, z=None, n=4):
         rr = np.linspace(r1, r2, int(n+1))
@@ -143,6 +136,9 @@ class Problem:
         node.draw = True
         node.boundary_condition = 'roller'
 
+    def roller90(self, node):
+        node.boundary_condition = 'roller90'
+
     def lock(self, node):
         node.draw = True
         node.boundary_condition = 'locked'
@@ -178,6 +174,8 @@ class Problem:
                 self.constrained_dofs.append(node.dofs[2])
             elif node.boundary_condition == 'glider':
                 self.constrained_dofs.extend((node.dofs[0], node.dofs[2]))
+            elif node.boundary_condition == 'roller90':
+                self.constrained_dofs.append(node.dofs[0])
 
     def load_node(self, node, load):
         # Load : global (Nx, Ny, M)

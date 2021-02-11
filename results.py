@@ -1,6 +1,7 @@
 import time
 from typing import *
 import numpy as np
+import matplotlib.pyplot as plt
 from elements import *
 from extras import DSSCanvas, DSSSettingsFrame
 
@@ -47,12 +48,14 @@ class ResultsStaticLinear(Results):
             node.displacements = displacements[node.dofs]
 
 class ResultsStaticNonlinear(Results):
-    def __init__(self, problem, displacements:Sized):
+    def __init__(self, problem, displacements:Sized, forces:Sized):
         super().__init__(problem)
 
+        self.forces = forces
         self.displacements = displacements
         self.num_steps = len(displacements)
         self.current_step = 0
+
 
     def set_displacements(self):
         displacements = self.displacements[self.current_step]
@@ -64,6 +67,8 @@ class ResultsStaticNonlinear(Results):
 
     def animate(self):
         if self.increment():
+            #i = self.current_step
+            #return int(self.step_lengths[i])
             return int(1000 * 2 / self.num_steps)
         else:
             return False
@@ -81,9 +86,26 @@ class ResultsStaticNonlinear(Results):
             self.current_step -= 1
         self.set_displacements()
 
+    def quickplot(self):
+        for node in self.nodes:
+            if node.loads.any():
+                break
+        dof = node.dofs[np.abs(node.loads).argmax()]
+        displ_history = self.displacements[:,dof]
+        sign = np.sign(np.average(displ_history))
+        load_history = self.forces
+
+        plt.ylabel('Control parameter')
+        plt.xlabel('Displacement')
+        plt.title(f'Displacement vs control parameter at dof {dof}')
+        plt.plot(sign * displ_history, load_history)
+        plt.show()
+
     def get_buttons(self):
         return {'Increment' : self.increment,
-                'Decrement' : self.decrement}
+                'Decrement' : self.decrement,
+                'Quick plot' : self.quickplot}
+
 
 
 class ResultsViewer:
