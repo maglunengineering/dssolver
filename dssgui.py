@@ -2,7 +2,6 @@ import sys
 import os
 import pickle
 from tkinter import filedialog
-import typing
 
 from problem import *
 import elements
@@ -60,8 +59,7 @@ class DSS:
         for var in self.settings.keys():
             self.settings[var].trace_add('write', self.draw_canvas)
 
-        self.plugin_types: Dict[str, type] = {}
-        self.plugin_instances: Dict[type, typing.List[object]] = {}
+        self.plugins: Dict[type, object] = {}
         if 'plugins' in kwargs:
             plugins: Iterable[DSSPlugin] = kwargs['plugins']
             for plugin in plugins:
@@ -79,6 +77,9 @@ class DSS:
         if not self.problem.nodes:
             self.problem.get_or_create_node((0,0), draw=True)
         self.draw_canvas()
+
+        for plugin in self.plugins.values():
+            plugin.on_after_dss_built()
 
     # Building functions
     def build_grid(self):
@@ -126,12 +127,11 @@ class DSS:
         menu_plugins = tk.Menu(topmenu)
         self.topmenu.add_cascade(label='Plugins', menu=menu_plugins)
         self.menus['Plugins'] = menu_plugins
-        for cls, instances in self.plugin_instances.items():
+        for cls, instance in self.plugins.items():
             menu = menu_plugins if not issubclass(cls, solvers.Solver) else menu_solve
-            for instance in instances:
-                for key,value in instance.get_functions().items():
-                    menu.add_command(label = key,
-                                     command = callback_factory(self, value))
+            for key,value in instance.get_functions().items():
+                menu.add_command(label = key,
+                                 command = callback_factory(self, value))
 
         menu_results = tk.Menu(topmenu)
         self.topmenu.add_cascade(label='Results', menu=menu_results)
@@ -153,9 +153,9 @@ class DSS:
 
     def build_bc_menu(self):
         """
-                Coordinates on these labels are updated when the left mouse button
-                is clicked on the canvas. (See self.rightclickmenu )
-                """
+        Coordinates on these labels are updated when the left mouse button
+        is clicked on the canvas. (See self.rightclickmenu )
+        """
         self.rcm = tk.Menu(root, tearoff=0)
 
         self.lm = tk.Menu(self.rcm, tearoff=0)  # Load menu
@@ -224,9 +224,9 @@ class DSS:
             button.grid(row=int(i/2+1), column=i%2, sticky='wns')
             i += 1
 
-        plugin_settings_frame = SettingsFrame(rsm_settings)
+        plugin_settings_frame = DSSSettingsFrame(rsm_settings)
         plugin_settings_frame.grid(row=3, columnspan=2, sticky='ew')
-        for cls in self.plugin_types.values():
+        for cls in self.plugins.keys():
             plugin_settings_frame.add_settings(cls)
 
     def rightclickmenu(self, event):
@@ -458,37 +458,6 @@ class DSS:
 
     def new_problem(self):
         self.problem = Problem()
-
-        self.rcm = None
-        self.bcm = None
-        self.bm = None
-        self.click_x = None
-        self.click_y = None
-        self.r1 = None
-        self.r2 = None  # For self.start_or_end_beam()
-        self.closest_node_label = None
-        self.dx = -50
-        self.dy = 100
-        self.kx = 1
-        self.ky = -1
-        self.canvas.transformation_matrix = np.array([[self.kx, 0, self.dx], [0, self.ky, self.dy], [0, 0, 1]], dtype=float)
-        self.tx = 0
-        self.ty = 0  # Translation
-        self.prev_x = None
-        self.prev_y = None
-        self.zoom = 1
-        self.ratio = 1
-
-        self.build_grid()
-        self.build_menu()
-        self.build_banner()
-        self.build_canvas()
-        self.build_bc_menu()
-
-        self.displaced_plot = False
-
-        self.problem.get_or_create_node((0, 0), draw=True)
-        self.upd_rsmenu()
         self.draw_canvas()
 
     def _printcoords(self, event):

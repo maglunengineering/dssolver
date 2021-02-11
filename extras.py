@@ -243,7 +243,7 @@ class HyperlinkManager:
                 return
 
 
-class SettingsFrame(tk.Frame):
+class DSSSettingsFrame(tk.Frame):
     def __init__(self, master, cnf={}, **kwargs):
         kwargs['bg'] = 'gray82'
         super().__init__(master, cnf, **kwargs)

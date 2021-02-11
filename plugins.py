@@ -5,12 +5,17 @@ import numpy as np
 
 class DSSPlugin:
     settings = {}
+    instantiate = False
     def __init__(self, owner:'DSS'):
-        self.owner:'DSS' = owner
+        self.dss: 'DSS' = owner
 
     @classmethod
     def load_plugin(cls, owner:'DSS'):
-        owner.plugin_types[cls.__name__] = cls
+        owner.plugins[cls] = DSSPlugin(owner) # Placeholder for plugins that are not instantiated
+        if cls.instantiate:
+            instance = cls(owner)
+            owner.plugins[cls] = instance
+            instance.load_instance()
 
     @classmethod
     def get_settings(cls) -> Dict[str, bool]:
@@ -20,10 +25,17 @@ class DSSPlugin:
     def set_setting(cls, key, value):
         cls.settings[key] = value
 
+    def load_instance(self):
+        pass
+
+    def on_after_dss_built(self):
+        pass
+
     def get_functions(self) -> Dict[str, Callable]:
         return {}
 
 class StandardProblemMenu(DSSPlugin):
+    instantiate = True
     def __init__(self, owner:'DSS'):
         super().__init__(owner)
 
@@ -34,25 +46,56 @@ class StandardProblemMenu(DSSPlugin):
     #    return {'Cantilever beam': lambda: cls.get_model(caller, 1),
     #            'Circular arch' : lambda: cls.get_model(caller, 4)}
 
-    def load_instance(self):
-        self.dss.plugin_instances[self.__class__].append(self)
+    def on_after_dss_built(self):
         menu_stdcases = tk.Menu(self.dss.topmenu)
         self.dss.topmenu.add_cascade(label='Standard problems',
-                                       menu=menu_stdcases)
+                                     menu=menu_stdcases)
 
         menu_stdcases.add_command(label='Cantilever beam',
-                                  command=lambda: self.get_model(1))
-        menu_stdcases.add_command(label='Simply supported beam',
-                                  command=lambda: self.get_model(2))
-        menu_stdcases.add_command(label='Fanned out cantilever elements',
-                                  command=lambda: self.get_model(3))
-        menu_stdcases.add_command(label='Circular arch',
-                                  command=lambda: self.get_model(4))
-        menu_stdcases.add_command(label='270 arch',
-                                  command=lambda: self.get_model(5))
+                                  command = self.cantilever_beam)
+        menu_stdcases.add_command(label='Deep arch',
+                                  command = self.deep_arch_half)
+        #menu_stdcases.add_command(label='Simply supported beam',
+        #                          command=lambda: self.get_model(2))
+        #menu_stdcases.add_command(label='Fanned out cantilever elements',
+        #                          command=lambda: self.get_model(3))
+        #menu_stdcases.add_command(label='Circular arch',
+        #                          command=lambda: self.get_model(4))
+        #menu_stdcases.add_command(label='270 arch',
+        #                          command=lambda: self.get_model(5))
 
-    @classmethod
-    def get_model(cls, caller, model = 1):
+    def cantilever_beam(self):
+        self.dss.new_problem()
+        self.dss.problem.create_beams((0, 0), (1000, 0), n=4)
+        self.dss.problem.fix(self.dss.problem.node_at((0, 0)))
+        self.dss.autoscale()
+
+    def deep_arch_half(self):
+        self.dss.new_problem()
+        p = self.dss.problem
+        N = 16
+        dofs = 2*(3*N - 2,)
+        start = np.pi - np.arctan(600/800)
+        end = np.pi/2
+
+        node_angles = np.linspace(start, end, N)
+        node_points = 1000*np.array([np.cos(node_angles), np.sin(node_angles)]).T
+        for r in node_points:
+            p.get_or_create_node(r)
+        for n1, n2 in zip(p.nodes, p.nodes[1:]):
+            p.create_beam(n1, n2, E=2.1e5, A=10, I=10**3/12)
+
+        p.reassign_dofs()
+        p.constrained_dofs = np.array([0, 1, 3*N - 3, 3*N - 1])
+        p.load_node(p.nodes[-1], np.array([0, -3600, 0]))
+
+        p.pin(p.nodes[0])
+        p.glider(p.nodes[-1])
+
+        self.dss.autoscale()
+
+
+    def get_model(self, caller, model = 1):
         caller.new_problem()
         if model == 1:  # Cantilever beam, point load
             caller.problem.create_beams((0,0), (1000,0), n=4)

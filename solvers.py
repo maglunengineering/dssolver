@@ -8,6 +8,7 @@ import results
 import extras
 
 class Solver(DSSPlugin):
+    instantiate = True
     def __init__(self, owner):
         super().__init__(owner)
         self.results = None
@@ -15,14 +16,8 @@ class Solver(DSSPlugin):
     def solve(self, problem:Problem) -> results.Results:
         pass
 
-    @classmethod
-    def load_plugin(cls, owner: DSS):
-        super().load_plugin(owner)
-
-        instance = cls(owner)
-        if not cls in owner.plugin_instances:
-            owner.plugin_instances[cls] = []
-        owner.plugin_instances[cls].append(instance)
+    def on_after_dss_built(self):
+        pass
 
 
 class LinearSolver(Solver):
@@ -43,17 +38,16 @@ class LinearSolver(Solver):
         problem.displacements = displacements
         problem.upd_obj_displacements() # To be removed
 
-        return results.ResultsStaticLinear(problem.nodes, problem.elements, displacements)
+        return results.ResultsStaticLinear(problem, displacements)
 
     def get_functions(self) -> Dict[str, Callable]:
-        return {'Linear' : lambda : self.solve(self.owner.problem)}
+        return {'Linear' : lambda : self.solve(self.dss.problem.clone())}
 
 class NonLinearSolver(Solver):
     def solve(self, problem:'Problem') -> results.ResultsStaticNonlinear:
-        steps = 600
+        steps = 200
         arclength = 35
         A = 0
-        dA = 1
         max_it = 35
 
         @extras.log
@@ -77,9 +71,8 @@ class NonLinearSolver(Solver):
             wq0 = np.linalg.solve(K, q)
             f = np.sqrt(1 + wq0 @ wq0)
 
-            sign = np.sign(wq0@v0 if i > 1 else 1)
+            sign = np.sign(wq0 @ v0 if i > 1 else 1)
             dA = arclength / f * sign
-            #dA = np.abs(dA) * sign
             v0 = dA*wq0
             A += dA
 
@@ -118,7 +111,7 @@ class NonLinearSolver(Solver):
         print(displ_storage)
         print("Ended at A = {}".format(A))
 
-        return results.ResultsStaticNonlinear(problem.nodes, problem.elements, displ_storage)
+        return results.ResultsStaticNonlinear(problem, displ_storage)
 
     def get_internal_forces(self, problem):
         ndofs = 3 * len(problem.nodes)
@@ -128,8 +121,5 @@ class NonLinearSolver(Solver):
 
         return forces
 
-
-
-
     def get_functions(self) -> Dict[str, Callable]:
-        return {'Nonlinear': lambda : self.solve(self.owner.problem)}
+        return {'Nonlinear': lambda : self.solve(self.dss.problem.clone())}

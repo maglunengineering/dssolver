@@ -2,7 +2,7 @@ import time
 from typing import *
 import numpy as np
 from elements import *
-from extras import DSSCanvas, SettingsFrame
+from extras import DSSCanvas, DSSSettingsFrame
 
 
 T = TypeVar('T')
@@ -108,7 +108,7 @@ class ResultsViewer:
         listbox = tk.Listbox(right_frame)
         listbox.grid(row=0)
 
-        settings_frame = SettingsFrame(right_frame)
+        settings_frame = DSSSettingsFrame(right_frame)
         settings_frame.grid(row=1)
 
         def draw_func():
