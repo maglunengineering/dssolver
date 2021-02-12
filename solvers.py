@@ -47,7 +47,7 @@ class LinearSolver(Solver):
 
 class NonLinearSolver(Solver):
     def solve(self, problem:Problem) -> results.ResultsStaticNonlinear:
-        steps = 300
+        steps = 800
         arclength = 45
         A = 0
         max_it = 35
@@ -87,7 +87,7 @@ class NonLinearSolver(Solver):
             # Corrector
             k = 0
             residual = get_residual(q, A)
-            while np.linalg.norm(residual) > 1e-2 and k < max_it:
+            while np.linalg.norm(residual) > 1e-4 and k < max_it:
                 K = problem.K(True)
                 wq = np.linalg.solve(K, q)
                 wr = np.linalg.solve(K, -residual)
@@ -99,8 +99,6 @@ class NonLinearSolver(Solver):
                     node.displacements = displacements[node.dofs]
                 k += 1
 
-                if residual.sum() > (q*A).sum() * 1.05:
-                    break
                 residual = get_residual(q, A)
 
             #displ_storage[i] = displacements
@@ -116,6 +114,7 @@ class NonLinearSolver(Solver):
                 arclength *= 0.6
             else:
                 arclength *= 0.85
+
 
         print(np.asarray(displ_storage))
         print("Ended at A = {}".format(A))
