@@ -57,6 +57,10 @@ class StandardProblemMenu(DSSPlugin):
                                   command = self.deep_arch_half)
         menu_stdcases.add_command(label='von Mises truss',
                                   command = self.von_mises_truss)
+        menu_stdcases.add_command(label='Snapback von Mises truss',
+                                  command = self.von_mises_truss_snapback)
+        menu_stdcases.add_command(label='Standing rod',
+                                  command = self.standing_rod)
         #menu_stdcases.add_command(label='Simply supported beam',
         #                          command=lambda: self.get_model(2))
         #menu_stdcases.add_command(label='Fanned out cantilever elements',
@@ -105,6 +109,33 @@ class StandardProblemMenu(DSSPlugin):
         p.pin(n1)
         p.roller90(n2)
         p.load_node(n2, np.array([0, -10000, 0]))
+        self.dss.autoscale()
+
+    def von_mises_truss_snapback(self):
+        self.dss.new_problem()
+        p = self.dss.problem
+        n1 = p.get_or_create_node((0, 0))
+        n2 = p.get_or_create_node((1000, 200))
+        n3 = p.get_or_create_node((1000, 600))
+        p.create_beam(n1, n2, A=10)
+        p.create_rod(n2, n3, A=0.05)
+        p.pin(n1)
+        p.roller90(n2)
+        p.glider(n3)
+        p.load_node(n3, np.array([0, -4000, 0]))
+        self.dss.autoscale()
+
+
+    def standing_rod(self):
+        self.dss.new_problem()
+        p = self.dss.problem
+        n1 = p.get_or_create_node((0,0))
+        n2 = p.get_or_create_node((0,1000))
+        p.create_rod(n1, n2, A=10)
+        p.glider(n1)
+        p.fix(n2)
+        p.load_node(n1, np.array([0, 1e6, 0]))
+
         self.dss.autoscale()
 
     def get_model(self, caller, model = 1):

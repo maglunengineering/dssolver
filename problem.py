@@ -34,6 +34,10 @@ class Problem:
         return element
 
     def create_rod(self, node1, node2, E=2e5, A=1e5, *args, **kwargs):
+        if isinstance(node1, np.ndarray):
+            node1 = self.get_or_create_node(node1)
+        if isinstance(node2, np.ndarray):
+            node2 = self.get_or_create_node(node2);
         rod = Rod(node1, node2, E, A)
 
         self.elements.append(rod)
@@ -99,13 +103,6 @@ class Problem:
     def upd_obj_displacements(self):
         for node in self.nodes:
             node.displacements = self.displacements[node.dofs]
-        for beam in self.elements:
-            beam.displacements = np.hstack((beam.nodes[0].displacements,
-                                            beam.nodes[1].displacements))
-            beam.forces = beam.stiffness_matrix_global() @ beam.displacements + beam.member_loads
-            beam.stress = beam.cpl @ beam.transform() @ beam.forces
-            #beam.nodes[0].forces = beam.forces[0:3]
-            #beam.nodes[1].forces = beam.forces[3:6]  # No sign convention
 
     def boundary_condition(self, r, bctype):
         """

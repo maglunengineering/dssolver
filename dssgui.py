@@ -691,7 +691,6 @@ class BeamInputMenu(DSSInputMenu):
             func(ri, rj, A=A, E=E, I=I, z=z, n=n)
 
 
-        self.window.upd_rsmenu()
         self.window.autoscale()
         self.top.destroy()
 

@@ -33,6 +33,9 @@ class LinearSolver(Solver):
         displacements = np.zeros(ndofs)
         displacements[free_dofs] = reduced_displacements
 
+        for node in problem.nodes:
+            node.displacements = displacements[node.dofs]
+
         # To be removed:
         problem.displacements = displacements
         problem.upd_obj_displacements() # To be removed
@@ -45,7 +48,7 @@ class LinearSolver(Solver):
 class NonLinearSolver(Solver):
     def solve(self, problem:'Problem') -> results.ResultsStaticNonlinear:
         steps = 300
-        arclength = 35
+        arclength = 45
         A = 0
         max_it = 35
 
@@ -84,7 +87,7 @@ class NonLinearSolver(Solver):
             # Corrector
             k = 0
             residual = get_residual(q, A)
-            while np.linalg.norm(residual) > 1e-3 and k < max_it:
+            while np.linalg.norm(residual) > 1e-2 and k < max_it:
                 K = problem.K(True)
                 wq = np.linalg.solve(K, q)
                 wr = np.linalg.solve(K, -residual)
@@ -96,6 +99,8 @@ class NonLinearSolver(Solver):
                     node.displacements = displacements[node.dofs]
                 k += 1
 
+                if residual.sum() > (q*A).sum() * 1.05:
+                    break
                 residual = get_residual(q, A)
 
             #displ_storage[i] = displacements
@@ -106,7 +111,7 @@ class NonLinearSolver(Solver):
 
             print(f"Finished in {k} corrector steps (stepped {dA}, arclength {arclength})")
             if k < 4:
-                arclength *= 1.1
+                arclength *= 1.05
             elif k > 8:
                 arclength *= 0.6
             else:

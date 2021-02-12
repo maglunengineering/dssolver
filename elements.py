@@ -212,7 +212,7 @@ class Node(DSSModelObject):
         return id(self)
 
 class FiniteElement2Node(DSSModelObject):
-    settings = {'Displaced': False}
+    settings = {'Displaced': True}
     def __init__(self, node1:Node, node2:Node):
         self.nodes = [node1, node2]
         self.node1 = node1
@@ -300,12 +300,14 @@ class FiniteElement2Node(DSSModelObject):
                              self.node2.r + self.node2.displacements[0:2],
                              fill='red', dash=(1,), **kwargs)
 
-    def clone(self, newnode1, newnode2):
-        new_element = FiniteElement2Node(newnode1, newnode2)
-        this_dict = self.__dict__
-        for attr in this_dict:
-            setattr(new_element, attr, this_dict[attr])
-        return new_element
+    @property
+    def r1(self):
+        return self.node1.r
+
+    @property
+    def r2(self):
+        return self.node2.r
+
 
 
 
@@ -349,13 +351,6 @@ class Beam(FiniteElement2Node):
     def clone(self, newnode1, newnode2):
         return Beam(newnode1, newnode2, self.E, self.A, self.I, self.z)
 
-    @property
-    def r1(self):
-        return self.node1.r
-
-    @property
-    def r2(self):
-        return self.node2.r
 
     def __eq__(self, other):
         return np.allclose(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
@@ -375,6 +370,40 @@ class Rod(FiniteElement2Node):
                                                   [-self.kn, 0, 0, self.kn, 0, 0],
                                                   [0, 0, 0, 0, 0, 0],
                                                   [0, 0, 0, 0, 0, 0]])
+
+    def draw_on_canvas(self, canvas, **kwargs):
+        if not self.settings['Displaced']:
+            r1 = self.node1.r
+            r2 = self.node2.r
+        else:
+            r1 = self.node1.r + self.node1.displacements[0:2]
+            r2 = self.node2.r + self.node2.displacements[0:2]
+
+        length = np.linalg.norm(self.r2 - self.r1)
+        dirvec = (r2 - r1) / length
+        normal = np.array([-dirvec[1], dirvec[0]]) * (length / self._deformed_length())**2
+        num_steps = 21
+        steplen = length * 1 / num_steps
+
+        pt1 = r1
+        pt2 = pt1 + normal * steplen * 0.5 + dirvec * steplen * 0.5
+        pts = [pt1, pt2]
+        sign = -1
+        for i in range(num_steps - 1):
+            new_pt = pts[-1] + sign * normal * steplen + dirvec * steplen
+            pts.append(new_pt)
+            sign *= -1
+        pts.append(r2)
+
+        if not self.settings['Displaced']:
+            for pt1, pt2 in zip(pts, pts[1:]):
+                canvas.draw_line(pt1, pt2)
+        else:
+            for pt1, pt2 in zip(pts, pts[1:]):
+                canvas.draw_line(pt1, pt2, fill='red', dash=(1,), **kwargs)
+
+    def clone(self, newnode1, newnode2):
+        return Rod(newnode1, newnode2, self.E, self.A)
 
 def beta(angle):
     s, c = np.sin(angle), np.cos(angle)
