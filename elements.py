@@ -213,15 +213,17 @@ class Node(DSSModelObject):
 
 class FiniteElement2Node(DSSModelObject):
     settings = {'Displaced': True}
-    def __init__(self, node1:Node, node2:Node):
+    def __init__(self, node1:Node, node2:Node, A:float):
         self.nodes = [node1, node2]
         self.node1 = node1
         self.node2 = node2
+        self.A = A
 
         for node in self.nodes:
             node.add_element(self)
 
         self.stiffness_matrix_local = np.zeros((6,6))
+        self._undeformed_length = np.linalg.norm(self.r2 - self.r1)
 
     @property
     def dofs(self):
@@ -232,15 +234,6 @@ class FiniteElement2Node(DSSModelObject):
 
     def get_forces(self):
         return self.transform().T @ self._get_forces_local()
-
-    def stiffness_matrix_geometric(self):
-        fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local()
-        deformed_length = self._deformed_length()
-
-        forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
-        G = np.array([0, -1/deformed_length, 0, 0, 1/deformed_length, 0])
-        T = self.transform()
-        return T.T @ np.outer(forces_permuted, G) @ T
 
     def transform(self):
         e1 = ((self.node2.r + self.node2.displacements[:2]) -
@@ -257,6 +250,28 @@ class FiniteElement2Node(DSSModelObject):
     def stiffness_matrix_global(self):
         T = self.transform()
         return T.T @ self.stiffness_matrix_local @ T + self.stiffness_matrix_geometric()
+
+    def stiffness_matrix_geometric(self):
+        fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local()
+        deformed_length = self._deformed_length()
+
+        forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
+        G = np.array([0, -1/deformed_length, 0, 0, 1/deformed_length, 0])
+        T = self.transform()
+        return T.T @ np.outer(forces_permuted, G) @ T
+
+    def mass_matrix_global(self):
+        T = self.transform()
+        density = 7.86e-9 # Density of steel in tonnes / mm^3
+        half_mass = self.A * self._undeformed_length * density / 2
+        rot_mass = 1/50 * self._undeformed_length ** 2 # Felippa: IFEM Ch.31
+        local = half_mass * np.array([[1, 0, 0, 0, 0, 0],
+                                      [0, 1, 0, 0, 0, 0],
+                                      [0, 0, rot_mass, 0, 0, 0],
+                                      [0, 0, 0, 1, 0, 0],
+                                      [0, 0, 0, 0, 1, 0],
+                                      [0, 0, 0, 0, 0, rot_mass]])
+        return T.T @ local @ T
 
     def expand(self, arr, newdim):
         E = self._Ex(newdim)
@@ -313,7 +328,7 @@ class FiniteElement2Node(DSSModelObject):
 
 class Beam(FiniteElement2Node):
     def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
-        super().__init__(node1, node2)
+        super().__init__(node1, node2, A)
 
         self.E = E
         self.A = A
@@ -356,9 +371,8 @@ class Beam(FiniteElement2Node):
         return np.allclose(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
 
 class Rod(FiniteElement2Node):
-
     def __init__(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):
-        super().__init__(node1=r1, node2=r2)
+        super().__init__(r1, r2, A)
 
         self.E = E
         self.A = A

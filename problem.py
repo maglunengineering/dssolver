@@ -56,8 +56,6 @@ class Problem:
                 return node
         else:
             new_node = Node(r, draw)
-            new_node.number = len(self.nodes) - 1  # Give node a unique number/id
-            new_node.dofs = (new_node.number*3, 1 + new_node.number*3, 2 + new_node.number*3)
             self.nodes.append(new_node)
             return new_node
 
@@ -223,16 +221,22 @@ class Problem:
     def free_dofs(self) -> np.ndarray:
         return np.delete(np.arange(3*len(self.nodes)), self.constrained_dofs)
 
+    def M(self, reduced=False):
+        return self.assemble(lambda e: e.mass_matrix_global(), reduced)
+
     def K(self, reduced=False):
+        return self.assemble(lambda e: e.stiffness_matrix_global(), reduced)
+
+    def assemble(self, elem_func, reduced=False):
         self.remove_dofs()
-        num_dofs = 3 * len(self.nodes)  # int: Number of system dofs
-        K = sum(beam.expand(beam.stiffness_matrix_global(), num_dofs) for beam in self.elements)
+
+        num_dofs = 3 * len(self.nodes)
+        matrix = sum(e.expand(elem_func(e), num_dofs) for e in self.elements)
         if not reduced:
-            return K
+            return matrix
         else:
-            K = np.delete(K, self.constrained_dofs, axis=0)
-            K = np.delete(K, self.constrained_dofs, axis=1)
-            return K
+            free_dofs = self.free_dofs()
+            return matrix[np.ix_(free_dofs, free_dofs)]
 
     def Qf(self):  # Member force vector for distr loads
         dofs = 3*len(self.nodes)

@@ -3,7 +3,7 @@ from typing import *
 import numpy as np
 import matplotlib.pyplot as plt
 from elements import *
-from extras import DSSCanvas, DSSSettingsFrame
+from extras import DSSCanvas, DSSSettingsFrame, DSSListbox
 
 
 T = TypeVar('T')
@@ -18,7 +18,6 @@ class ElementNodeMap:
         at_node_1 = self.nodal_results[element.node1]
         at_node_2 = self.nodal_results[element.node2]
         return np.hstack((at_node_1, at_node_2))
-
 
 
 class Results:
@@ -40,6 +39,9 @@ class Results:
     def reset_animation(self):
         pass
 
+    def on_after_resultview_built(self, view):
+        pass
+
 class ResultsStaticLinear(Results):
     def __init__(self, problem, displacements:np.ndarray):
         super().__init__(problem)
@@ -55,7 +57,6 @@ class ResultsStaticNonlinear(Results):
         self.displacements = displacements
         self.num_steps = len(displacements)
         self.current_step = 0
-
 
     def set_displacements(self):
         displacements = self.displacements[self.current_step]
@@ -107,6 +108,38 @@ class ResultsStaticNonlinear(Results):
                 'Quick plot' : self.quickplot}
 
 
+class ResultsModal(Results):
+    def __init__(self, problem, eigenvalues, eigenvectors):
+        super().__init__(problem)
+
+        self.eigenvectors = eigenvectors
+        self.eigenvalues = eigenvalues
+        self.current_eigenvector = 0
+        self.scale = problem.model_size() / 5
+
+    def set_displacements(self):
+        eigenvector = self.eigenvectors[self.current_eigenvector] * self.scale
+        eigenvalue = self.eigenvalues[self.current_eigenvector]
+        for node in self.nodes:
+            node.displacements = eigenvector[node.dofs]
+
+    def on_after_resultview_built(self, view):
+        for eigenvector in self.eigenvectors:
+            view.listbox.add(eigenvector)
+        self.set_displacements()
+
+    def increment(self):
+        self.current_eigenvector += 1
+        self.set_displacements()
+
+    def decrement(self):
+        self.current_eigenvector -= 1
+        self.set_displacements()
+
+    def get_buttons(self):
+        return {'Increment': self.increment,
+                'Decrement': self.decrement}
+
 
 class ResultsViewer:
     def __init__(self, root, results:Results, **kwargs):
@@ -127,8 +160,8 @@ class ResultsViewer:
         right_frame = tk.Frame(self.top)
         right_frame.grid(row=0, column=1)
 
-        listbox = tk.Listbox(right_frame)
-        listbox.grid(row=0)
+        self.listbox = DSSListbox(right_frame)
+        self.listbox.grid(row=0)
 
         settings_frame = DSSSettingsFrame(right_frame)
         settings_frame.grid(row=1)
@@ -142,7 +175,6 @@ class ResultsViewer:
                 self.canvas.after(delay, draw_func)
             else:
                 results.reset_animation()
-
 
         btn_animate = tk.Button(right_frame, text='Animate',
                                 command = draw_func)
@@ -165,4 +197,5 @@ class ResultsViewer:
             settings_frame.add_settings(cls)
 
         self.canvas.autoscale()
+        results.on_after_resultview_built(self)
 

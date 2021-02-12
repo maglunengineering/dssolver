@@ -4,7 +4,6 @@ import numpy as np
 from plugins import DSSPlugin
 from problem import Problem
 import results
-import extras
 
 class Solver(DSSPlugin):
     instantiate = True
@@ -25,7 +24,7 @@ class LinearSolver(Solver):
         problem.remove_dofs()
 
         ndofs = 3 * len(problem.nodes)
-        free_dofs = np.delete(np.arange(ndofs), problem.constrained_dofs)
+        free_dofs = problem.free_dofs()
         stiffness_matrix = problem.K(reduced=True)
         loads = problem.loads[free_dofs]
 
@@ -45,8 +44,9 @@ class LinearSolver(Solver):
     def get_functions(self) -> Dict[str, Callable]:
         return {'Linear' : lambda : self.solve(self.dss.problem.clone())}
 
+
 class NonLinearSolver(Solver):
-    def solve(self, problem:'Problem') -> results.ResultsStaticNonlinear:
+    def solve(self, problem:Problem) -> results.ResultsStaticNonlinear:
         steps = 300
         arclength = 45
         A = 0
@@ -133,3 +133,39 @@ class NonLinearSolver(Solver):
 
     def get_functions(self) -> Dict[str, Callable]:
         return {'Nonlinear': lambda : self.solve(self.dss.problem.clone())}
+
+
+class ModalSolver(Solver):
+    def __init__(self, owner):
+        super().__init__(owner)
+
+        self.eigenvalues = np.zeros(0)
+        self.eigenvectors = np.zeros((0,0))
+
+    def solve(self, problem:Problem):
+        problem.reassign_dofs()
+        M = problem.M(True)
+        K = problem.K(True)
+        ndofs = 3 * len(problem.nodes)
+        free_dofs = problem.free_dofs()
+        full_eigenvectors = np.zeros((len(free_dofs), ndofs))
+
+        # Unsymmetric reduction
+        A = np.linalg.solve(M, K)
+
+        # Symmetry preserving reduction
+        #L = np.linalg.cholesky(M)
+        #A = np.linalg.inv(L) @ K @ np.linalg.inv(L.T)
+
+        eigenvalues, eigenvectors = np.linalg.eig(A)
+
+        eigenvectors = eigenvectors.T # Row-major
+        eigenvectors = eigenvectors[eigenvalues.argsort()]
+        eigenvalues.sort()
+        full_eigenvectors[:,free_dofs] = eigenvectors
+
+        return results.ResultsModal(problem, eigenvalues, full_eigenvectors)
+
+    def get_functions(self) -> Dict[str, Callable]:
+        return {'Modal': lambda: self.solve(self.dss.problem.clone())}
+
