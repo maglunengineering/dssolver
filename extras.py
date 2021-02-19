@@ -201,11 +201,6 @@ class DSSListbox(tk.Listbox):
         k = self.get(self.curselection())
         return self.string_map[k]
 
-    def update_from_notifier(self, items):
-        self.delete(0, tk.END)
-        for item in items:
-            self.append(item)
-
 class HyperlinkManager:
 
     def __init__(self, text):

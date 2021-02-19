@@ -49,6 +49,7 @@ class ResultsStaticLinear(Results):
         for node in self.nodes:
             node.displacements = displacements[node.dofs]
 
+
 class ResultsStaticNonlinear(Results):
     def __init__(self, problem, displacements:Sized, forces:Sized):
         super().__init__(problem)
@@ -139,6 +140,54 @@ class ResultsModal(Results):
     def get_buttons(self):
         return {'Increment': self.increment,
                 'Decrement': self.decrement}
+
+class ResultsDynamicTimeIntegration(Results):
+    def __init__(self, problem, displacements):
+        super().__init__(problem)
+        self.displacements = displacements
+        self.num_steps = len(self.displacements)
+        self.current_step = 0
+
+    def set_displacements(self):
+        displacements = self.displacements[self.current_step]
+        for node in self.nodes:
+            node.displacements = displacements[node.dofs]
+
+    def animate(self):
+        if self.increment():
+            #i = self.current_step
+            #return int(self.step_lengths[i])
+            t_ms = int(1000 * 2 / self.num_steps)
+            if t_ms == 0:
+                return 1
+            else:
+                return t_ms
+        else:
+            return False
+
+    def increment(self):
+        if self.current_step < self.num_steps - 1:
+            self.current_step += 1
+        else:
+            self.current_step = 0
+            return False
+        self.set_displacements()
+        return True
+
+    def decrement(self):
+        if self.current_step > 0:
+            self.current_step -= 1
+        self.set_displacements()
+
+    def reset(self):
+        self.current_step = 0
+        self.set_displacements()
+
+    def get_buttons(self):
+        return {'Increment': self.increment,
+                'Decrement': self.decrement,
+                'Reset': self.reset}
+
 
 
 class ResultsViewer:

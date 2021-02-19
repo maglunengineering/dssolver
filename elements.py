@@ -258,13 +258,16 @@ class FiniteElement2Node(DSSModelObject):
         forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
         G = np.array([0, -1/deformed_length, 0, 0, 1/deformed_length, 0])
         T = self.transform()
+        kg = np.outer(forces_permuted, G)
+        #kg = 0.5 * (kg + kg.T)
         return T.T @ np.outer(forces_permuted, G) @ T
 
     def mass_matrix_global(self):
         T = self.transform()
         density = 7.86e-9 # Density of steel in tonnes / mm^3
         half_mass = self.A * self._undeformed_length * density / 2
-        rot_mass = 1/50 * self._undeformed_length ** 2 # Felippa: IFEM Ch.31
+        rot_mass = 1/50 * half_mass * self._undeformed_length ** 2 # Felippa: IFEM Ch.31
+        rot_mass = half_mass # This is likely better (in fact, should be negative but matrix must be positive)
         local = half_mass * np.array([[1, 0, 0, 0, 0, 0],
                                       [0, 1, 0, 0, 0, 0],
                                       [0, 0, rot_mass, 0, 0, 0],
@@ -314,7 +317,6 @@ class FiniteElement2Node(DSSModelObject):
             canvas.draw_line(self.node1.r + self.node1.displacements[0:2],
                              self.node2.r + self.node2.displacements[0:2],
                              fill='red', dash=(1,), **kwargs)
-
     @property
     def r1(self):
         return self.node1.r
@@ -360,12 +362,29 @@ class Beam(FiniteElement2Node):
                              [0,     1/self.A,   0]])
         self.cpl[0:3, 0:3] = self.cpl[3:6, 3:6] = self.cpl_
 
+    def get_strain_energy(self):
+        """
+        Bending energy is
+        integral between (x=0, L) of M(x)/(2EI) dx
+        Am assuming
+        M(x) = M1(1-x/L) + M2(x/L)
+        """
+        c = 1/(6 * self.E * self.I)
+        forces = self._get_forces_local()
+        M1,M2 = forces[2], forces[5]
+        bending_strain_energy = c*(M1**2 + M1*M2 + M2**2)*self._undeformed_length
+
+        axial_strain = 1 - self._deformed_length()/self._undeformed_length
+        axial_stress = self.E * axial_strain
+        axial_strain_energy = 0.5 * axial_stress * axial_strain * self.A * self._undeformed_length
+
+        return axial_strain_energy + bending_strain_energy
+
     def member_loads_expanded(self, newdim):
         return self._Ex(newdim) @ self.member_loads
 
     def clone(self, newnode1, newnode2):
         return Beam(newnode1, newnode2, self.E, self.A, self.I, self.z)
-
 
     def __eq__(self, other):
         return np.allclose(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
@@ -384,6 +403,11 @@ class Rod(FiniteElement2Node):
                                                   [-self.kn, 0, 0, self.kn, 0, 0],
                                                   [0, 0, 0, 0, 0, 0],
                                                   [0, 0, 0, 0, 0, 0]])
+
+    def get_strain_energy(self):
+        strain = 1 - self._deformed_length() / self._undeformed_length
+        stress = self.E * strain
+        return np.abs(0.5 * stress * strain * self.A * self._undeformed_length)
 
     def draw_on_canvas(self, canvas, **kwargs):
         if not self.settings['Displaced']:

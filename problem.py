@@ -7,8 +7,8 @@ np.set_printoptions(suppress=True)
 
 class Problem:
     def __init__(self):
-        self.nodes = list()
-        self.elements = list()
+        self.nodes:List[Node] = list()
+        self.elements:List[FiniteElement2Node] = list()
 
         self.constrained_dofs = []
         self.member_loads = np.array([])  # Member loads, for distr loads and such
@@ -28,6 +28,10 @@ class Problem:
         2 - Draw node at r2
         3 - Draw nodes at r1 and r2
         """
+        if isinstance(node1, np.ndarray):
+            node1 = self.get_or_create_node(node1)
+        if isinstance(node2, np.ndarray):
+            node2 = self.get_or_create_node(node2)
         element = Beam(node1, node2, E, A, I, z)
         self.elements.append(element)
 

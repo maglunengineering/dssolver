@@ -61,6 +61,10 @@ class StandardProblemMenu(DSSPlugin):
                                   command = self.von_mises_truss_snapback)
         menu_stdcases.add_command(label='Standing rod',
                                   command = self.standing_rod)
+        menu_stdcases.add_command(label='270 arch',
+                                  command = self.arch_270)
+        menu_stdcases.add_command(label='Pendulum',
+                                  command = self.pendulum)
         #menu_stdcases.add_command(label='Simply supported beam',
         #                          command=lambda: self.get_model(2))
         #menu_stdcases.add_command(label='Fanned out cantilever elements',
@@ -72,7 +76,7 @@ class StandardProblemMenu(DSSPlugin):
 
     def cantilever_beam(self):
         self.dss.new_problem()
-        self.dss.problem.create_beams((0, 0), (1000, 0), n=4)
+        self.dss.problem.create_beams((0, 0), (1000, 0), n=8)
         self.dss.problem.fix(self.dss.problem.node_at((0, 0)))
         self.dss.autoscale()
 
@@ -125,7 +129,6 @@ class StandardProblemMenu(DSSPlugin):
         p.load_node(n3, np.array([0, -4000, 0]))
         self.dss.autoscale()
 
-
     def standing_rod(self):
         self.dss.new_problem()
         p = self.dss.problem
@@ -137,6 +140,34 @@ class StandardProblemMenu(DSSPlugin):
         p.load_node(n1, np.array([0, 1e6, 0]))
 
         self.dss.autoscale()
+
+    def arch_270(self):
+        self.dss.new_problem()
+        p = self.dss.problem
+        start = np.deg2rad(225)
+        end = np.deg2rad(-45)
+        n = 31
+        node_angles = np.linspace(start, end, n)
+        node_points = 500 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + np.array([0, 500])
+
+        for r1, r2 in zip(node_points, node_points[1:]):
+            p.create_beam(r1, r2)
+
+        p.pin(p.nodes[0])
+        p.fix(p.nodes[-1])
+        p.load_node(p.nodes[n//2], np.array([0, -200000, 0]))
+        self.dss.autoscale()
+
+    def pendulum(self):
+        self.dss.new_problem()
+        p = self.dss.problem
+        n1 = p.get_or_create_node((0, 0))
+        n2 = p.get_or_create_node((1000, 0))
+        p.create_rod(n1, n2)
+        p.pin(n1)
+
+        self.dss.autoscale()
+
 
     def get_model(self, caller, model = 1):
         caller.new_problem()
