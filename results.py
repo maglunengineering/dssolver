@@ -1,4 +1,4 @@
-import time
+import functools
 from typing import *
 import numpy as np
 import matplotlib.pyplot as plt
@@ -42,6 +42,7 @@ class Results:
     def on_after_resultview_built(self, view):
         pass
 
+
 class ResultsStaticLinear(Results):
     def __init__(self, problem, displacements:np.ndarray):
         super().__init__(problem)
@@ -68,12 +69,18 @@ class ResultsStaticNonlinear(Results):
         self.current_step = 0
 
     def animate(self):
-        if self.increment():
-            #i = self.current_step
-            #return int(self.step_lengths[i])
-            return int(1000 * 2 / self.num_steps)
-        else:
-            return False
+        interval = int(1000 * 2 / self.num_steps)
+        self.current_step = 0
+        for step in range(self.num_steps):
+            self.set_displacements()
+            self.current_step += 1
+            yield interval
+        yield False
+
+        #if self.increment():
+        #    return int(1000 * 2 / self.num_steps)
+        #else:
+        #    return False
 
     def increment(self):
         if self.current_step < self.num_steps - 1:
@@ -129,6 +136,17 @@ class ResultsModal(Results):
             view.listbox.add(eigenvector)
         self.set_displacements()
 
+    def animate(self):
+        # 50 steps
+        oldscale = self.scale
+        for sine in np.sin(np.linspace(-np.pi, np.pi, 51)):
+            self.scale = sine * oldscale
+            self.set_displacements()
+            yield 20
+        self.scale = oldscale
+        self.set_displacements()
+        yield False
+
     def increment(self):
         self.current_eigenvector += 1
         self.set_displacements()
@@ -140,6 +158,7 @@ class ResultsModal(Results):
     def get_buttons(self):
         return {'Increment': self.increment,
                 'Decrement': self.decrement}
+
 
 class ResultsDynamicTimeIntegration(Results):
     def __init__(self, problem, displacements):
@@ -159,11 +178,11 @@ class ResultsDynamicTimeIntegration(Results):
             #return int(self.step_lengths[i])
             t_ms = int(1000 * 2 / self.num_steps)
             if t_ms == 0:
-                return 1
+                yield 1
             else:
-                return t_ms
+                yield t_ms
         else:
-            return False
+            yield False
 
     def increment(self):
         if self.current_step < self.num_steps - 1:
@@ -187,7 +206,6 @@ class ResultsDynamicTimeIntegration(Results):
         return {'Increment': self.increment,
                 'Decrement': self.decrement,
                 'Reset': self.reset}
-
 
 
 class ResultsViewer:
@@ -215,13 +233,22 @@ class ResultsViewer:
         settings_frame = DSSSettingsFrame(right_frame)
         settings_frame.grid(row=1)
 
-        def draw_func():
-            delay = results.animate()
+        def draw_func(*args):
+            """
+            Works with a generator formulation of the animate() function. animate() must yield a frame delay (in ms)
+            while the animation runs, then yield False.
+            """
+            if args:
+                iterator = args[0]
+            else:
+                iterator = results.animate()
+
+            delay = next(iterator)
             if delay:
                 self.canvas.redraw()
                 self.canvas.update()
                 self.top.update()
-                self.canvas.after(delay, draw_func)
+                self.canvas.after(delay, draw_func, iterator)
             else:
                 results.reset_animation()
 
