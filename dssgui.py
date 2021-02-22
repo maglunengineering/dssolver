@@ -513,7 +513,7 @@ class LoadInputMenu(DSSInputMenu):
 
         for idx, entry in enumerate((self.e_fx, self.e_fy, self.e_m)):
             try:
-                entry.insert(0, self.problem.nodes[self.problem.node_at(self.window.closest_node_label)].loads[idx])
+                entry.insert(0, self.problem.node_at(self.window.closest_node_label).loads[idx])
             except:
                 entry.insert(0, 0)
 
