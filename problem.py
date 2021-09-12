@@ -249,7 +249,7 @@ class Problem:
             self.member_loads += beam.expand(beam.member_loads, dofs)
 
     def solve(self) -> ResultsStaticLinear:
-        raise PendingDeprecationWarning()
+        #raise PendingDeprecationWarning()
         self.reassign_dofs()
         self.remove_dofs()
         free_dofs = self.free_dofs()
@@ -258,8 +258,8 @@ class Problem:
         Kr = self.K(reduced=True)
         F = self.loads - self.member_loads
         Fr = F[free_dofs]
-        print('Fr', Fr)
-        print('Reduced stiffness matrix size', np.shape(Kr))
+        #print('Fr', Fr)
+        #print('Reduced stiffness matrix size', np.shape(Kr))
         dr = np.linalg.solve(Kr, Fr)
 
         displacements = np.zeros(3 * len(self.nodes))
@@ -270,15 +270,15 @@ class Problem:
 
         self.upd_obj_displacements()
 
-        print('Nodal displacements', self.displacements)
-        print('Nodal loads', self.loads)
-        print('Member loads', self.member_loads)
+        #print('Nodal displacements', self.displacements)
+        #print('Nodal loads', self.loads)
+        #print('Member loads', self.member_loads)
 
-        self.forces = np.array([beam.forces for beam in self.elements])
+        #self.forces = np.array([beam.forces for beam in self.elements])
         # forces.shape == (n, 6), n: no. of elements
 
         self.solved = True
-        return ResultsStaticLinear(self.nodes, self.elements, displacements)
+        return ResultsStaticLinear(self, displacements)
 
     def solve_nlgeom(self, k):
         self.reassign_dofs()

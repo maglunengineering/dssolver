@@ -72,6 +72,7 @@ class ResultsStaticLinear(Results):
     def __init__(self, problem, displacements:np.ndarray):
         super().__init__(problem)
 
+        self.displacements = displacements
         for node in self.nodes:
             node.displacements = displacements[node.dofs]
 

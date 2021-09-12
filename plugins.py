@@ -168,7 +168,6 @@ class StandardProblemMenu(DSSPlugin):
 
         self.dss.autoscale()
 
-
     def get_model(self, caller, model = 1):
         caller.new_problem()
         if model == 1:  # Cantilever beam, point load
