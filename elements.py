@@ -403,6 +403,7 @@ class Rod(FiniteElement2Node):
                                                   [-self.kn, 0, 0, self.kn, 0, 0],
                                                   [0, 0, 0, 0, 0, 0],
                                                   [0, 0, 0, 0, 0, 0]])
+        pass
 
     def get_strain_energy(self):
         strain = 1 - self._deformed_length() / self._undeformed_length
