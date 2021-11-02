@@ -55,6 +55,8 @@ class StandardProblemMenu(DSSPlugin):
                                   command = self.cantilever_beam)
         menu_stdcases.add_command(label='Deep arch',
                                   command = self.deep_arch_half)
+        menu_stdcases.add_command(label='Deep arch (full)',
+                                  command = self.deep_arch)
         menu_stdcases.add_command(label='von Mises truss',
                                   command = self.von_mises_truss)
         menu_stdcases.add_command(label='Snapback von Mises truss',
@@ -65,6 +67,8 @@ class StandardProblemMenu(DSSPlugin):
                                   command = self.arch_270)
         menu_stdcases.add_command(label='Pendulum',
                                   command = self.pendulum)
+        menu_stdcases.add_command(label='von Mises Truss (spring BC)',
+                                  command = self.von_mises_truss_springbc)
         #menu_stdcases.add_command(label='Simply supported beam',
         #                          command=lambda: self.get_model(2))
         #menu_stdcases.add_command(label='Fanned out cantilever elements',
@@ -104,6 +108,30 @@ class StandardProblemMenu(DSSPlugin):
 
         self.dss.autoscale()
 
+    def deep_arch(self):
+        self.dss.new_problem()
+        p = self.dss.problem
+        N = 17
+        dofs = 2*(3*N - 2,)
+        start = np.pi - np.arctan(600/800)
+        end = np.pi + np.arctan(600/800)
+
+        node_angles = np.linspace(start, end, N)
+        node_points = 1000*np.array([np.sin(node_angles), -np.cos(node_angles)]).T
+        for r in node_points:
+            p.get_or_create_node(r)
+        for n1, n2 in zip(p.nodes, p.nodes[1:]):
+            p.create_beam(n1, n2, E=2.1e5, A=10, I=10**3/12)
+
+        p.reassign_dofs()
+        #p.constrained_dofs = np.array([0, 1, 3*N-2, 3*N-1])
+        p.load_node(p.nodes[len(p.nodes)//2], np.array([0, -1000, 0]))
+
+        p.pin(p.nodes[0])
+        p.pin(p.nodes[-1])
+
+        self.dss.autoscale()
+
     def von_mises_truss(self):
         self.dss.new_problem()
         p = self.dss.problem
@@ -124,6 +152,23 @@ class StandardProblemMenu(DSSPlugin):
         p.create_beam(n1, n2, A=10)
         p.create_rod(n2, n3, A=0.05)
         p.pin(n1)
+        p.roller90(n2)
+        p.glider(n3)
+        p.load_node(n3, np.array([0, -4000, 0]))
+        self.dss.autoscale()
+
+    def von_mises_truss_springbc(self):
+        self.dss.new_problem()
+        p = self.dss.problem
+        n1 = p.get_or_create_node((0, 0))
+        n2 = p.get_or_create_node((1000, 200))
+        n3 = p.get_or_create_node((1000, 600))
+        n4 = p.get_or_create_node((0, 400))
+        p.create_beam(n1, n2, A=10)
+        p.create_rod(n2, n3, A=0.05)
+        p.create_rod(n1, n4, A=0.05)
+        p.fix(n4)
+        p.roller90(n1)
         p.roller90(n2)
         p.glider(n3)
         p.load_node(n3, np.array([0, -4000, 0]))
