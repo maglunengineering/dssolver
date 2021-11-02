@@ -1,5 +1,6 @@
 import unittest
 import time
+import matplotlib.pyplot as plt
 import problem
 import solvers
 
@@ -112,4 +113,41 @@ class PerformanceTest(unittest.TestCase):
     @timeit
     def test_timeit_both(self):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
+
+class SampleProblems(unittest.TestCase):
+    def setUp(self):
+        self.p = problem.Problem();
+
+    def curved_spring(self, ampl):
+        length = 10.5 #mm
+
+        # Half sine centered at (l/2, 0)
+        xx = np.linspace(0, length, 21)
+        yy = np.sin(xx / xx.max() * np.pi) * ampl
+
+
+        E = 1500 # MPa
+        h = 5
+        t = 0.07
+        I = 1/12 * h * t**3
+
+        for x1, x2, y1, y2 in zip(xx, xx[1:], yy, yy[1:]):
+            self.p.create_beam(np.array((x1,y1)) ,np.array((x2,y2)), E=E, A=t*h, I=I, z=t/2)
+
+        self.p.roller(self.p.nodes[0])
+        self.p.pin(self.p.nodes[-1])
+        self.p.load_node(self.p.nodes[0], np.array([0.01, 0, 0]))
+
+        res = self.p.solve()
+        print(f'Amplitude: {ampl} - Displacement: {res.displacements[0]}')
+
+        #self.p.plot()
+        #plt.show()
+
+    def test_curved_spring(self):
+        for i in range(5):
+            self.p = problem.Problem()
+            self.curved_spring(i)
+
+
 
