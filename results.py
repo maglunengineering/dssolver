@@ -161,36 +161,40 @@ class ResultsModal(Results):
                 'Decrement': self.decrement}
 
 
-class ResultsDynamicTimeIntegration(Results):
+class ResultsDynamicTimeIntegration(ResultsStaticNonlinear):
     def __init__(self, problem, displacements):
-        super().__init__(problem)
-        self.displacements = displacements
-        self.num_result_vectors = len(self.displacements)
-        self.current_result_vector = 0
+        super().__init__(problem, displacements, np.zeros_like(displacements))
 
-    def set_displacements(self):
-        displacements = self.displacements[self.current_result_vector]
-        for node in self.nodes:
-            node.displacements = displacements[node.dofs]
-
-    def animate(self):
-        if self.increment():
-            t_ms = int(1000 * 2 / self.num_result_vectors)
-            if t_ms == 0:
-                yield 1
-            else:
-                yield t_ms
-        else:
-            yield False
-
-    def reset(self):
-        self.current_result_vector = 0
-        self.set_displacements()
-
-    def get_buttons(self):
-        return {'Increment': self.increment,
-                'Decrement': self.decrement,
-                'Reset': self.reset}
+#class ResultsDynamicTimeIntegration(Results):
+#    def __init__(self, problem, displacements):
+#        super().__init__(problem)
+#        self.displacements = displacements
+#        self.num_result_vectors = len(self.displacements)
+#        self.current_result_vector = 0
+#
+#    def set_displacements(self):
+#        displacements = self.displacements[self.current_result_vector]
+#        for node in self.nodes:
+#            node.displacements = displacements[node.dofs]
+#
+#    def animate(self):
+#        if self.increment():
+#            t_ms = int(1000 * 2 / self.num_result_vectors)
+#            if t_ms == 0:
+#                yield 1
+#            else:
+#                yield t_ms
+#        else:
+#            yield False
+#
+#    def reset(self):
+#        self.current_result_vector = 0
+#        self.set_displacements()
+#
+#    def get_buttons(self):
+#        return {'Increment': self.increment,
+#                'Decrement': self.decrement,
+#                'Reset': self.reset}
 
 
 class ResultsViewer:

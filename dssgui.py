@@ -881,7 +881,7 @@ case.
             self.textbox.insert(tk.INSERT, A.format(idx).replace('\n', '').replace('/n','\n'))
             self.textbox.insert(tk.INSERT, '\n\n')
 
-if __name__ == '__main__':
+if True or __name__ == '__main__':
     #self.icon = 'dss_icon.ico' if _platform == 'win32' or _platform == 'win64' else '@dss_icon.xbm'
     if sys.platform == 'win32' or sys.platform == 'win64':
         icon = os.getcwd() + '/gfx/dss_icon.ico'

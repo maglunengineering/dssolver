@@ -268,7 +268,7 @@ class DynamicSolver(Solver):
         problem.remove_dofs()
         dt = 1e-3
         ndofs = 3 * len(problem.nodes)
-        num_steps = 200
+        num_steps = 10
         free_dofs = problem.free_dofs()
         ndofs_free = len(free_dofs)
 
@@ -303,7 +303,7 @@ class DynamicSolver(Solver):
 
         t = 0
         i = 0
-        tmax = 5
+        tmax = 0.5
         nonlinear = True
         total_work_done = 0
         du = np.zeros(ndofs_free)
@@ -311,16 +311,14 @@ class DynamicSolver(Solver):
             K = problem.K(True)
             # M = problem.M(True)
             # invM = np.linalg.inv(M)
-            B[ndofs_free:] = f  # - self.get_internal_forces(problem)[free_dofs]
+            B[ndofs_free:] = f #+ self.get_internal_forces(problem)[free_dofs]
 
             AA = np.block([[-M, O], [O, K]])
 
             AB = np.block([[O, M], [M, C]])
             A = np.linalg.solve(-AB, AA)
 
-            qdot = np.linalg.solve(I - dt * A, q + dt * B)
-            q[free_dofs] += qdot[:ndofs_free] * dt
-            q[ndofs_free:] += qdot[ndofs_free:] * dt
+            q = np.linalg.solve(I - A*dt, q + B*dt)
 
             u[free_dofs] = q[ndofs_free:]
             for node in problem.nodes:
@@ -330,6 +328,7 @@ class DynamicSolver(Solver):
             i += 1
             if i % num_steps == 0:
                 print(f'Step {i}: Stepped {dt}. Displacements {u[free_dofs]}')
+                print(f'f={self.get_internal_forces(problem)[free_dofs]}')
                 disp_history.append(np.array(u))
 
         return results.ResultsDynamicTimeIntegration(problem, np.asarray(disp_history))
