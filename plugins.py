@@ -208,7 +208,7 @@ class StandardProblemMenu(DSSPlugin):
         p = self.dss.problem
         n1 = p.get_or_create_node((0, 0))
         n2 = p.get_or_create_node((1000, 0))
-        p.create_rod(n1, n2)
+        p.create_rod(n1, n2, A=10)
         p.pin(n1)
 
         self.dss.autoscale()

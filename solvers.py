@@ -196,70 +196,54 @@ class DynamicSolver(Solver):
     def solve_explicit(self, problem):
         problem.reassign_dofs()
         problem.remove_dofs()
-        dt = 5e-3
+        dt = 1e-4
         ndofs = 3 * len(problem.nodes)
-        num_steps = 25
+        num_steps = 50
         free_dofs = problem.free_dofs()
-        model_size = problem.model_size()
+        ndofs_free = len(free_dofs)
 
-        for node in problem.nodes:
-            node.velocities = np.zeros(3)
-            node.accelerations = np.zeros(3)
         self.load_by_structural_weight(problem)
-
-        lbd = problem.elements[0].E
-        mu = lbd / 2
-        cd = np.sqrt((lbd + 2 * mu) / 7.86e-9)
-        dt = 1 / np.sqrt(2) * problem.elements[0]._deformed_length() / cd
-        dt *= 0.01
 
         f = problem.loads[free_dofs]
         u = np.zeros(ndofs)
-        v = np.zeros(ndofs)
-        a = np.zeros(ndofs)
 
-        ur = u[free_dofs]
-        vr = v[free_dofs]
-        ar = a[free_dofs]
+        q = np.zeros(2 * ndofs_free)
 
         K = problem.K(True)
         M = problem.M(True)
         C = 0.01 * K
-        invM = np.linalg.inv(M)
+
+        O = np.zeros_like(M)
+        B = np.hstack((np.zeros(ndofs_free), f))
 
         disp_history = []
-        vel_history = []
-        acc_history = []
-        dt_history = []
 
         t = 0
         i = 0
-        tmax = 1
-        nonlinear = True
+        tmax = 2
+        num_timesteps = tmax / dt
+        interval = int(num_timesteps / num_steps)
         while t < tmax:
-            if nonlinear and i % num_steps == 0:
-                K = problem.K(True)
-                M = problem.M(True)
-                invM = np.linalg.inv(M)
+            K = problem.K(True)
 
-            ur, vr, ar = ur + vr * dt + 0.5 * ar * dt ** 2, \
-                         vr + ar * dt, \
-                         invM @ (f - K @ ur)
+            B[ndofs_free:] = f - self.get_internal_forces(problem)[free_dofs]
 
-            u[free_dofs] = ur
-            v[free_dofs] = vr
-            a[free_dofs] = ar
+            AA = np.block([[-M, O], [O, K]])
+            AB = np.block([[O, M], [M, C]])
+            A = np.linalg.solve(-AB, AA)
+
+            q = (A@q + B)*dt
+
+            u[free_dofs] = q[ndofs_free:]
+            for node in problem.nodes:
+                node.displacements = u[node.dofs]
 
             t += dt
             i += 1
-            if i % num_steps == 0:
-                for node in problem.nodes:
-                    node.displacements = u[node.dofs]
+            if i % interval == 0:
+                print(f'Step {i}: t = {np.round(t, 3)}. Displacements {u[free_dofs]}')
+                print(f'f={self.get_internal_forces(problem)[free_dofs]}')
                 disp_history.append(np.array(u))
-                vel_history.append(v)
-                acc_history.append(a)
-
-                print(f'Step {i}: Stepped {dt}. Displacements: {ur}')
 
         return results.ResultsDynamicTimeIntegration(problem, np.asarray(disp_history))
 
@@ -268,7 +252,7 @@ class DynamicSolver(Solver):
         problem.remove_dofs()
         dt = 1e-3
         ndofs = 3 * len(problem.nodes)
-        num_steps = 10
+        num_steps = 50
         free_dofs = problem.free_dofs()
         ndofs_free = len(free_dofs)
 
@@ -276,45 +260,30 @@ class DynamicSolver(Solver):
 
         f = problem.loads[free_dofs]
         u = np.zeros(ndofs)
-        v = np.zeros(ndofs)
-        a = np.zeros(ndofs)
-
-        ur = np.zeros(ndofs_free)
-        vr = np.zeros(ndofs_free)
-        ar = np.zeros(ndofs_free)
 
         q = np.zeros(2 * ndofs_free)
 
         K = problem.K(True)
         M = problem.M(True)
         C = 0.01 * K
-        invM = np.linalg.inv(M)
+
 
         I = np.eye(2 * ndofs_free)
         O = np.zeros_like(M)
         B = np.hstack((np.zeros(ndofs_free), f))
 
-        a_m = 0.3
-        a_f = 0.4
-        beta = 0.3 + 0.5 * (a_f - a_m)
-        gamma = 0.5 - a_m + a_f
-
         disp_history = []
 
         t = 0
         i = 0
-        tmax = 0.5
-        nonlinear = True
-        total_work_done = 0
-        du = np.zeros(ndofs_free)
+        tmax = 2
+        num_timesteps = tmax/dt
+        interval = int(num_timesteps / num_steps)
         while t < tmax:
             K = problem.K(True)
-            # M = problem.M(True)
-            # invM = np.linalg.inv(M)
-            B[ndofs_free:] = f #+ self.get_internal_forces(problem)[free_dofs]
+            B[ndofs_free:] = f - self.get_internal_forces(problem)[free_dofs]
 
             AA = np.block([[-M, O], [O, K]])
-
             AB = np.block([[O, M], [M, C]])
             A = np.linalg.solve(-AB, AA)
 
@@ -326,8 +295,8 @@ class DynamicSolver(Solver):
 
             t += dt
             i += 1
-            if i % num_steps == 0:
-                print(f'Step {i}: Stepped {dt}. Displacements {u[free_dofs]}')
+            if i % interval == 0:
+                print(f'Step {i}: t = {np.round(t, 3)}. Displacements {u[free_dofs]}')
                 print(f'f={self.get_internal_forces(problem)[free_dofs]}')
                 disp_history.append(np.array(u))
 
