@@ -9,7 +9,6 @@ from elements import *
 from extras import *
 import plugins
 import solvers
-import report_plugin
 from results import ResultsViewer
 
 np.set_printoptions(precision=2, suppress=True)
@@ -695,6 +694,7 @@ class BeamInputMenu(DSSInputMenu):
         self.window.autoscale()
         self.top.destroy()
 
+
 class SectionManager(DSSInputMenu):
     def __init__(self, bip, window, root):
         """
@@ -890,7 +890,7 @@ if __name__ == '__main__':
 
     # Load plugin_types
     plugin_list = []
-    for module in (plugins, elements, solvers, report_plugin):
+    for module in (plugins, elements, solvers):
         plugin_classes = (cls for cls in module.__dict__.values() if
                           isinstance(cls, type) and issubclass(cls, plugins.DSSPlugin))
         for cls in plugin_classes:

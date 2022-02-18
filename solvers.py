@@ -6,13 +6,15 @@ from plugins import DSSPlugin
 from problem import Problem
 import results
 
+
 class Solver(DSSPlugin):
     instantiate = True
+
     def __init__(self, owner):
         super().__init__(owner)
         self.results = None
 
-    def solve(self, problem:Problem) -> results.Results:
+    def solve(self, problem: Problem) -> results.Results:
         pass
 
     def on_after_dss_built(self):
@@ -20,7 +22,7 @@ class Solver(DSSPlugin):
 
 
 class LinearSolver(Solver):
-    def solve(self, problem:'Problem') -> results.ResultsStaticLinear:
+    def solve(self, problem: 'Problem') -> results.ResultsStaticLinear:
         problem.reassign_dofs()
         problem.remove_dofs()
 
@@ -38,16 +40,16 @@ class LinearSolver(Solver):
 
         # To be removed:
         problem.displacements = displacements
-        problem.upd_obj_displacements() # To be removed
+        problem.upd_obj_displacements()  # To be removed
 
         return results.ResultsStaticLinear(problem, displacements)
 
     def get_functions(self) -> Dict[str, Callable]:
-        return {'Linear' : lambda : self.solve(self.dss.problem.clone())}
+        return {'Linear': lambda: self.solve(self.dss.problem.clone())}
 
 
 class NonLinearSolver(Solver):
-    def solve(self, problem:Problem) -> results.ResultsStaticNonlinear:
+    def solve(self, problem: Problem) -> results.ResultsStaticNonlinear:
         steps = 500
         arclength = 45
         A = 0
@@ -63,7 +65,7 @@ class NonLinearSolver(Solver):
         displacements = np.zeros(len(problem.nodes) * 3)
         loads = np.zeros_like(displacements)
 
-        #displ_storage = np.zeros((steps, 3 * len(problem.nodes)))
+        # displ_storage = np.zeros((steps, 3 * len(problem.nodes)))
         displ_storage = []
         force_storage = []
 
@@ -76,7 +78,7 @@ class NonLinearSolver(Solver):
 
             sign = np.sign(wq0 @ v0 if i > 1 else 1)
             dA = arclength / f * sign
-            v0 = dA*wq0
+            v0 = dA * wq0
             A += dA
 
             displacements[free_dofs] = displacements[free_dofs] + v0
@@ -85,7 +87,7 @@ class NonLinearSolver(Solver):
 
             # Corrector
             k = 0
-            residual = self.get_internal_forces(problem)[free_dofs] - q*A
+            residual = self.get_internal_forces(problem)[free_dofs] - q * A
             while np.linalg.norm(residual) > 1e-3 and k < max_it:
                 K = problem.K(True)
                 wq = np.linalg.solve(K, q)
@@ -93,20 +95,20 @@ class NonLinearSolver(Solver):
                 dA_ = -wq @ wr / (1 + wq @ wq)
                 A += dA_
 
-                displacements[free_dofs] = displacements[free_dofs] + (wr + dA_*wq)
+                displacements[free_dofs] = displacements[free_dofs] + (wr + dA_ * wq)
                 for node in problem.nodes:
                     node.displacements = displacements[node.dofs]
                 k += 1
 
-                residual = self.get_internal_forces(problem)[free_dofs] - q*A
+                residual = self.get_internal_forces(problem)[free_dofs] - q * A
 
-            #displ_storage[i] = displacements
+            # displ_storage[i] = displacements
             displ_storage.append(np.array(displacements))
-            loads[free_dofs] = q*A
+            loads[free_dofs] = q * A
             force_storage.append(A)
             i += 1
 
-            #print(f"Finished in {k} corrector steps (stepped {dA}, arclength {arclength})")
+            # print(f"Finished in {k} corrector steps (stepped {dA}, arclength {arclength})")
             if k < 4:
                 arclength *= 1.05
             elif k > 8:
@@ -132,7 +134,7 @@ class NonLinearSolver(Solver):
         return forces
 
     def get_functions(self) -> Dict[str, Callable]:
-        return {'Nonlinear': lambda : self.solve(self.dss.problem.clone())}
+        return {'Nonlinear': lambda: self.solve(self.dss.problem.clone())}
 
 
 class ModalSolver(Solver):
@@ -140,9 +142,9 @@ class ModalSolver(Solver):
         super().__init__(owner)
 
         self.eigenvalues = np.zeros(0)
-        self.eigenvectors = np.zeros((0,0))
+        self.eigenvectors = np.zeros((0, 0))
 
-    def solve(self, problem:Problem):
+    def solve(self, problem: Problem):
         problem.reassign_dofs()
         M = problem.M(True)
         K = problem.K(True)
@@ -154,20 +156,21 @@ class ModalSolver(Solver):
         A = np.linalg.solve(M, K)
 
         # Symmetry preserving reduction
-        #L = np.linalg.cholesky(M)
-        #A = np.linalg.inv(L) @ K @ np.linalg.inv(L.T)
+        # L = np.linalg.cholesky(M)
+        # A = np.linalg.inv(L) @ K @ np.linalg.inv(L.T)
 
         eigenvalues, eigenvectors = np.linalg.eig(A)
 
-        eigenvectors = eigenvectors.T # Row-major
+        eigenvectors = eigenvectors.T  # Row-major
         eigenvectors = eigenvectors[eigenvalues.argsort()]
         eigenvalues.sort()
-        full_eigenvectors[:,free_dofs] = eigenvectors
+        full_eigenvectors[:, free_dofs] = eigenvectors
 
         return results.ResultsModal(problem, eigenvalues, full_eigenvectors)
 
     def get_functions(self) -> Dict[str, Callable]:
         return {'Modal': lambda: self.solve(self.dss.problem.clone())}
+
 
 class DynamicSolver(Solver):
     def __init__(self, owner):
@@ -178,8 +181,9 @@ class DynamicSolver(Solver):
         for node in problem.nodes:
             mass = 0
             for element in node.elements:
-                mass += np.linalg.norm(element.r2 - element.r1) * element.A * 7.86e-9 # Density of steel in tonnes / mm^3
-            node.loads += np.array([0, -mass*gravity*0.5, 0])
+                mass += np.linalg.norm(
+                    element.r2 - element.r1) * element.A * 7.86e-9  # Density of steel in tonnes / mm^3
+            node.loads += np.array([0, -mass * gravity * 0.5, 0])
 
     def get_internal_forces(self, problem):
         ndofs = 3 * len(problem.nodes)
@@ -204,9 +208,9 @@ class DynamicSolver(Solver):
         self.load_by_structural_weight(problem)
 
         lbd = problem.elements[0].E
-        mu = lbd/2
-        cd = np.sqrt((lbd + 2*mu)/7.86e-9)
-        dt = 1/np.sqrt(2) * problem.elements[0]._deformed_length() / cd
+        mu = lbd / 2
+        cd = np.sqrt((lbd + 2 * mu) / 7.86e-9)
+        dt = 1 / np.sqrt(2) * problem.elements[0]._deformed_length() / cd
         dt *= 0.01
 
         f = problem.loads[free_dofs]
@@ -238,9 +242,9 @@ class DynamicSolver(Solver):
                 M = problem.M(True)
                 invM = np.linalg.inv(M)
 
-            ur, vr, ar =    ur + vr*dt + 0.5*ar*dt**2, \
-                            vr + ar*dt, \
-                            invM @ (f - K@ur)
+            ur, vr, ar = ur + vr * dt + 0.5 * ar * dt ** 2, \
+                         vr + ar * dt, \
+                         invM @ (f - K @ ur)
 
             u[free_dofs] = ur
             v[free_dofs] = vr
@@ -292,7 +296,7 @@ class DynamicSolver(Solver):
 
         a_m = 0.3
         a_f = 0.4
-        beta = 0.3 + 0.5*(a_f - a_m)
+        beta = 0.3 + 0.5 * (a_f - a_m)
         gamma = 0.5 - a_m + a_f
 
         disp_history = []
@@ -305,17 +309,16 @@ class DynamicSolver(Solver):
         du = np.zeros(ndofs_free)
         while t < tmax:
             K = problem.K(True)
-            #M = problem.M(True)
-            #invM = np.linalg.inv(M)
-            B[ndofs_free:] = f# - self.get_internal_forces(problem)[free_dofs]
+            # M = problem.M(True)
+            # invM = np.linalg.inv(M)
+            B[ndofs_free:] = f  # - self.get_internal_forces(problem)[free_dofs]
 
             AA = np.block([[-M, O], [O, K]])
 
             AB = np.block([[O, M], [M, C]])
             A = np.linalg.solve(-AB, AA)
 
-
-            qdot = np.linalg.solve(I - dt*A, q + dt*B)
+            qdot = np.linalg.solve(I - dt * A, q + dt * B)
             q[free_dofs] += qdot[:ndofs_free] * dt
             q[ndofs_free:] += qdot[ndofs_free:] * dt
 
@@ -335,13 +338,13 @@ class DynamicSolver(Solver):
         problem.reassign_dofs()
         problem.remove_dofs()
         dt = 1e-3
-        ndofs = 3*len(problem.nodes)
+        ndofs = 3 * len(problem.nodes)
         num_steps = 300
         free_dofs = problem.free_dofs()
         ndofs_free = len(free_dofs)
 
         self.load_by_structural_weight(problem)
-        set_displacements = lambda : self.set_displacements(u, problem)
+        set_displacements = lambda: self.set_displacements(u, problem)
 
         f = problem.loads[free_dofs]
         u = np.zeros(ndofs)
@@ -354,7 +357,7 @@ class DynamicSolver(Solver):
 
         K = problem.K(True)
         M = problem.M(True)
-        C = 0.01*K
+        C = 0.01 * K
         invM = np.linalg.inv(M)
 
         disp_history = []
@@ -371,7 +374,6 @@ class DynamicSolver(Solver):
                 node.displacements = old_disps[node]
             return strain_energy
 
-
         t = 0
         i = 0
         tmax = 1
@@ -385,19 +387,19 @@ class DynamicSolver(Solver):
             C = 0.01 * K
             invM = np.linalg.inv(M)
 
-            ar = invM @ (f - K@ur)
-            delta_ur = vr*dt + 0.5*ar*dt**2
+            ar = invM @ (f - K @ ur)
+            delta_ur = vr * dt + 0.5 * ar * dt ** 2
             ur += delta_ur
             vr += ar * dt
-            vr += 0.5*ar*dt
+            vr += 0.5 * ar * dt
 
             u[free_dofs] = ur
 
             set_displacements()
 
-            strain_energy_rate = dt * vr@K@vr
-            kinetic_energy_rate = vr@M@ar
-            rel_kinetic_energy_rate = kinetic_energy_rate/(kinetic_energy_rate + strain_energy_rate)
+            strain_energy_rate = dt * vr @ K @ vr
+            kinetic_energy_rate = vr @ M @ ar
+            rel_kinetic_energy_rate = kinetic_energy_rate / (kinetic_energy_rate + strain_energy_rate)
 
             diff_work = f @ delta_ur
             total_work += diff_work
@@ -413,9 +415,10 @@ class DynamicSolver(Solver):
             j = 1e-6
             dj = 1e-8
             while not np.isclose(strain_energy, target_strain_energy):
-                derivative = (get_strain_energy_for(ur + (j+dj)*residual_acceleration) - get_strain_energy_for(ur + j*residual_acceleration)) / dj
+                derivative = (get_strain_energy_for(ur + (j + dj) * residual_acceleration) - get_strain_energy_for(
+                    ur + j * residual_acceleration)) / dj
                 j += (target_strain_energy - strain_energy) / derivative
-                u[free_dofs] = ur + j*residual_acceleration
+                u[free_dofs] = ur + j * residual_acceleration
                 total_work += f @ (j * residual_acceleration)
                 set_displacements()
                 strain_energy = sum(e.get_strain_energy() for e in problem.elements)
@@ -427,7 +430,7 @@ class DynamicSolver(Solver):
                 kinetic_energy = 0.5 * vr.T @ M @ vr
 
             strain_energy = sum(e.get_strain_energy() for e in problem.elements)
-            kinetic_energy = 0.5*vr@M@vr
+            kinetic_energy = 0.5 * vr @ M @ vr
 
             print(f'Work done: {total_work}, Strain energy: {strain_energy}, kinetic energy: {kinetic_energy}')
 
@@ -441,6 +444,6 @@ class DynamicSolver(Solver):
             node.displacements = displ[node.dofs]
 
     def get_functions(self) -> Dict[str, Callable]:
-        return {'Explicit time integration' : lambda: self.solve_explicit(self.dss.problem.clone()),
-                'Implicit time integration' : lambda: self.solve_implicit(self.dss.problem.clone()),
-                'WIP algorithm' : lambda : self.solve_whoknows(self.dss.problem.clone())}
+        return {'Explicit time integration': lambda: self.solve_explicit(self.dss.problem.clone()),
+                'Implicit time integration': lambda: self.solve_implicit(self.dss.problem.clone()),
+                'WIP algorithm': lambda: self.solve_whoknows(self.dss.problem.clone())}
