@@ -1,6 +1,5 @@
 import unittest
 import time
-import matplotlib.pyplot as plt
 import problem
 import solvers
 

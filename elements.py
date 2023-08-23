@@ -4,7 +4,7 @@ import numpy as np
 import tkinter as tk
 
 from extras import *
-from plugins import DSSPlugin
+from plugin_base import DSSPlugin
 
 class DSSModelObject(DSSPlugin):
     def draw_on_canvas(self, canvas, **kwargs):

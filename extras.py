@@ -1,5 +1,4 @@
 import collections
-from typing import *
 import tkinter as tk
 import numpy as np
 from numpy.linalg import solve
@@ -17,8 +16,6 @@ class ResizingCanvas(tk.Canvas):
 
     def on_resize(self, event):
         # determine the ratio of old width/height to new width/height
-        wscale = float(event.width)/self.width
-        hscale = float(event.height)/self.height
         self.width = event.width
         self.height = event.height
         # resize the canvas

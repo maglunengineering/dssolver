@@ -1,8 +1,11 @@
-from typing import *
+import os
+import sys
 import time
 import numpy as np
+from typing import Dict, Callable
 
-from plugins import DSSPlugin
+sys.path.append(os.path.dirname(__file__))
+from plugin_base import DSSPlugin
 from problem import Problem
 import results
 

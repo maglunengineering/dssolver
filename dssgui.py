@@ -1,14 +1,16 @@
 import sys
 import os
 import pickle
+import importlib
 from tkinter import filedialog
 
 from problem import *
 import elements
 from elements import *
 from extras import *
-import plugins
+import plugin_base
 import solvers
+
 from results import ResultsViewer
 
 np.set_printoptions(precision=2, suppress=True)
@@ -890,14 +892,23 @@ if True or __name__ == '__main__':
 
     # Load plugin_types
     plugin_list = []
-    for module in (plugins, elements, solvers):
+    modules = [elements, solvers]
+    for module_name in os.listdir('plugins'):
+        if module_name.endswith('.py'):
+            module = importlib.import_module(f'plugins.{module_name[:-3]}')
+            modules.append(module)
+
+    for module in modules:
         plugin_classes = (cls for cls in module.__dict__.values() if
-                          isinstance(cls, type) and issubclass(cls, plugins.DSSPlugin))
+                          isinstance(cls, type) and issubclass(cls, plugin_base.DSSPlugin))
         for cls in plugin_classes:
             plugin_list.append(cls)
             #cls.load_plugin(dss)
             # instance = cls.create_instance(dss)
             # instance.load_plugin()
+
+
+
 
 
 
