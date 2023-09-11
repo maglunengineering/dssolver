@@ -1,7 +1,10 @@
+from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
-from results import *
+from elements import FiniteElement2Node, Node, Rod, Beam, beta
+import results
+
 np.set_printoptions(suppress=True)
 
 
@@ -248,7 +251,7 @@ class Problem:
         for beam in self.elements:
             self.member_loads += beam.expand(beam.member_loads, dofs)
 
-    def solve(self) -> ResultsStaticLinear:
+    def solve(self) -> results.ResultsStaticLinear:
         #raise PendingDeprecationWarning()
         self.reassign_dofs()
         self.remove_dofs()
@@ -278,7 +281,7 @@ class Problem:
         # forces.shape == (n, 6), n: no. of elements
 
         self.solved = True
-        return ResultsStaticLinear(self, displacements)
+        return results.ResultsStaticLinear(self, displacements)
 
     def solve_nlgeom(self, k):
         self.reassign_dofs()
@@ -590,11 +593,6 @@ class Problem:
 
         self.anim = anm.FuncAnimation(fig, animate_,
                                  frames=id.shape[0], interval=interval, blit=False)
-
-        #Writer = anm.writers['ffmpeg']
-        #writer = Writer(fps=8, metadata=dict(artist='maglun engineering'),
-        #                bitrate=1800)
-        #self.anim.save('beam.mp4')
         plt.show()
 
     def open_problem(self):
@@ -634,110 +632,3 @@ class Problem:
         result = cls.__new__(cls)
         result.__dict__.update(self.__dict__)
         return result
-
-
-if __name__ == '__main__':
-    m = Problem()
-
-    for _ in range(1):
-        def arch_half():
-            global dofs, p
-            p = Problem()
-            N = 16
-            # n = int(np.floor(N/2))
-
-            dofs = 2 * (3 * N - 2,)
-            start = np.pi - np.arctan(600 / 800)
-            end = np.pi / 2
-
-            node_angles = np.linspace(start, end, N)
-            node_points = 1000 * np.array([np.cos(node_angles), np.sin(node_angles)]).T
-            for r1, r2 in zip(node_points, node_points[1:]):
-                p.create_beam(r1, r2)
-
-            p.constrained_dofs = np.array([0, 1, 3 * N - 3, 3 * N - 1])
-            p.loads = np.array([*np.zeros(3 * N - 5), -400])
-
-
-        def lin():
-            global p, dofs
-            p = Problem()
-            dofs = (35, 35)
-            p.create_beams((-400, 500), (600, 500), n=11)  # Aksial ok!
-            # p.create_beams((0,100),(0,700), n=5)  # ikke ok!
-            # p.create_beams((-250,250),(250,750), n=11)  # ok!
-            # Alle er dog ustabile ved store laster! Kun korrektorsteg gir ustabilitet
-            # Kan lese av displacement history at sideveis forskyvning oscillerer. Korrektor forverrer?
-            # Når bjelker roterer til å være vannrett opp/ned (alpha = pi/2), feiler løsningen
-            p.constrained_dofs = np.array([0, 1, 2])
-            p.loads = np.array([*np.zeros(3 * len(p.nodes) - len(p.constrained_dofs) - 3), 0, 0, 500000])
-            p.displacements = np.zeros(len(p.free_dofs()))
-
-
-        def mt():
-            global p, dofs
-            p = Problem()
-            dofs = (-2, -2)
-            n = 1
-            load = 15000
-            p.create_beams((-500, 500), (500, 700), n=n)
-            p.constrained_dofs = np.array([0, 1, 3 * n])
-            p.loads = np.array([*np.zeros(3 * (n + 1) - 5), -load, 0])
-            p.displacements = np.zeros(len(p.free_dofs()))
-
-
-        def mt_spring():
-            global p, dofs
-            p = Problem()
-            dofs = (7, 7)
-            load = 4000
-            p.create_beam((-500, 500), (500, 700))
-            p.create_beam((500, 1200), (500, 700), E=210000 / 250)
-            p.constrained_dofs = np.array([0, 1, 3, 6, 8])
-            p.loads = np.array([0, 0, 0, -load])
-            p.displacements = np.zeros(len(p.free_dofs()))
-
-
-        def deg270():
-            global p, dofs
-            p = Problem()
-            N = 31
-            dofs = (46, 46)
-            start = np.deg2rad(225)
-            end = np.deg2rad(-45)
-            node_angles = np.linspace(start, end, N)
-            node_points = 500 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + [0, 500]
-            for r1, r2 in zip(node_points, node_points[1:]):
-                p.create_beam(r1, r2)
-            p.constrained_dofs = np.array([0, 1, 3 * N - 3, 3 * N - 2, 3 * N - 1])
-            p.loads = np.array([0, *np.zeros(int((3 * N - 9) / 2)), 0, -300, 0, *np.zeros(int((3 * N - 9) / 2))])
-            p.displacements = np.zeros(len(p.free_dofs()))
-
-
-        def buckl():
-            global p, dofs
-            p = Problem()
-            dofs = (60, 60)
-            p.create_beams((0, 0), (1000, 0), n=20, I=1000)
-            p.constrained_dofs = np.array([0, 1, 2, 61])
-            p.loads = np.array([*np.zeros(len(p.free_dofs()) - 2), -80000000, 100000000])
-            p.displacements = np.zeros(len(p.free_dofs()))
-
-    try:
-        raise ValueError
-        f, (ax1, ax2) = plt.subplots(1, 2, sharey=False)
-
-        ax1.plot(-m.incremental_displacements[:,intr_displ], -m.incremental_loads[:,intr_load])
-        ax2.plot(m.repr_residual)
-        #"""
-        ax1.set_xlabel('Displacement')
-        ax1.set_ylabel('Load')
-        ax2.set_xlabel('Control parameter')
-        ax2.set_ylabel('Residual norm before iteration')
-        #"""
-        plt.tight_layout()
-        plt.show()
-    except:
-        print('Pass')
-        pass
-

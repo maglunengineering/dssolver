@@ -2,12 +2,14 @@ import sys
 import os
 import pickle
 import importlib
-from tkinter import filedialog
+import tkinter as tk
+from typing import Callable, Iterable, Dict
 
-from problem import *
+import numpy as np
+
+import problem
 import elements
-from elements import *
-from extras import *
+import extras
 import plugin_base
 import solvers
 
@@ -16,7 +18,7 @@ from results import ResultsViewer
 np.set_printoptions(precision=2, suppress=True)
 inv = np.linalg.inv
 
-class DSS:
+class DSSGUI:
     def __init__(self, root:tk.Tk, problem=None, *args, **kwargs):
         self.root = root
         self.root.minsize(width=1024, height=640)
@@ -61,9 +63,9 @@ class DSS:
         for var in self.settings.keys():
             self.settings[var].trace_add('write', self.draw_canvas)
 
-        self.plugins: Dict[type, DSSPlugin] = {}
+        self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
         if 'plugins' in kwargs:
-            plugins: Iterable[DSSPlugin] = kwargs['plugins']
+            plugins: Iterable[plugin_base.DSSPlugin] = kwargs['plugins']
             for plugin in plugins:
                 plugin.load_plugin(self)
 
@@ -192,7 +194,7 @@ class DSS:
                              command=lambda: self.query_node(self.closest_node_label))
 
     def build_canvas(self):
-        self.canvas = DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
+        self.canvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
         self.canvas.dss = self # TODO: Remove
         self.canvas.grid(row=1, column=0, sticky='nsew')
 
@@ -205,7 +207,7 @@ class DSS:
         self.rsm = tk.Frame(self.mainframe, bg=color1, width=256)
         self.rsm.grid(row=1, column=1, sticky='nsew')
 
-        self.listbox_results = DSSListbox(self.rsm)
+        self.listbox_results = extras.DSSListbox(self.rsm)
         self.listbox_results.grid(row=1, column=0)
         self.listbox_results.bind('<Double-Button-1>', self.view_results)
 
@@ -221,11 +223,11 @@ class DSS:
         i = 0
         for b,v in zip(buttons, vars):
             button = tk.Checkbutton(rsm_settings, text=b, variable=v, bg=color2,
-                                    highlightthickness=0, justify=tk.LEFT)
+                                           highlightthickness=0, justify=tk.LEFT)
             button.grid(row=int(i/2+1), column=i%2, sticky='wns')
             i += 1
 
-        plugin_settings_frame = DSSSettingsFrame(rsm_settings)
+        plugin_settings_frame = extras.DSSSettingsFrame(rsm_settings)
         plugin_settings_frame.grid(row=3, columnspan=2, sticky='ew')
         for cls in self.plugins.keys():
             plugin_settings_frame.add_settings(cls)
@@ -300,14 +302,14 @@ class DSS:
             v1 = (beam.transform(beam.angle)@beam.forces)[1]
             v2 = -(beam.transform(beam.angle)@beam.forces)[4]
 
-            p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
-            p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
+            p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale]) * v1
+            p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale]) * v2
             self.canvas.create_line(*p1, *p2,
                                     tag='sheardiagram')
-            self.canvas.create_text(*p1, text='{}'.format(np.round(v1,2)), anchor='sw')
+            self.canvas.create_text(*p1, text='{}'.format(np.round(v1, 2)), anchor='sw')
 
     def draw_moment_diagram(self):
-        max_moment = np.max(np.abs(np.array([self.problem.forces[:,2], self.problem.forces[:,5]])))
+        max_moment = np.max(np.abs(np.array([self.problem.forces[:, 2], self.problem.forces[:, 5]])))
         scale = 100/max_moment
         for beam in self.problem.elements:
             s,c = np.sin(beam.angle), np.cos(beam.angle)
@@ -316,8 +318,8 @@ class DSS:
             v1 = beam.forces[2]
             v2 = -beam.forces[5]
 
-            p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale])*v1
-            p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale])*v2
+            p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale]) * v1
+            p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale]) * v2
             self.canvas.create_line(*p1, *p2,
                                     tag='momentdiagram')
             self.canvas.create_text(*p1, text='{}'.format(np.round(v1, 2)), anchor='sw')
@@ -342,17 +344,17 @@ class DSS:
 
         if element_id is not None:
             element = self.problem.elements[element_id]
-            beam_r1 = (inv(self.canvas.transformation_matrix)@np.hstack((element.r1, 1)))[0:2]
-            beam_r2 = (inv(self.canvas.transformation_matrix)@np.hstack((element.r2, 1)))[0:2]
+            beam_r1 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r1, 1)))[0:2]
+            beam_r2 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r2, 1)))[0:2]
 
             self.canvas.create_text(*beam_r1, text='r1', anchor='sw')
             self.canvas.create_text(*beam_r2, text='r2', anchor='sw')
 
-            if type(element) == Beam:
+            if type(element) == elements.Beam:
                 self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
                                         width=self.linewidth, tag='highlight', fill='red')
 
-            elif type(element) == Rod:
+            elif type(element) == elements.Rod:
                 self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
                                         width=self.linewidth/4, tag='highlight', fill='red')
 
@@ -371,22 +373,22 @@ class DSS:
     # Scaling and moving functions
     def autoscale(self):
         # TODO: Replace with DSSCanvas.autoscale when objects are added to the canvas
-        x_ = (np.max(self.problem.nodal_coordinates[:, 0]) + np.min(self.problem.nodal_coordinates[:, 0]))/2
-        y_ = (np.max(self.problem.nodal_coordinates[:, 1]) + np.min(self.problem.nodal_coordinates[:, 1]))/2
+        x_ = (np.max(self.problem.nodal_coordinates[:, 0]) + np.min(self.problem.nodal_coordinates[:, 0])) / 2
+        y_ = (np.max(self.problem.nodal_coordinates[:, 1]) + np.min(self.problem.nodal_coordinates[:, 1])) / 2
 
         w = self.canvas.width
         h = self.canvas.height
 
         a = self.problem.model_size()*0.7
 
-        r0 = np.array([x_, y_, 1]) - np.array([a/2, a/2, 0])  # Problem bounding square SW corner
-        r0_ = np.array([w/5, 4*h/5, 1])  # Canvas subsquare SW corner
+        r0 = np.array([x_, y_, 1]) - np.array([a / 2, a / 2, 0])  # Problem bounding square SW corner
+        r0_ = np.array([w / 5, 4 * h / 5, 1])  # Canvas subsquare SW corner
 
         r = np.array([x_, y_, 1])  # Problem midpoint
-        r_ = np.array([w/5, 4*h/5, 1]) + np.array([h/3, -h/3, 0])  # Canvas subsquare midpoint
+        r_ = np.array([w / 5, 4 * h / 5, 1]) + np.array([h / 3, -h / 3, 0])  # Canvas subsquare midpoint
 
-        r1 = np.array([x_, y_, 1]) + np.array([0, a/2, 0])  # Problem bounding square N centerpoint
-        r1_ = r_ + np.array([0, -h/3, 0])  # Canvas subsquare N centerpoint
+        r1 = np.array([x_, y_, 1]) + np.array([0, a / 2, 0])  # Problem bounding square N centerpoint
+        r1_ = r_ + np.array([0, -h / 3, 0])  # Canvas subsquare N centerpoint
 
         R = np.array([r0, r, r1]).T
         R_ = np.array([r0_, r_, r1_]).T
@@ -398,9 +400,9 @@ class DSS:
     def move_to(self, xy=(50, -150)):
         # Moves the problem csys origin to canvas csys (xy)
         x,y = xy
-        self.canvas.transformation_matrix[0:3,2] = np.array([self.canvas.transformation_matrix[0,0]*(x-1),
-                                                      self.canvas.transformation_matrix[1,1]*(y-1),
-                                                      1])
+        self.canvas.transformation_matrix[0:3,2] = np.array([self.canvas.transformation_matrix[0, 0] * (x - 1),
+                                                                           self.canvas.transformation_matrix[1,1] * (y-1),
+                                                                           1])
         self.draw_canvas()
 
     # Mechanical functions
@@ -458,7 +460,7 @@ class DSS:
         self.prev_y = None
 
     def new_problem(self):
-        self.problem = Problem()
+        self.problem = problem.Problem()
         self.draw_canvas()
 
     def _printcoords(self, event):
@@ -510,7 +512,7 @@ class LoadInputMenu(DSSInputMenu):
             entry.grid(row=idx+1, column=1)
 
         for idx, key in enumerate(entrykeys):
-            tk.Label(self.top, text=key).grid(row=idx+1)
+            tk.Label(self.top, text=key).grid(row=idx + 1)
 
         for idx, entry in enumerate((self.e_fx, self.e_fy, self.e_m)):
             try:
@@ -536,7 +538,7 @@ class LoadInputMenu(DSSInputMenu):
         self.top.destroy()
 
 class DistrLoadInputMenu(DSSInputMenu):
-    def __init__(self, window, root, problem, r1 = np.array([0,0]), r2 = np.array([0,0])):
+    def __init__(self, window, root, problem, r1 = np.array([0, 0]), r2 = np.array([0, 0])):
         """
         :param window: The DSSolver main window (passed as 'self' from class Window)
         :param root: root is the root = tkinter.Tk() (passed as 'self.root')
@@ -555,7 +557,7 @@ class DistrLoadInputMenu(DSSInputMenu):
             entry.grid(row=idx+1, column=1)
 
         for idx, key in enumerate(entrykeys):
-            tk.Label(self.top, text=key).grid(row=idx+1)
+            tk.Label(self.top, text=key).grid(row=idx + 1)
 
         self.e_r1.insert(0, '{},{}'.format(r1[0], r1[1]))
         self.e_r2.insert(0, '{},{}'.format(r2[0], r2[1]))
@@ -577,7 +579,7 @@ class DistrLoadInputMenu(DSSInputMenu):
         self.top.destroy()
 
 class BeamInputMenu(DSSInputMenu):
-    def __init__(self, window, root, problem, def_r1=np.array([0,0]), def_r2=np.array([1000,0])):
+    def __init__(self, window, root, problem, def_r1=np.array([0, 0]), def_r2=np.array([1000, 0])):
         """
         :param window: The DSSolver main window (passed as 'self' from class Window)
         :param root: root is the root = tkinter.Tk() (passed as 'self.root')
@@ -596,8 +598,8 @@ class BeamInputMenu(DSSInputMenu):
         self.nodeframe.grid_columnconfigure(0, weight=1)
 
         self.morenodes = tk.Button(self.top,
-                                   text='+1 \n node',
-                                   command=lambda: self.more_nodes())
+                                          text='+1 \n node',
+                                          command=lambda: self.more_nodes())
         self.morenodes.grid(row=0, column=2)
 
         self.n = 0
@@ -613,7 +615,7 @@ class BeamInputMenu(DSSInputMenu):
             entry.grid(row=idx+2, column=1, columnspan=2)
 
         for idx, key in enumerate(entrykeys):
-            tk.Label(self.top, text=key).grid(row=idx+2)
+            tk.Label(self.top, text=key).grid(row=idx + 2)
 
         defaults = (1e5, 2e5, 1e5, 4)
         for value, entry in zip(defaults, (self.e_A, self.e_E, self.e_I, self.e_n)):
@@ -625,8 +627,8 @@ class BeamInputMenu(DSSInputMenu):
         self.e_r1.focus_set()
 
         self.secmgr = tk.Button(self.top,
-                                text='Section \n manager',
-                                command=lambda: SectionManager(bip=self,
+                                       text='Section \n manager',
+                                       command=lambda: SectionManager(bip=self,
                                                                window=self.window,
                                                                root=self.root))
         self.secmgr.grid(row=0, column=1, columnspan=1, sticky='e')
@@ -642,10 +644,10 @@ class BeamInputMenu(DSSInputMenu):
         self.k = tk.IntVar()
 
         b1 = tk.Radiobutton(self.top, text='Beam', variable=self.k, value=1,
-                            command=lambda: self.check_choice())#.grid(row=8, column=1)
+                                   command=lambda: self.check_choice())#.grid(row=8, column=1)
         b1.grid(row=9, column=1)
         b2 = tk.Radiobutton(self.top, text='Rod', variable=self.k, value=2,
-                            command=lambda: self.check_choice())#.grid(row=8, column=2)
+                                   command=lambda: self.check_choice())#.grid(row=8, column=2)
         b2.grid(row=9, column=2)
         self.k.set(1)
         self.check_choice()
@@ -667,7 +669,7 @@ class BeamInputMenu(DSSInputMenu):
         self.__setattr__('e_r{}'.format(self.n+1), tk.Entry(self.nodeframe))
         self.__getattribute__('e_r{}'.format(self.n+1)).grid(row=self.n, column=1, columnspan=2, sticky='e')
         #.grid(row=self.n, column=1, columnspan=2))
-        tk.Label(self.nodeframe, text='Node {}'.format(self.n+1)).grid(row=self.n, column=0, sticky='ew')
+        tk.Label(self.nodeframe, text='Node {}'.format(self.n + 1)).grid(row=self.n, column=0, sticky='ew')
         self.n += 1
 
     def cleanup(self):
@@ -724,7 +726,7 @@ class SectionManager(DSSInputMenu):
             entry.grid(row=idx+2, column=1)
 
         for idx, key in enumerate(entrykeys):
-            tk.Label(self.top, text=key).grid(row=idx+2)
+            tk.Label(self.top, text=key).grid(row=idx + 2)
 
         self.dim3.insert(0, 0)
         self.dim4.insert(0, 0)
@@ -765,8 +767,8 @@ class SectionManager(DSSInputMenu):
             self.A = (dim1*dim2) - (dim3*dim4)
             self.z = (dim2/2)
         elif self.sec.get() == 'Circular':
-            self.I = np.pi/4 * ((dim1/2)**4 - (dim2/2)**4)
-            self.A = np.pi * (dim1**2 - dim2**2)
+            self.I = np.pi / 4 * ((dim1 / 2) ** 4 - (dim2 / 2) ** 4)
+            self.A = np.pi * (dim1 ** 2 - dim2 ** 2)
             self.z = dim1/2
         elif self.sec.get() == 'I-beam':
             self.I = 1/12 * ((dim1 * dim3**3)
@@ -804,7 +806,7 @@ class BeamManager:
 
         self.e_A.insert(0, self.problem.elements[element_id].A)
 
-if True or __name__ == '__main__':
+if __name__ == '__main__':
     #self.icon = 'dss_icon.ico' if _platform == 'win32' or _platform == 'win64' else '@dss_icon.xbm'
     if sys.platform == 'win32' or sys.platform == 'win64':
         icon = os.getcwd() + '/gfx/dss_icon.ico'
@@ -824,9 +826,6 @@ if True or __name__ == '__main__':
                           isinstance(cls, type) and issubclass(cls, plugin_base.DSSPlugin))
         for cls in plugin_classes:
             plugin_list.append(cls)
-            #cls.load_plugin(dss)
-            # instance = cls.create_instance(dss)
-            # instance.load_plugin()
 
 
 
@@ -835,9 +834,9 @@ if True or __name__ == '__main__':
 
 
 
-    p = Problem()
+    p = problem.Problem()
     root = tk.Tk()
-    dss = DSS(root, problem=p, plugins=plugin_list)
+    dss = DSSGUI(root, problem=p, plugins=plugin_list)
     dss.autoscale()
 
     root.mainloop()

@@ -1,9 +1,6 @@
-from typing import Dict
-
 import numpy as np
-import tkinter as tk
 
-from extras import *
+import extras
 from plugin_base import DSSPlugin
 
 class DSSModelObject(DSSPlugin):
@@ -61,7 +58,7 @@ class Node(DSSModelObject):
         self.x, self.y = self.x+dx, self.y+dy
         self.r = np.array([self.x, self.y])
 
-    def draw_on_canvas(self, canvas:DSSCanvas, **kwargs):
+    def draw_on_canvas(self, canvas:extras.DSSCanvas, **kwargs):
         canvas.draw_node(self.r, 2.5, **kwargs)
 
         # If lump force, draw an arrow
@@ -71,7 +68,7 @@ class Node(DSSModelObject):
         if self.settings['Boundary conditions']:
             self.draw_boundary_condition(canvas, **kwargs)
 
-    def draw_loads(self, canvas:DSSCanvas):
+    def draw_loads(self, canvas:extras.DSSCanvas):
         scale = 100
         pos = self.r
         if np.any(np.round(self.loads[0:2])):
@@ -98,7 +95,7 @@ class Node(DSSModelObject):
                              text='{}'.format(self.loads[2]),
                              anchor='ne', tag='mech')
             
-    def draw_boundary_condition(self, canvas:DSSCanvas):
+    def draw_boundary_condition(self, canvas:extras.DSSCanvas):
         scale = 50
         linewidth = 2
         pos = self.r
@@ -238,7 +235,7 @@ class FiniteElement2Node(DSSModelObject):
     def transform(self):
         e1 = ((self.node2.r + self.node2.displacements[:2]) -
               (self.node1.r + self.node1.displacements[0:2])) / self._deformed_length()
-        e2 = R(np.deg2rad(90)) @ e1 # TODO: Just make it like [-e2, e1] or whatever
+        e2 = extras.R(np.deg2rad(90)) @ e1 # TODO: Just make it like [-e2, e1] or whatever
         T = np.array([[*e1, 0, *np.zeros(3)],
                       [*e2, 0, *np.zeros(3)],
                       [0, 0, 1,*np.zeros(3)],
@@ -294,8 +291,8 @@ class FiniteElement2Node(DSSModelObject):
         tan_e = (self.node2.r - self.node1.r)/undeformed_length
         tan_ed = (self.node2.r + self.node2.displacements[0:2] -
                   self.node1.r - self.node1.displacements[0:2])/self._deformed_length()
-        tan_1 = R(self.node1.displacements[2])@tan_e
-        tan_2 = R(self.node2.displacements[2])@tan_e
+        tan_1 = extras.R(self.node1.displacements[2])@tan_e
+        tan_2 = extras.R(self.node2.displacements[2])@tan_e
 
         th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
         th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])
