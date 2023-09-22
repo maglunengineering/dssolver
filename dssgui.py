@@ -114,7 +114,7 @@ class DSSGUI:
         self.menus['Edit'] = menu_edit
         topmenu.add_cascade(label='Edit', menu=menu_edit)
         menu_edit.add_command(label='Create element(s)',
-                              command=lambda: BeamInputMenu(self, self.root, self.problem))
+                              command=lambda: BeamInputMenu(self, self.problem))
         menu_edit.add_command(label='Auto rotation lock',
                               command=lambda: self.problem.auto_rotation_lock())
         menu_edit.add_separator()
@@ -423,7 +423,7 @@ class DSSGUI:
 
         elif self.r1 is not None and self.r2 is None:  # If r1 does exist and r2 does not exist
             self.r2 = np.array(r)
-            DistrLoadInputMenu(self, self.root, self.problem,
+            DistrLoadInputMenu(self, self.problem,
                                self.r1,
                                self.r2)
             self.r1 = self.r2 = None
@@ -485,16 +485,15 @@ class DSSGUI:
         self.autoscale()
 
 class DSSInputMenu:
-    def __init__(self, window, root, problem, *args, **kwargs):
+    def __init__(self, window, problem, *args, **kwargs):
         self.top = tk.Toplevel(root)
         self.top.iconbitmap(window.icon)
 
         self.window = window
-        self.root = root
         self.problem = problem
 
 class LoadInputMenu(DSSInputMenu):
-    def __init__(self, window, root, problem):
+    def __init__(self, window, problem):
         """
         :param window: The DSSolver main window (passed as 'self' from class Window)
         :param root: root is the root = tkinter.Tk() (passed as 'self.root')
@@ -538,13 +537,13 @@ class LoadInputMenu(DSSInputMenu):
         self.top.destroy()
 
 class DistrLoadInputMenu(DSSInputMenu):
-    def __init__(self, window, root, problem, r1 = np.array([0, 0]), r2 = np.array([0, 0])):
+    def __init__(self, window, problem, r1 = np.array([0, 0]), r2 = np.array([0, 0])):
         """
         :param window: The DSSolver main window (passed as 'self' from class Window)
         :param root: root is the root = tkinter.Tk() (passed as 'self.root')
         :param problem: Instance of the Problem class (passed as 'self.problem')
         """
-        super().__init__(window, root, problem)
+        super().__init__(window, problem)
         self.top.winfo_toplevel().title('Apply distributed load')
 
         self.label = tk.Label(self.top, text='Apply distributed load')
@@ -579,13 +578,12 @@ class DistrLoadInputMenu(DSSInputMenu):
         self.top.destroy()
 
 class BeamInputMenu(DSSInputMenu):
-    def __init__(self, window, root, problem, def_r1=np.array([0, 0]), def_r2=np.array([1000, 0])):
+    def __init__(self, window, problem, def_r1=np.array([0, 0]), def_r2=np.array([1000, 0])):
         """
         :param window: The DSSolver main window (passed as 'self' from class Window)
-        :param root: root is the root = tkinter.Tk() (passed as 'self.root')
         :param problem: Instance of the Problem class (passed as 'self.problem')
         """
-        super().__init__(window, root, problem)
+        super().__init__(window, problem)
 
         self.top.winfo_toplevel().title('Create element(s)')
         self.top.columnconfigure(1, weight=1)
@@ -785,27 +783,6 @@ class SectionManager(DSSInputMenu):
 
         self.top.destroy()
 
-class BeamManager:
-    def __init__(self, window, root, element_id):
-        """
-        :param bip: The BeamInputMenu window (passed as 'self' from class BeamInputMenu)
-        :param window: The DSSolver main window (passed as 'self' from class Window)
-        :param root: root is the root = tkinter.Tk() (passed as 'self.root')
-        :param problem: Instance of the Problem class (passed as 'self.problem')
-        """
-        top = self.top = tk.Toplevel(root)
-        self.top.winfo_toplevel().title('Properties: Element no. {}'.format(element_id))
-        self.top.iconbitmap(window.icon)
-
-        self.window = window
-        self.root = root
-
-        entrykeys = ['Area', 'Elastic modulus', '2nd mmt of area']
-        entries = [self.e_A, self.e_E, self.e_I] = \
-            [tk.Entry(top) for _ in range(3)]
-
-        self.e_A.insert(0, self.problem.elements[element_id].A)
-
 if __name__ == '__main__':
     #self.icon = 'dss_icon.ico' if _platform == 'win32' or _platform == 'win64' else '@dss_icon.xbm'
     if sys.platform == 'win32' or sys.platform == 'win64':
@@ -826,11 +803,6 @@ if __name__ == '__main__':
                           isinstance(cls, type) and issubclass(cls, plugin_base.DSSPlugin))
         for cls in plugin_classes:
             plugin_list.append(cls)
-
-
-
-
-
 
 
 
