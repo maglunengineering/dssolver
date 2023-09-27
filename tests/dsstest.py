@@ -1,9 +1,9 @@
 import unittest
 import time
-import problem
-import solvers
+from core import problem
+from plugins import solvers
 
-from elements import *
+from core.elements import *
 
 class ElementTest(unittest.TestCase):
     def setUp(self):

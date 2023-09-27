@@ -7,7 +7,7 @@ import numpy as np
 from PySide6 import QtCore, QtWidgets, QtGui
 
 dirname = os.path.dirname(QtCore.__file__)
-plugin_path = os.path.join(dirname, 'plugins', 'platforms')
+plugin_path = os.path.join(dirname, '../tkinter/plugins', 'platforms')
 os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = plugin_path
 
 

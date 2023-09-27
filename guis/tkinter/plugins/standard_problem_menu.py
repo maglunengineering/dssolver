@@ -4,7 +4,7 @@ import tkinter as tk
 import numpy as np
 
 sys.path.append(os.path.dirname(__file__))
-from plugin_base import DSSPlugin
+from core.plugin_base import DSSPlugin
 
 class StandardProblemMenu(DSSPlugin):
     instantiate = True

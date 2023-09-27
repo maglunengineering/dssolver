@@ -2,8 +2,8 @@ from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
-from elements import FiniteElement2Node, Node, Rod, Beam, beta
-import results
+from core.elements import FiniteElement2Node, Node, Rod, Beam, beta
+import core.results as results
 
 np.set_printoptions(suppress=True)
 
