@@ -32,20 +32,6 @@ class Node(DSSModelObject):
     def r(self):
         return self._r
 
-    @property
-    def rr(self):
-        return self._r + self.displacements[0:2]
-
-    @property
-    def abs_forces(self):
-        self.forces = np.array([0,0,0])
-        for element in self.elements:
-            if np.array_equal(element.r1, self.r):
-                self.forces = self.forces + np.abs(element.forces[0:3]) / 2
-            elif np.array_equal(element.r2, self.r):
-                self.forces = self.forces + np.abs(element.forces[3:6]) / 2
-        return self.forces + np.abs(self.loads/2)
-
     def connected_nodes(self):
         other_nodes = []
         for element in self.elements:
@@ -53,10 +39,6 @@ class Node(DSSModelObject):
                 if not node == self:
                     other_nodes.append(node)
         return other_nodes
-
-    def translate(self, dx, dy):
-        self.x, self.y = self.x+dx, self.y+dy
-        self.r = np.array([self.x, self.y])
 
     def draw_on_canvas(self, canvas:extras.DSSCanvas, **kwargs):
         canvas.draw_node(self.r, 2.5, **kwargs)

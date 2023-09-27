@@ -66,23 +66,6 @@ class Problem:
             self.nodes.append(new_node)
             return new_node
 
-    def remove_orphan_nodes(self):
-        for node in self.nodes.copy():
-            if len(node.elements) == 0:
-                self.nodes.remove(node)
-        self.reassign_dofs()
-
-    def remove_element(self, r1, r2):
-        try:
-            element = self.elements[self.beam_at(r1, r2)]
-            for node in element.nodes:
-                node.elements.remove(element)
-            self.elements.remove(self.elements[self.beam_at(r1, r2)])
-            print('Removed element at', r1, r2)
-            self.remove_orphan_nodes()
-        except:
-            print('Failed to remove; No element at', r1, r2)
-
     def node_at(self, r):
         r = np.asarray(r)
         for node in self.nodes:
@@ -108,23 +91,6 @@ class Problem:
     def upd_obj_displacements(self):
         for node in self.nodes:
             node.displacements = self.displacements[node.dofs]
-
-    def boundary_condition(self, r, bctype):
-        """
-        :param r: Location of node
-        :param bctype: 'fixed', 'pinned', 'roller', 'lock'
-        """
-        r = np.asarray(r)
-        if bctype == 'fixed':
-            self.fix(self.node_at(r))
-        elif bctype == 'pinned':
-            self.pin(self.node_at(r))
-        elif bctype == 'roller':
-            self.roller(self.node_at(r))
-        elif bctype == 'lock':
-            self.lock(self.node_at(r))
-        elif bctype == 'glider':
-            self.glider(self.node_at(r))
 
     def fix(self, node):
         node.draw = True
@@ -497,20 +463,6 @@ class Problem:
             p[k] = (self.strain_energy(delta_disp) - self.strain_energy()) / dui
         return p  # p =~ self.K() @ self.displacements hopefully
 
-    def work_energy(self):
-        return np.dot(self.loads, self.displacements)/2
-    
-    def internal_forces(self, reduced=True):
-        f_int = np.zeros(3*len(self.nodes))
-        for beam in self.elements:
-            f_beam = beam.Ex(3*len(self.nodes)) @ beam.k @ beam.displacements
-            f_int = f_int + f_beam
-        if reduced:
-            free_dofs = np.delete(np.arange(3 * len(self.nodes)), self.constrained_dofs)
-            return f_int[free_dofs]
-        else:
-            return f_int
-
     def plot(self):
         nodal_coordinates = np.array([0,0])
 
@@ -594,12 +546,6 @@ class Problem:
         self.anim = anm.FuncAnimation(fig, animate_,
                                  frames=id.shape[0], interval=interval, blit=False)
         plt.show()
-
-    def open_problem(self):
-        pass
-
-    def save_problem(self):
-        pass
 
     def clone(self):
         node_clones = {}
