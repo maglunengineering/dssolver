@@ -2,6 +2,7 @@ import collections
 import tkinter as tk
 import numpy as np
 from numpy.linalg import solve
+import drawing
 
 # a subclass of Canvas for dealing with resizing of windows
 # credit: ebarr @ StackOverflow
@@ -104,7 +105,7 @@ class DSSCanvas(tk.Canvas):
     def redraw(self):
         self.delete('all')
         for obj in self.objects:
-            obj.draw_on_canvas(self)
+            drawing.get_drawer(obj).draw_on_canvas(obj, self)
 
     def move(self, event):
         if self.prev_x is None or self.prev_y is None:
@@ -169,7 +170,7 @@ class DSSCanvas(tk.Canvas):
 
     def add_object(self, obj):
         self.objects.append(obj)
-        obj.draw_on_canvas(self)
+        drawing.get_drawer(obj).draw_on_canvas(obj, self)
 
     def scaleup(self, event):
         self.transformation_matrix[0:2, 0:2] = self.transformation_matrix[0:2, 0:2]*0.8

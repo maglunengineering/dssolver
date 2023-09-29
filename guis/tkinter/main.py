@@ -12,6 +12,7 @@ from guis.tkinter import extras
 from plugins import solvers
 
 from results_viewer import ResultsViewer
+from drawing import NodeDrawer, ElementDrawer
 
 np.set_printoptions(precision=2, suppress=True)
 inv = np.linalg.inv
@@ -284,11 +285,11 @@ class DSSGUI:
 
     def draw_elements(self):
         for element in self.problem.elements:
-            element.draw_on_canvas(self.canvas)
+            ElementDrawer.draw_on_canvas(element, self.canvas)
 
     def draw_nodes(self):
         for node in self.problem.nodes:
-            node.draw_on_canvas(self.canvas)
+            NodeDrawer.draw_on_canvas(node, self.canvas)
 
     def draw_shear_diagram(self):
         max_shear = np.max(np.abs(np.array([self.problem.forces[:, 1], self.problem.forces[:, 4]])))
