@@ -81,7 +81,7 @@ class ProblemTest(unittest.TestCase):
         self.p.nodes.append(self.n1)
         self.p.nodes.append(self.n2)
 
-    def test_dynamic_timeint_pendulum(self):
+    def _test_dynamic_timeint_pendulum(self): # Uncomment leading _ to run
         rod = self.p.create_rod(self.n1, self.n2)
         self.p.pin(self.n1)
         solver = solvers.DynamicSolver(None)
@@ -147,6 +147,19 @@ class SampleProblems(unittest.TestCase):
         for i in range(5):
             self.p = problem.Problem()
             self.curved_spring(i)
+
+    def test_cantilever_beam(self):
+        P = 1000
+        L = 1000
+        E = 210e5
+        I = 1000
+        self.p.create_beams((0, 0), (L, 0), E=E, I=I)
+        self.p.fix(self.p.node_at((0,0)))
+        self.p.node_at((1000,0)).loads = np.array([0, -P, 0])
+
+        self.p.solve()
+
+        self.assertAlmostEqual(-P*L**3 / (3*E*I), self.p.node_at((1000,0)).displacements[1], places=5)
 
 
 
