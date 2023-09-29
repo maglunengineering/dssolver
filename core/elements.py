@@ -1,6 +1,6 @@
 import numpy as np
 
-from core import extras
+from guis.tkinter import extras
 from core.plugin_base import DSSPlugin
 
 class DSSModelObject(DSSPlugin):

@@ -1,5 +1,5 @@
 import tkinter as tk
-from core.extras import DSSCanvas, DSSSettingsFrame, DSSListbox
+from guis.tkinter.extras import DSSCanvas, DSSSettingsFrame, DSSListbox
 from core.results import Results
 
 class ResultsViewer:
