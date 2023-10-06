@@ -162,8 +162,9 @@ class DSSGUI:
 
         self.lm = tk.Menu(self.rcm, tearoff=0)  # Load menu
         self.rcm.add_cascade(label='Apply load', menu=self.lm)
+
         self.lm.add_command(label='Apply point load at {}'.format(self.closest_node_label),
-                            command=lambda: LoadInputMenu(self, self.root, self.problem))
+                            command=lambda: LoadInputMenu(self, self.problem))
         self.lm.add_command(label='Apply distributed load from {}'.format(self.closest_node_label),
                             command=lambda: self.start_or_end_distr_load(r=self.closest_node_label))
 
@@ -422,7 +423,8 @@ class DSSGUI:
 
         elif self.r1 is not None and self.r2 is None:  # If r1 does exist and r2 does not exist
             self.r2 = np.array(r)
-            DistrLoadInputMenu(self, self.problem,
+            DistrLoadInputMenu(self,
+                               self.problem,
                                self.r1,
                                self.r2)
             self.r1 = self.r2 = None
@@ -498,7 +500,7 @@ class LoadInputMenu(DSSInputMenu):
         :param root: root is the root = tkinter.Tk() (passed as 'self.root')
         :param problem: Instance of the Problem class (passed as 'self.problem')
         """
-        super().__init__(window, root, problem)
+        super().__init__(window, problem)
         self.top.winfo_toplevel().title('Apply load')
         self.label = tk.Label(self.top, text='Apply load at node')
         self.label.grid(row=0, column=0)
