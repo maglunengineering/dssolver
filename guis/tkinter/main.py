@@ -27,7 +27,6 @@ class DSSGUI:
 
         self.mainframe = tk.Frame(self.root, bg='white')
         self.mainframe.pack(fill=tk.BOTH, expand=True)
-        #self.mainframe.grid(row=0, column=0, sticky='NSEW')
         self.mainframe.winfo_toplevel().title('DSSolver')
         self.topmenu = None
         self.canvas = None  # Changed later on
@@ -44,7 +43,6 @@ class DSSGUI:
         self.closest_node_label = None
         # [problem coords] = [[T]] @ [canvas coords]
         self.tx = 0; self.ty = 0  # Translation
-        self.prev_x = None; self.prev_y = None
         self.zoom = 1
         self.ratio = 1
 
@@ -154,8 +152,6 @@ class DSSGUI:
 
         self.lm.add_command(label='Apply point load at {}'.format(self.closest_node_label),
                             command=lambda: LoadInputMenu(self, self.problem))
-        self.lm.add_command(label='Apply distributed load from {}'.format(self.closest_node_label),
-                            command=lambda: self.start_or_end_distr_load(r=self.closest_node_label))
 
         self.bcm = tk.Menu(self.rcm, tearoff=0)  # Boundary condition menu
         self.rcm.add_cascade(label='Apply boundary condition', menu=self.bcm)
@@ -178,9 +174,6 @@ class DSSGUI:
         self.bm.add_command(label='Start element at closest',
                             command=lambda: self.start_or_end_beam
                              (r=self.closest_node_label))
-
-        self.rcm.add_command(label='Query node at {}'.format(self.closest_node_label),
-                             command=lambda: self.query_node(self.closest_node_label))
 
     def build_canvas(self):
         self.canvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
@@ -237,14 +230,10 @@ class DSSGUI:
         self.bm.entryconfigure(1, label='Start element at closest: {}'.format(self.closest_node_label))
 
         self.lm.entryconfigure(0, label='Apply point load at {}'.format(self.closest_node_label))
-        self.lm.entryconfigure(1, label='Apply distributed load from {}'.format(self.closest_node_label))
-
-        self.rcm.entryconfigure(3, label='Query node at {}'.format(self.closest_node_label))
 
         if self.r1 is not None and np.any(self.r2) is None:  # End distr loads or elements
             self.bm.entryconfigure(0, label='End element at {}'.format((self.canvas.transformation_matrix@[event.x, event.y, 1])[0:2]))
             self.bm.entryconfigure(1, label='End element at closest: {}'.format(self.closest_node_label))
-            self.lm.entryconfigure(1, label='End distributed load at {}'.format(self.closest_node_label))
 
         self.rcm.grab_release()
         self.rcm.tk_popup(event.x_root, event.y_root, 0)
@@ -343,11 +332,6 @@ class DSSGUI:
             self.canvas.create_oval(*np.hstack((node_r - node_radius, node_r + node_radius)),
                                     fill='red', tag='mech')
 
-    def query_node(self, node):
-        self.problem.nodes[self.problem.node_at(node)].draw = not self.problem.nodes[self.problem.node_at(node)].draw
-        self.draw_canvas()
-        pass
-
     # Scaling and moving functions
     def autoscale(self):
         # TODO: Replace with DSSCanvas.autoscale when objects are added to the canvas
@@ -393,18 +377,6 @@ class DSSGUI:
             BeamInputMenu(self, self.root, self.problem,
                           def_r1=self.r1,
                           def_r2=self.r2)
-            self.r1 = self.r2 = None
-
-    def start_or_end_distr_load(self, r):
-        if self.r1 is None:  # If r1 does not exist
-            self.r1 = np.array(r)
-
-        elif self.r1 is not None and self.r2 is None:  # If r1 does exist and r2 does not exist
-            self.r2 = np.array(r)
-            DistrLoadInputMenu(self,
-                               self.problem,
-                               self.r1,
-                               self.r2)
             self.r1 = self.r2 = None
 
     def _closest_node(self, xy):
@@ -511,47 +483,6 @@ class LoadInputMenu(DSSInputMenu):
 
         self.window.draw_canvas()
 
-        self.top.destroy()
-
-class DistrLoadInputMenu(DSSInputMenu):
-    def __init__(self, window, problem, r1 = np.array([0, 0]), r2 = np.array([0, 0])):
-        """
-        :param window: The DSSolver main window (passed as 'self' from class Window)
-        :param root: root is the root = tkinter.Tk() (passed as 'self.root')
-        :param problem: Instance of the Problem class (passed as 'self.problem')
-        """
-        super().__init__(window, problem)
-        self.top.winfo_toplevel().title('Apply distributed load')
-
-        self.label = tk.Label(self.top, text='Apply distributed load')
-        self.label.grid(row=0, column=0)
-
-        entrykeys = ['Starting node', 'Ending node', 'Load magnitude']
-        entries = [self.e_r1, self.e_r2, self.e_load] = [tk.Entry(self.top) for _ in range(3)]
-
-        for idx, entry in enumerate(entries):
-            entry.grid(row=idx+1, column=1)
-
-        for idx, key in enumerate(entrykeys):
-            tk.Label(self.top, text=key).grid(row=idx + 1)
-
-        self.e_r1.insert(0, '{},{}'.format(r1[0], r1[1]))
-        self.e_r2.insert(0, '{},{}'.format(r2[0], r2[1]))
-        self.e_load.insert(0, '0')
-
-        self.e_r2.focus_set()
-
-        self.b = tk.Button(self.top, text='Apply load', command=self.cleanup)
-        self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
-        self.b.grid(row=4, column=0)
-
-    def cleanup(self):
-        r1 = np.array(eval(self.e_r1.get()))
-        r2 = np.array(eval(self.e_r2.get()))
-        load = float(eval(self.e_load.get()))
-        self.problem.load_members_distr(r1=r1, r2=r2, load=load)
-
-        self.window.draw_canvas()
         self.top.destroy()
 
 class BeamInputMenu(DSSInputMenu):

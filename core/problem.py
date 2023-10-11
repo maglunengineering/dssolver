@@ -127,39 +127,6 @@ class Problem:
         node.loads = np.array(load)
         node.draw = True
 
-    def load_member_distr(self, member_id, load):
-        # Distributed load
-        beam = self.elements[member_id]  # Beam object
-        beam.member_loads = -beam.beta(beam.angle).T @ np.array([0,
-                                      load * beam.length/2,
-                                      load * beam.length**2 / 12,
-                                      0,
-                                      load*beam.length/2,
-                                      -load * beam.length**2 / 12])
-        beam.distributed_load = load if load != 0 else False  # For drawing purposes
-        # Distr load: 0, pL/2, pLL/12, 0, pL/2, -pLL/12
-
-    def load_members_distr(self, r1, r2, load):
-        # Distributed load on colinear elements from r1 to r2
-        starting_node = self.node_at(r1)
-        ending_node = self.node_at(r2)
-        r1 = np.array(r1); r2 = np.array(r2)
-        dir = (r2 - r1) / np.linalg.norm(r2 - r1)
-
-        checking_node = starting_node
-        while checking_node != ending_node:
-            # OBS! Will loop forever if it fails
-            for possible_next_node in checking_node.connected_nodes():
-                dir_to_node = (possible_next_node.r - checking_node.r)/ \
-                              np.linalg.norm(possible_next_node.r - checking_node.r)
-                if np.isclose(dir @ dir_to_node, 1):
-                    # possible_next_node is in fact the next node
-                    self.load_member_distr(self.beam_at(possible_next_node.r,
-                                                        checking_node.r), load)
-                    checking_node = possible_next_node
-
-        print('Done adding loads')
-
     def model_size(self):
         xy = self.nodal_coordinates
         if not np.any(xy):
