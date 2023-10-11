@@ -65,7 +65,7 @@ class DSSGUI:
         self.build_bc_menu()  # Outsourced
 
         if not self.problem.nodes:
-            self.problem.get_or_create_node((0,0), draw=True)
+            self.problem.get_or_create_node((0,0))
         self.draw_canvas()
 
         for plugin in self.plugins.values():

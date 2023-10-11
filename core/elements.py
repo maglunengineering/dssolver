@@ -6,7 +6,7 @@ class DSSModelObject(DSSPlugin):
     pass
 
 class Node(DSSModelObject):
-    def __init__(self, xy, draw=False):
+    def __init__(self, xy):
         self.x, self.y = xy
         self._r = np.array(xy)
 
@@ -17,8 +17,6 @@ class Node(DSSModelObject):
         self.number = None  # (node id) assigned on creation
         self.dofs:np.ndarray = None  # self.dofs (dof1, dof2, dof3) assigned on creation
         self.boundary_condition = None  # 'fixed', 'pinned', 'roller', 'locked', 'glider'
-
-        self.draw = draw  # Node is not drawn unless it is interesting
 
     def add_element(self, beam):
         self.elements.append(beam)
@@ -36,27 +34,21 @@ class Node(DSSModelObject):
         return other_nodes
 
     def fix(self):
-        self.draw = True
         self.boundary_condition = 'fixed'
 
     def pin(self):
-        self.draw = True
         self.boundary_condition = 'pinned'
 
     def roller(self):
-        self.draw = True
         self.boundary_condition = 'roller'
 
     def roller90(self):
-        self.draw = True
         self.boundary_condition = 'roller90'
 
     def lock(self):
-        self.draw = True
         self.boundary_condition = 'locked'
 
     def glider(self):
-        self.draw = True
         self.boundary_condition = 'glider'
 
     def copy(self):
@@ -73,7 +65,6 @@ class Node(DSSModelObject):
         return id(self)
 
 class FiniteElement2Node(DSSModelObject):
-
     def __init__(self, node1:Node, node2:Node, A:float):
         self.nodes = [node1, node2]
         self.node1 = node1
