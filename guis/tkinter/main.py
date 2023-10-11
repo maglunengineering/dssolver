@@ -443,17 +443,15 @@ class DSSGUI:
         :param bc: 'fixed', 'fix', 'pinned', 'locked', 'pin', 'roller', 'lock'
         """
         if bc == 'fix':
-            self.problem.fix(self.problem.node_at(self.closest_node_label))
+            self.problem.node_at(self.closest_node_label).fix()
         elif bc == 'pin':
-            self.problem.pin(self.problem.node_at(self.closest_node_label))
+            self.problem.node_at(self.closest_node_label).pin()
         elif bc == 'roller':
-            self.problem.roller(self.problem.node_at(self.closest_node_label))
+            self.problem.node_at(self.closest_node_label).roller()
         elif bc == 'locked':
-            self.problem.lock(self.problem.node_at(self.closest_node_label))
+            self.problem.node_at(self.closest_node_label).lock()
         elif bc == 'glider':
-            self.problem.glider(self.problem.node_at(self.closest_node_label))
-        else:
-            pass
+            self.problem.node_at(self.closest_node_label).glider()
         self.draw_canvas()
 
     def reset_prev(self, event):

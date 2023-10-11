@@ -53,7 +53,7 @@ class StandardProblemMenu(DSSPlugin):
     def cantilever_beam(self):
         self.dss.new_problem()
         self.dss.problem.create_beams((0, 0), (1000, 0), n=8)
-        self.dss.problem.fix(self.dss.problem.node_at((0, 0)))
+        self.dss.problem.node_at((0, 0)).fix()
         self.dss.autoscale()
 
     def deep_arch_half(self):
@@ -75,8 +75,8 @@ class StandardProblemMenu(DSSPlugin):
         p.constrained_dofs = np.array([0, 1, 3*N - 3, 3*N - 1])
         p.load_node(p.nodes[-1], np.array([0, -3600, 0]))
 
-        p.pin(p.nodes[0])
-        p.glider(p.nodes[-1])
+        p.nodes[0].pin()
+        p.nodes[-1].glider()
 
         self.dss.autoscale()
 
@@ -99,8 +99,8 @@ class StandardProblemMenu(DSSPlugin):
         #p.constrained_dofs = np.array([0, 1, 3*N-2, 3*N-1])
         p.load_node(p.nodes[len(p.nodes)//2], np.array([0, -1000, 0]))
 
-        p.pin(p.nodes[0])
-        p.pin(p.nodes[-1])
+        p.nodes[0].pin()
+        p.nodes[-1].pin()
 
         self.dss.autoscale()
 
@@ -110,8 +110,8 @@ class StandardProblemMenu(DSSPlugin):
         n1 = p.get_or_create_node((0,0))
         n2 = p.get_or_create_node((1000,200))
         p.create_beam(n1, n2, A=10)
-        p.pin(n1)
-        p.roller90(n2)
+        n1.pin()
+        n2.roller90()
         p.load_node(n2, np.array([0, -10000, 0]))
         self.dss.autoscale()
 
@@ -123,9 +123,9 @@ class StandardProblemMenu(DSSPlugin):
         n3 = p.get_or_create_node((1000, 600))
         p.create_beam(n1, n2, A=10)
         p.create_rod(n2, n3, A=0.05)
-        p.pin(n1)
-        p.roller90(n2)
-        p.glider(n3)
+        n1.pin()
+        n2.roller90()
+        n3.glider()
         p.load_node(n3, np.array([0, -4000, 0]))
         self.dss.autoscale()
 
@@ -139,10 +139,10 @@ class StandardProblemMenu(DSSPlugin):
         p.create_beam(n1, n2, A=10)
         p.create_rod(n2, n3, A=0.05)
         p.create_rod(n1, n4, A=0.05)
-        p.fix(n4)
-        p.roller90(n1)
-        p.roller90(n2)
-        p.glider(n3)
+        n4.fix()
+        n1.roller90()
+        n2.roller90()
+        n3.glider()
         p.load_node(n3, np.array([0, -4000, 0]))
         self.dss.autoscale()
 
@@ -152,8 +152,8 @@ class StandardProblemMenu(DSSPlugin):
         n1 = p.get_or_create_node((0,0))
         n2 = p.get_or_create_node((0,1000))
         p.create_rod(n1, n2, A=10)
-        p.glider(n1)
-        p.fix(n2)
+        n1.glider()
+        n2.fix()
         p.load_node(n1, np.array([0, 1e6, 0]))
 
         self.dss.autoscale()
@@ -170,8 +170,8 @@ class StandardProblemMenu(DSSPlugin):
         for r1, r2 in zip(node_points, node_points[1:]):
             p.create_beam(r1, r2)
 
-        p.pin(p.nodes[0])
-        p.fix(p.nodes[-1])
+        p.nodes[0].pin()
+        p.nodes[-1].fix()
         p.load_node(p.nodes[n//2], np.array([0, -200000, 0]))
         self.dss.autoscale()
 
@@ -181,7 +181,7 @@ class StandardProblemMenu(DSSPlugin):
         n1 = p.get_or_create_node((0, 0))
         n2 = p.get_or_create_node((1000, 0))
         p.create_rod(n1, n2, A=10)
-        p.pin(n1)
+        n1.pin()
 
         self.dss.autoscale()
 
@@ -189,13 +189,12 @@ class StandardProblemMenu(DSSPlugin):
         caller.new_problem()
         if model == 1:  # Cantilever beam, point load
             caller.problem.create_beams((0,0), (1000,0), n=4)
-            caller.problem.fix(caller.problem.node_at((0,0)))
-
+            caller.problem.node_at((0,0)).fix()
 
         if model == 2:  # Simply supported beam, no load
             caller.problem.create_beams((0,0), (1000,0))
-            caller.problem.pin(caller.problem.node_at((0,0)))
-            caller.problem.roller(caller.problem.node_at((1000,0)))
+            caller.problem.node_at((0,0)).pin()
+            caller.problem.node_at((1000,0)).roller()
 
 
         if model == 3:  # Fanned out cantilever elements with load=10 distr loads
@@ -203,7 +202,7 @@ class StandardProblemMenu(DSSPlugin):
                 caller.problem.create_beams((0,0),point, n=2)
                 caller.problem.load_members_distr((0,0),point, load=10)
 
-            caller.problem.fix(caller.problem.node_at((0,0)))
+            caller.problem.node_at((0,0)).fix()
 
         if model == 4: # Circular arch
             start = np.pi - np.arctan(600 / 800)
@@ -213,8 +212,8 @@ class StandardProblemMenu(DSSPlugin):
             node_points = 1000 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + np.array([800,-1600])
             for r1, r2 in zip(node_points, node_points[1:]):
                 caller.problem.create_beam(r1, r2, E=2.1e5, I=10**3/12, A=10)
-            caller.problem.pin(caller.problem.node_at((0,0)))
-            caller.problem.pin(caller.problem.node_at((1600,0)))
+            caller.problem.node_at((0,0)).pin()
+            caller.problem.node_at((1600,0)).pin()
             for node in caller.problem.nodes:
                 node.draw = False
 

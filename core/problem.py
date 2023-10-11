@@ -66,7 +66,7 @@ class Problem:
             self.nodes.append(new_node)
             return new_node
 
-    def node_at(self, r):
+    def node_at(self, r) -> Node:
         r = np.asarray(r)
         for node in self.nodes:
             if np.allclose(node.r, r):
@@ -92,29 +92,6 @@ class Problem:
         for node in self.nodes:
             node.displacements = self.displacements[node.dofs]
 
-    def fix(self, node):
-        node.draw = True
-        node.boundary_condition = 'fixed'
-
-    def pin(self, node):
-        node.draw = True
-        node.boundary_condition = 'pinned'
-
-    def roller(self, node):
-        node.draw = True
-        node.boundary_condition = 'roller'
-
-    def roller90(self, node):
-        node.boundary_condition = 'roller90'
-
-    def lock(self, node):
-        node.draw = True
-        node.boundary_condition = 'locked'
-
-    def glider(self, node):
-        node.draw = True
-        node.boundary_condition = 'glider'
-
     def custom(self, node, dofs):
         dofs = np.array(dofs)
         self.constrained_dofs += tuple(node.dofs[dofs])
@@ -127,7 +104,7 @@ class Problem:
         for node in self.nodes:
             if np.all([type(element)==Rod for element in node.elements])\
                     and node.boundary_condition is None:
-                self.lock(node.number)
+                node.lock()
 
     def remove_dofs(self):  # Interpret boundary conditions
         self.constrained_dofs = []

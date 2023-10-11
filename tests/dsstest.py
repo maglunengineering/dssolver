@@ -42,7 +42,7 @@ class ElementTest(unittest.TestCase):
         self.p.nodes.append(self.n1)
         self.p.nodes.append(self.n2)
         self.p.create_beam(self.n1, self.n2)
-        self.p.fix(self.n1)
+        self.n1.fix()
         f = 10
         self.p.load_node(self.n2, np.array([0, -f, 0]))
         self.p.reassign_dofs()
@@ -57,7 +57,7 @@ class ElementTest(unittest.TestCase):
         self.p.nodes.append(self.n1)
         self.p.nodes.append(self.n2)
         self.p.create_beam(self.n1, self.n2)
-        self.p.fix(self.n1)
+        self.n1.fix()
         f = 5
         self.p.load_node(self.n2, np.array([0, -f, 0]))
         self.p.reassign_dofs()
@@ -83,7 +83,7 @@ class ProblemTest(unittest.TestCase):
 
     def _test_dynamic_timeint_pendulum(self): # Uncomment leading _ to run
         rod = self.p.create_rod(self.n1, self.n2)
-        self.p.pin(self.n1)
+        self.n1.pin()
         solver = solvers.DynamicSolver(None)
         solver.solve_whoknows(self.p)
 
@@ -133,8 +133,8 @@ class SampleProblems(unittest.TestCase):
         for x1, x2, y1, y2 in zip(xx, xx[1:], yy, yy[1:]):
             self.p.create_beam(np.array((x1,y1)) ,np.array((x2,y2)), E=E, A=t*h, I=I, z=t/2)
 
-        self.p.roller(self.p.nodes[0])
-        self.p.pin(self.p.nodes[-1])
+        self.p.nodes[0].roller()
+        self.p.nodes[-1].pin()
         self.p.load_node(self.p.nodes[0], np.array([0.01, 0, 0]))
 
         res = self.p.solve()
@@ -154,7 +154,7 @@ class SampleProblems(unittest.TestCase):
         E = 210e5
         I = 1000
         self.p.create_beams((0, 0), (L, 0), E=E, I=I)
-        self.p.fix(self.p.node_at((0,0)))
+        self.p.node_at((0,0)).fix()
         self.p.node_at((1000,0)).loads = np.array([0, -P, 0])
 
         self.p.solve()

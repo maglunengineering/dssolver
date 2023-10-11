@@ -35,6 +35,29 @@ class Node(DSSModelObject):
                     other_nodes.append(node)
         return other_nodes
 
+    def fix(self):
+        self.draw = True
+        self.boundary_condition = 'fixed'
+
+    def pin(self):
+        self.draw = True
+        self.boundary_condition = 'pinned'
+
+    def roller(self):
+        self.draw = True
+        self.boundary_condition = 'roller'
+
+    def roller90(self):
+        self.draw = True
+        self.boundary_condition = 'roller90'
+
+    def lock(self):
+        self.draw = True
+        self.boundary_condition = 'locked'
+
+    def glider(self):
+        self.draw = True
+        self.boundary_condition = 'glider'
 
     def copy(self):
         new_node = Node(self.r)
