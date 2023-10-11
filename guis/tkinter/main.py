@@ -51,17 +51,6 @@ class DSSGUI:
         self.linewidth = 2.0
         self.scale = 50
         self.node_radius = 2.5
-
-        self.settings = {'shear': tk.BooleanVar(),
-                         'moment': tk.BooleanVar(),
-                         'highlight':tk.IntVar()}
-
-        for var in ('shear', 'moment'):
-            self.settings[var].set(False)
-
-        for var in self.settings.keys():
-            self.settings[var].trace_add('write', self.draw_canvas)
-
         self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
         if 'plugins' in kwargs:
             plugins: Iterable[plugin_base.DSSPlugin] = kwargs['plugins']
@@ -213,12 +202,13 @@ class DSSGUI:
 
         rsm_settings = tk.Frame(self.rsm, bg=color2, width=255)
         rsm_settings.grid(row=3, column=0, sticky='nw')
-        rsm_shm_label = tk.Label(rsm_settings, text='Show/hide', bg=color2)
-        rsm_shm_label.grid(row=0, column=0, columnspan=2, sticky='ew')
+        rsm_shm_label = tk.Label(rsm_settings, text='Settings', bg=color2)
+        rsm_shm_label.grid(row=0, column=1, columnspan=3, sticky='ew')
 
         buttons = ['Shear \n diagram', 'Moment \n diagram']
 
-        vars = [self.settings['shear'], self.settings['moment']]
+        #vars = [self.settings['shear'], self.settings['moment']]
+        vars = []
 
         i = 0
         for b,v in zip(buttons, vars):
@@ -269,18 +259,6 @@ class DSSGUI:
 
         self.draw_nodes()
         self.draw_elements()
-
-        if self.settings['highlight'].get() and self.rsm_view_elements:
-            self.draw_highlight(element_id =self.settings['highlight'].get() - 1)
-        elif self.settings['highlight'].get() and not self.rsm_view_elements:
-            self.draw_highlight(node_id =self.settings['highlight'].get() - 1)
-
-        if self.problem.solved:
-            if self.settings['shear'].get():
-                self.draw_shear_diagram()
-
-            if self.settings['moment'].get():
-                self.draw_moment_diagram()
 
         self.draw_csys()
 
@@ -626,8 +604,8 @@ class BeamInputMenu(DSSInputMenu):
         self.secmgr = tk.Button(self.top,
                                        text='Section \n manager',
                                        command=lambda: SectionManager(bip=self,
-                                                               window=self.window,
-                                                               root=self.root))
+                                                               window=self.window
+                                                                      ))
         self.secmgr.grid(row=0, column=1, columnspan=1, sticky='e')
         #self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
 
@@ -696,14 +674,13 @@ class BeamInputMenu(DSSInputMenu):
 
 
 class SectionManager(DSSInputMenu):
-    def __init__(self, bip, window, root):
+    def __init__(self, bip, window):
         """
         :param bip: The BeamInputMenu window (passed as 'self' from class BeamInputMenu)
         :param window: The DSSolver main window (passed as 'self' from class Window)
-        :param root: root is the root = tkinter.Tk() (passed as 'self.root')
         :param problem: Instance of the Problem class (passed as 'self.problem')
         """
-        super().__init__(window, root, problem=None)
+        super().__init__(window, problem=None)
         self.top.winfo_toplevel().title('Section manager')
         self.bip = bip
 
@@ -735,14 +712,14 @@ class SectionManager(DSSInputMenu):
         self.b.grid(row=7, column=0, columnspan=2)
         self.top.bind('<Return>', (lambda e, b=self.b: self.b.invoke()))
 
-        file = os.getcwd() + '/gfx/dim_Rectangular.gif'
+        file = os.path.join(os.getcwd(), '..', 'gfx', 'dim_Rectangular.gif')
         self.photo = tk.PhotoImage(file=file)
         self.photolabel = tk.Label(self.top, image=self.photo)
         self.photolabel.photo = self.photo
         self.photolabel.grid(row=1, column=2, rowspan=7)
 
     def change_dropdown(self, *args):
-        file = os.getcwd() + '/gfx/dim_{}.gif'.format(self.sec.get())
+        file = os.path.join(os.getcwd(), '..', 'gfx', f'dim_{self.sec.get()}.gif')
         self.photo = tk.PhotoImage(file=file)
         self.photolabel.configure(image=self.photo)
 
@@ -800,8 +777,6 @@ if __name__ == '__main__':
                           isinstance(cls, type) and issubclass(cls, plugin_base.DSSPlugin))
         for cls in plugin_classes:
             plugin_list.append(cls)
-
-
 
     p = problem.Problem()
     root = tk.Tk()
