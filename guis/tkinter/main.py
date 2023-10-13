@@ -301,37 +301,6 @@ class DSSGUI:
                                 arrow='last')
         self.canvas.create_text(10, self.canvas.height-110, text='y', anchor='sw')
 
-    def draw_highlight(self, node_id=None, element_id=None):
-        """
-        :param node_id: node.number
-        :param element_id: element.number
-        :return:  """
-
-        self.canvas.delete('highlight')
-
-        if element_id is not None:
-            element = self.problem.elements[element_id]
-            beam_r1 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r1, 1)))[0:2]
-            beam_r2 = (inv(self.canvas.transformation_matrix) @ np.hstack((element.r2, 1)))[0:2]
-
-            self.canvas.create_text(*beam_r1, text='r1', anchor='sw')
-            self.canvas.create_text(*beam_r2, text='r2', anchor='sw')
-
-            if type(element) == elements.Beam:
-                self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
-                                        width=self.linewidth, tag='highlight', fill='red')
-
-            elif type(element) == elements.Rod:
-                self.canvas.create_line(*np.hstack((beam_r1, beam_r2)),
-                                        width=self.linewidth/4, tag='highlight', fill='red')
-
-        elif node_id is not None:
-            node = self.problem.nodes[node_id]
-            node_r = (inv(self.canvas.transformation_matrix) @ np.hstack((node.r, 1)))[0:2]
-            node_radius = self.node_radius * 1.5
-            self.canvas.create_oval(*np.hstack((node_r - node_radius, node_r + node_radius)),
-                                    fill='red', tag='mech')
-
     # Scaling and moving functions
     def autoscale(self):
         # TODO: Replace with DSSCanvas.autoscale when objects are added to the canvas
@@ -403,10 +372,6 @@ class DSSGUI:
         elif bc == 'glider':
             self.problem.node_at(self.closest_node_label).glider()
         self.draw_canvas()
-
-    def reset_prev(self, event):
-        self.prev_x = None
-        self.prev_y = None
 
     def new_problem(self):
         self.problem = problem.Problem()
