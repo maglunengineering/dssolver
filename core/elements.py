@@ -1,8 +1,6 @@
 import numpy as np
 
-from core.plugin_base import DSSPlugin
-
-class DSSModelObject(DSSPlugin):
+class DSSModelObject:
     pass
 
 class Node(DSSModelObject):

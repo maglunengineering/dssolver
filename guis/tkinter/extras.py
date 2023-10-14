@@ -248,6 +248,9 @@ class DSSSettingsFrame(tk.Frame):
         def callback_factory(cls, name, bv):
             return lambda *args: cls.set_setting(name, bv.get())
 
+        if not hasattr(cls, 'get_settings'):
+            return
+
         settings = cls.get_settings()
         for name,value in settings.items():
             if name in self.settings:

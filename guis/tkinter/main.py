@@ -7,8 +7,8 @@ from typing import Callable, Iterable, Dict
 
 import numpy as np
 
-from core import problem, plugin_base, elements
-from guis.tkinter import extras
+from core import problem, elements
+from guis.tkinter import extras, plugin_base
 from plugins import solvers
 
 from results_viewer import ResultsViewer

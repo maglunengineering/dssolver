@@ -2,7 +2,7 @@ import time
 import numpy as np
 from typing import Dict, Callable
 
-from core.plugin_base import DSSPlugin
+from guis.tkinter.plugin_base import DSSPlugin
 from core.problem import Problem
 import core.results as results
 
