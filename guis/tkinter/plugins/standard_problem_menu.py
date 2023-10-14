@@ -19,28 +19,15 @@ class StandardProblemMenu(DSSPlugin):
     #            'Circular arch' : lambda: cls.get_model(caller, 4)}
 
     def on_after_dss_built(self):
-        menu_stdcases = tk.Menu(self.dss.topmenu)
-        self.dss.topmenu.add_cascade(label='Standard problems',
-                                     menu=menu_stdcases)
-
-        menu_stdcases.add_command(label='Cantilever beam',
-                                  command = self.cantilever_beam)
-        menu_stdcases.add_command(label='Deep arch',
-                                  command = self.deep_arch_half)
-        menu_stdcases.add_command(label='Deep arch (full)',
-                                  command = self.deep_arch)
-        menu_stdcases.add_command(label='von Mises truss',
-                                  command = self.von_mises_truss)
-        menu_stdcases.add_command(label='Snapback von Mises truss',
-                                  command = self.von_mises_truss_snapback)
-        menu_stdcases.add_command(label='Standing rod',
-                                  command = self.standing_rod)
-        menu_stdcases.add_command(label='270 arch',
-                                  command = self.arch_270)
-        menu_stdcases.add_command(label='Pendulum',
-                                  command = self.pendulum)
-        menu_stdcases.add_command(label='von Mises Truss (spring BC)',
-                                  command = self.von_mises_truss_springbc)
+        self.dss.add_topmenu_item('Standard problems', 'Cantilever beam', self.cantilever_beam)
+        self.dss.add_topmenu_item('Standard problems', 'Deep arch', self.deep_arch_half)
+        self.dss.add_topmenu_item('Standard problems', 'Deep arch (full)', self.deep_arch)
+        self.dss.add_topmenu_item('Standard problems', 'von Mises truss', self.von_mises_truss)
+        self.dss.add_topmenu_item('Standard problems', 'Snapback von Mises truss', self.von_mises_truss_snapback)
+        self.dss.add_topmenu_item('Standard problems', 'Standing rod', self.standing_rod)
+        self.dss.add_topmenu_item('Standard problems', '270 arch', self.arch_270)
+        self.dss.add_topmenu_item('Standard problems', 'Pendulum', self.pendulum)
+        self.dss.add_topmenu_item('Standard problems', 'von Mises Truss (spring BC)', self.von_mises_truss_springbc)
         #menu_stdcases.add_command(label='Simply supported beam',
         #                          command=lambda: self.get_model(2))
         #menu_stdcases.add_command(label='Fanned out cantilever elements',

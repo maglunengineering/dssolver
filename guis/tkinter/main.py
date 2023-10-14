@@ -88,24 +88,15 @@ class DSSGUI:
         topmenu = self.topmenu
         self.root.config(menu=topmenu)
 
-        menu_file = tk.Menu(topmenu)
-        self.menus['File'] = menu_file
-        topmenu.add_cascade(label='File', menu=menu_file)
-        menu_file.add_command(label='Open', command=lambda: self.open_problem())
-        menu_file.add_command(label='Save as', command=lambda: self.save_problem())
-        menu_file.add_separator()
-        menu_file.add_command(label='New problem ', command=lambda: self.new_problem())
+        self.add_topmenu_item('File', 'Open', self.open_problem)
+        self.add_topmenu_item('File', 'Save as', self.save_problem)
+        self.menus['File'].add_separator()
+        self.add_topmenu_item('File', 'New problem', self.new_problem)
 
-        menu_edit = tk.Menu(topmenu)
-        self.menus['Edit'] = menu_edit
-        topmenu.add_cascade(label='Edit', menu=menu_edit)
-        menu_edit.add_command(label='Create element(s)',
-                              command=lambda: BeamInputMenu(self, self.problem))
-        menu_edit.add_command(label='Auto rotation lock',
-                              command=lambda: self.problem.auto_rotation_lock())
-        menu_edit.add_separator()
-        menu_edit.add_command(label='Redraw canvas',
-                              command=lambda: self.draw_canvas())
+        self.add_topmenu_item('Edit', 'Create element(s)', lambda: BeamInputMenu(self, self.problem))
+        self.add_topmenu_item('Edit', 'Auto rotation lock', self.problem.auto_rotation_lock)
+        self.menus['Edit'].add_separator()
+        self.add_topmenu_item('Edit', 'Redraw canvas', self.draw_canvas)
 
         menu_solve = tk.Menu(topmenu)
         self.menus['Solve'] = menu_solve
@@ -132,6 +123,16 @@ class DSSGUI:
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale() )
 
         #topmenu.add_command(label='Func', command=lambda: self.upd_rsmenu())
+
+    def add_topmenu_item(self, menu_title:str, cmd_title:str, cmd:Callable):
+        if menu_title not in self.menus:
+            self.menus[menu_title] = tk.Menu(self.topmenu)
+            self.topmenu.add_cascade(label=menu_title, menu=self.menus[menu_title])
+
+        if cmd_title and cmd:
+            menu = self.menus[menu_title]
+            menu.add_command(label=cmd_title, command=cmd)
+
 
     def call_and_add_to_results(self, func:Callable):
         results = func()
