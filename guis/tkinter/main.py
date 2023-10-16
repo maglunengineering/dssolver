@@ -344,7 +344,7 @@ class DSSGUI:
 
         elif self.r1 is not None and self.r2 is None:  # If r1 does exist and r2 does not exist
             self.r2 = np.array(r)
-            BeamInputMenu(self, self.root, self.problem,
+            BeamInputMenu(self, self.problem,
                           def_r1=self.r1,
                           def_r2=self.r2)
             self.r1 = self.r2 = None
