@@ -27,15 +27,13 @@ class ResultsViewer:
         settings_frame = DSSSettingsFrame(right_frame)
         settings_frame.grid(row=1)
 
-
-        btn_animate = tk.Button(right_frame, text='Animate',
-                                command = self.animate_func)
+        btn_animate = tk.Button(right_frame, text='Animate', command = self.animate_func)
         btn_animate.grid(row=2)
 
         self.stringvar = tk.StringVar()
 
         self.results = results
-        self.stringvar.set(results.get_text())
+        self.stringvar.set(f'Current displacement set: {self.results.current_displ_set}')
         classes = set()
         for item in self.results.get_objects():
             self.canvas.add_object(item)
@@ -45,7 +43,7 @@ class ResultsViewer:
             settings_frame.add_settings(cls)
 
         i = 3
-        for name, func in results.get_buttons().items():
+        for name, func in results.get_actions().items():
             button = tk.Button(right_frame, text=name, command=self.on_click_factory(func))
             button.grid(row=i)
             i += 1
@@ -70,7 +68,7 @@ class ResultsViewer:
         if delay:
             self.canvas.redraw()
             self.canvas.update()
-            self.stringvar.set(self.results.get_text())
+            self.stringvar.set(f'Current displacement set: {self.results.current_displ_set}')
             self.top.update()
             self.canvas.after(delay, self.animate_func, iterator)
         else:
@@ -81,5 +79,5 @@ class ResultsViewer:
         def return_func():
             func()
             self.canvas.redraw()
-            self.stringvar.set(self.results.get_text())
+            self.stringvar.set(f'Current displacement set: {self.results.current_displ_set}')
         return return_func
