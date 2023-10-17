@@ -22,7 +22,7 @@ class Problem:
         self.incremental_loads = None
         self.incremental_displacements = None
 
-    def create_beam(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None, drawnodes=3):
+    def create_beam(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
         """
         drawnode:
         0 - Don't draw any nodes

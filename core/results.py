@@ -6,26 +6,13 @@ from core.elements import FiniteElement2Node, Node, DSSModelObject
 
 T = TypeVar('T')
 
-class ElementNodeMap:
-    def __init__(self, elements:Iterable[FiniteElement2Node],
-                 nodal_results:Dict[Node, np.ndarray]):
-        self.elements = list(elements)
-        self.nodal_results = nodal_results
-
-    def __getitem__(self, element:FiniteElement2Node):
-        at_node_1 = self.nodal_results[element.node1]
-        at_node_2 = self.nodal_results[element.node2]
-        return np.hstack((at_node_1, at_node_2))
-
-
 class Results:
     def __init__(self, problem):
-        self.problem = problem
-        self.nodes = problem.nodes
-        self.elements = problem.elements
+        self.nodes = list(problem.nodes)
+        self.elements = list(problem.elements)
 
         self.current_result_vector = 0
-        self.num_result_vectors = 1
+        self.num_displ_sets = 1
 
     def get_objects(self) -> Iterable[DSSModelObject]:
         yield from self.nodes
@@ -38,7 +25,7 @@ class Results:
         return f'Current results vector: {self.current_result_vector}'
 
     def increment(self):
-        if self.current_result_vector < self.num_result_vectors - 1:
+        if self.current_result_vector < self.num_displ_sets - 1:
             self.current_result_vector += 1
         else:
             self.current_result_vector = 0
@@ -49,7 +36,7 @@ class Results:
         if self.current_result_vector > 0:
             self.current_result_vector -= 1
         else:
-            self.current_result_vector = self.num_result_vectors - 1
+            self.current_result_vector = self.num_displ_sets - 1
 
         self.set_displacements()
 
@@ -81,7 +68,7 @@ class ResultsStaticNonlinear(Results):
 
         self.forces = forces
         self.displacements = displacements
-        self.num_result_vectors = len(displacements)
+        self.num_displ_sets = len(displacements)
 
     def set_displacements(self):
         displacements = self.displacements[self.current_result_vector]
@@ -89,9 +76,9 @@ class ResultsStaticNonlinear(Results):
             node.displacements = displacements[node.dofs]
 
     def animate(self):
-        interval = int(1000 * 2 / self.num_result_vectors)
+        interval = int(1000 * 2 / self.num_displ_sets)
         self.current_result_vector = 0
-        for step in range(self.num_result_vectors):
+        for step in range(self.num_displ_sets):
             self.set_displacements()
             self.current_result_vector += 1
             yield interval
