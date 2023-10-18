@@ -1,4 +1,5 @@
 import tkinter as tk
+from typing import Callable
 from guis.tkinter.extras import DSSCanvas, DSSSettingsFrame, DSSListbox
 from core.results import Results
 
@@ -33,7 +34,6 @@ class ResultsViewer:
         self.stringvar = tk.StringVar()
 
         self.results = results
-        self.stringvar.set(f'Current displacement set: {self.results.current_displ_set}')
         classes = set()
         for item in self.results.get_objects():
             self.canvas.add_object(item)
@@ -54,26 +54,18 @@ class ResultsViewer:
         self.canvas.autoscale()
         results.on_after_resultview_built(self)
 
-    def animate_func(self, *args):
-        """
-        Works with a generator formulation of the animate() function. animate() must yield a frame delay (in ms)
-        while the animation runs, then yield False.
-        """
-        if args:
-            iterator = args[0]
-        else:
-            iterator = self.results.animate()
-
-        delay = next(iterator)
-        if delay:
-            self.canvas.redraw()
-            self.canvas.update()
-            self.stringvar.set(f'Current displacement set: {self.results.current_displ_set}')
-            self.top.update()
-            self.canvas.after(delay, self.animate_func, iterator)
-        else:
-            self.results.reset_animation()
-            self.canvas.redraw()
+    def animate_func(self):
+        animator = ResultAnimator(self.results, self.canvas)
+        animator.add_hook(lambda i: self.stringvar.set(f'Current displacement set: {i}'))
+        animator.start()
+    def _iterate_results(self):
+        interval = int(1000 * 2 / self.results.num_displ_sets)
+        self.current_displ_set = 0
+        for step in range(self.results.num_displ_sets):
+            self.results.set_displacements()
+            self.results.current_displ_set += 1
+            yield interval
+        yield False
 
     def on_click_factory(self, func):
         def return_func():
@@ -81,3 +73,31 @@ class ResultsViewer:
             self.canvas.redraw()
             self.stringvar.set(f'Current displacement set: {self.results.current_displ_set}')
         return return_func
+
+
+class ResultAnimator:
+    def __init__(self, results, canvas):
+        self.results = results
+        self.canvas = canvas
+        self._delay = int(2000 / self.results.num_displ_sets)
+        self._running = False
+        self._hooks = []
+
+    def start(self):
+        self._running = True
+        self.canvas.after(0, self._run_animation)
+
+    def stop(self):
+        self._running = False
+
+    def add_hook(self, hook:Callable[[int],None]):
+        self._hooks.append(hook)
+
+    def _run_animation(self):
+        if self.results.increment() == 0:
+            return
+        self.canvas.redraw()
+        if self._running:
+            for hook in self._hooks:
+                hook(self.results.current_displ_set)
+            self.canvas.after(self._delay, self._run_animation)

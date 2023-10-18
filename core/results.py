@@ -29,6 +29,7 @@ class Results:
             self.current_displ_set = 0
 
         self.set_displacements()
+        return self.current_displ_set
 
     def decrement(self):
         if self.current_displ_set > 0:
@@ -37,6 +38,7 @@ class Results:
             self.current_displ_set = self.num_displ_sets - 1
 
         self.set_displacements()
+        return self.current_displ_set
 
     def animate(self):
         pass
@@ -69,15 +71,6 @@ class ResultsStaticNonlinear(Results):
         self.forces = forces
         self.displacements = displacements
         self.num_displ_sets = len(displacements)
-
-    def animate(self):
-        interval = int(1000 * 2 / self.num_displ_sets)
-        self.current_displ_set = 0
-        for step in range(self.num_displ_sets):
-            self.set_displacements()
-            self.current_displ_set += 1
-            yield interval
-        yield False
 
     def quickplot(self):
         for node in self.nodes:
