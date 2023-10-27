@@ -72,6 +72,19 @@ class ElementTest(unittest.TestCase):
 
         self.assertAlmostEqual(work, 0.5*u.T@k@u, places=2)
 
+    def test_quad4_should_compute_monkeypatched(self):
+        self.n3 = Node((1000, 1000))
+        self.n4 = Node((0, 1000))
+        self.quad = Quad4(self.n1, self.n2, self.n3, self.n4, 210e3, 0.3, 1)
+        Quad4.stiffness_matrix_global = lambda *args,**kwargs: np.random.random((12,12))
+        self.n1.pin()
+        self.n2.pin()
+        self.n3.loads = np.array([1000, 0, 0])
+        self.p.nodes.extend((self.n1, self.n2, self.n3, self.n4))
+        self.p.elements.append(self.quad)
+
+        self.p.solve()
+
 
 class ProblemTest(unittest.TestCase):
     def setUp(self) -> None:

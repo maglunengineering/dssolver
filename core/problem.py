@@ -2,7 +2,7 @@ from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
-from core.elements import FiniteElement2Node, Node, Rod, Beam, beta
+from core.elements import FiniteElement, Node, Rod, Beam, beta
 import core.results as results
 
 np.set_printoptions(suppress=True)
@@ -11,7 +11,7 @@ np.set_printoptions(suppress=True)
 class Problem:
     def __init__(self):
         self.nodes:List[Node] = list()
-        self.elements:List[FiniteElement2Node] = list()
+        self.elements:List[FiniteElement] = list()
 
         self.constrained_dofs = []
         self.forces = None  # Forces (at all nodes, incl removed dofs)

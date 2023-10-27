@@ -2,7 +2,7 @@ from typing import Dict,Iterable,TypeVar,Sized
 
 import numpy as np
 import matplotlib.pyplot as plt
-from core.elements import FiniteElement2Node, Node, DSSModelObject
+from core.elements import FiniteElement, Node, DSSModelObject
 
 T = TypeVar('T')
 

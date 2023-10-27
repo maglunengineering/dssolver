@@ -62,25 +62,51 @@ class Node(DSSModelObject):
     def __hash__(self):
         return id(self)
 
-class FiniteElement2Node(DSSModelObject):
-    def __init__(self, node1:Node, node2:Node, A:float):
-        self.nodes = [node1, node2]
-        self.node1 = node1
-        self.node2 = node2
-        self.A = A
+class FiniteElement(DSSModelObject):
+    def __init__(self, nodes):
+        self.nodes = nodes
 
         for node in self.nodes:
             node.add_element(self)
 
         self.stiffness_matrix_local = np.zeros((6,6))
-        self._undeformed_length = np.linalg.norm(self.r2 - self.r1)
 
     @property
     def dofs(self):
-        return np.hstack((self.nodes[0].dofs, self.nodes[1].dofs))
+        return np.hstack([n.dofs for n in self.nodes])
 
     def get_displacements(self):
-        return np.hstack((self.nodes[0].displacements, self.nodes[1].displacements))
+        return np.hstack([n.displacements for n in self.nodes])
+
+    def expand(self, arr, newdim):
+        E = self._Ex(newdim)
+        if len(arr.shape) == 1:
+            return E @ arr
+        elif len(arr.shape) == 2:
+            return E @ arr @ E.T
+
+    def _Ex(self, newdim):
+        dofs = np.hstack([n.dofs for n in self.nodes])
+        E = np.zeros((newdim, len(dofs)))
+        for i, j in enumerate(dofs):
+            E[j, i] = 1
+        return E
+
+class FiniteElement2Node(FiniteElement):
+    def __init__(self, node1:Node, node2:Node, A:float):
+        super().__init__([node1, node2])
+        self.node1 = node1
+        self.node2 = node2
+        self.A = A
+        self._undeformed_length = np.linalg.norm(self.r2 - self.r1)
+
+    @property
+    def r1(self):
+        return self.node1.r
+
+    @property
+    def r2(self):
+        return self.node2.r
 
     def get_forces(self):
         return self.transform().T @ self._get_forces_local()
@@ -126,13 +152,6 @@ class FiniteElement2Node(DSSModelObject):
                                       [0, 0, 0, 0, 0, rot_mass]])
         return T.T @ local @ T
 
-    def expand(self, arr, newdim):
-        E = self._Ex(newdim)
-        if len(arr.shape) == 1:
-            return E @ arr
-        elif len(arr.shape) == 2:
-            return E @ arr @ E.T
-
     def _deformed_length(self):
         return np.linalg.norm((self.node2.r + self.node2.displacements[:2] -
                                self.node1.r - self.node1.displacements[:2]))
@@ -153,25 +172,6 @@ class FiniteElement2Node(DSSModelObject):
         displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2])
         forces_local = self.stiffness_matrix_local @ displacements_local
         return forces_local
-
-    def _Ex(self, newdim):
-        dofs = np.hstack((self.nodes[0].dofs, self.nodes[1].dofs))
-        E = np.zeros((newdim, len(dofs)))
-        for i, j in enumerate(dofs):
-            E[j, i] = 1
-        return E
-
-
-    @property
-    def r1(self):
-        return self.node1.r
-
-    @property
-    def r2(self):
-        return self.node2.r
-
-
-
 
 class Beam(FiniteElement2Node):
     def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
@@ -288,6 +288,16 @@ class Rod(FiniteElement2Node):
 
     def clone(self, newnode1, newnode2):
         return Rod(newnode1, newnode2, self.E, self.A)
+
+class Quad4(FiniteElement):
+    def __init__(self, node1, node2, node3, node4, E, v, t):
+        self.nodes = [node1, node2, node3, node4]
+        self.E = E
+        self.v = v
+        self.t = t
+
+    def stiffness_matrix_global(self):
+        return np.zeros((12,12))
 
 def beta(angle):
     s, c = np.sin(angle), np.cos(angle)

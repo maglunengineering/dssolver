@@ -1,5 +1,5 @@
 import numpy as np
-from core.elements import Node, FiniteElement2Node
+from core.elements import Node, FiniteElement
 import extras
 
 
@@ -171,7 +171,7 @@ class ElementDrawer:
 
 
 _register[Node] = NodeDrawer
-_register[FiniteElement2Node] = ElementDrawer
+_register[FiniteElement] = ElementDrawer
 
 def get_drawer(obj):
     for T in type(obj).__mro__:
