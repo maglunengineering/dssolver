@@ -25,8 +25,8 @@ class ResultsViewer:
         self.listbox = DSSListbox(right_frame)
         self.listbox.grid(row=0)
 
-        settings_frame = DSSSettingsFrame(right_frame)
-        settings_frame.grid(row=1)
+        #settings_frame = DSSSettingsFrame(right_frame)
+        #settings_frame.grid(row=1)
 
         btn_animate = tk.Button(right_frame, text='Animate', command = self.animate_func)
         btn_animate.grid(row=2)
@@ -38,9 +38,6 @@ class ResultsViewer:
         for item in self.results.get_objects():
             self.canvas.add_object(item)
             classes.add(item.__class__)
-
-        for cls in classes:
-            settings_frame.add_settings(cls)
 
         i = 3
         for name, func in results.get_actions().items():

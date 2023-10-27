@@ -7,7 +7,7 @@ from typing import Callable, Iterable, Dict
 
 import numpy as np
 
-from core import problem, elements
+from core import problem, elements, settings
 from guis.tkinter import extras, plugin_base
 from plugins import solvers
 import tools
@@ -46,8 +46,9 @@ class DSSGUI:
         self.zoom = 1
         self.ratio = 1
 
-        self.linewidth = 2.0
-        self.scale = 50
+        self.linewidth = settings.get_setting('dssgui.linewidth', 2.0)
+        self.scale = settings.get_setting('dssgui.scale', 50)
+        self._thebool = settings.get_setting('dssgui.helloworld', True)
         self.node_radius = 2.5
         self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
         if 'plugins' in kwargs:
@@ -178,10 +179,8 @@ class DSSGUI:
             button.grid(row=int(i/2+1), column=i%2, sticky='wns')
             i += 1
 
-        plugin_settings_frame = extras.DSSSettingsFrame(rsm_settings)
+        plugin_settings_frame = extras.DSSSettingsFrame(rsm_settings, settings.get_by_category('dssgui'), settings.set_setting)
         plugin_settings_frame.grid(row=3, columnspan=2, sticky='ew')
-        for cls in self.plugins.keys():
-            plugin_settings_frame.add_settings(cls)
 
     def view_results(self, *args):
         result = self.listbox_results.get_selected()

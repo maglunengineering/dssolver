@@ -1,6 +1,7 @@
 import collections
 import tkinter as tk
 import numpy as np
+from typing import Iterable, Tuple, Callable
 from numpy.linalg import solve
 import drawing
 
@@ -237,12 +238,49 @@ class HyperlinkManager:
 
 
 class DSSSettingsFrame(tk.Frame):
-    def __init__(self, master, cnf={}, **kwargs):
+    def __init__(self, master, settings:Iterable[Tuple[str, object]], setter:Callable[[str,object],None], **kwargs):
+        if not 'cnf' in kwargs:
+            kwargs['cnf'] = {}
         kwargs['bg'] = 'gray82'
-        super().__init__(master, cnf, **kwargs)
+        super().__init__(master, **kwargs)
+        self._refs = []
+        self._cnt = 0
 
-        self.settings = {}
-        self.counter = 0
+        self.settings = settings
+        def log(f):
+            def inner(*args, **kwargs):
+                print(f'Called {f.__name__} with args {args} kwargs {kwargs}')
+                f(*args, **kwargs)
+            return inner
+        self.setter = log(setter)
+
+        for k,v in sorted(settings, key=lambda tup: type(tup[1]).__name__):
+            self._add_editor(k, v)
+
+    def _add_editor(self, key, val):
+        label = tk.Label(self, text=key)
+        label.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
+        self._cnt += 1
+        if isinstance(val, bool):
+            var = tk.BooleanVar()
+            var.set(val)
+            self._refs.append(var) # Bug in Tkinter? This reference is somehow needed
+            btn = tk.Checkbutton(self, variable=var, bg='gray82')
+            btn.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
+            var.trace_add('write', lambda *_: self.setter(key, val.get()))
+
+        elif isinstance(val, int) or isinstance(val, float):
+            t = type(val)
+            entry = tk.Entry(self)
+            entry.insert(0, val)
+            entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
+            entry.bind('<FocusOut>', lambda *_: self.setter(key, t(entry.get())))
+        self._cnt += 1
+
+    def _get_callback(self, key, parse_func):
+        pass
+
+
 
     def add_settings(self, cls):
         def callback_factory(cls, name, bv):
