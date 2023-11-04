@@ -57,7 +57,7 @@ class Node(DSSModelObject):
         return new_node
 
     def __str__(self):
-        return '{},{}'.format(self.x, self.y)
+        return f'Node(({self.x},{self.y}))'
 
     def __hash__(self):
         return id(self)

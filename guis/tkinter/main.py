@@ -30,6 +30,9 @@ class DSSGUI:
         self.mainframe.pack(fill=tk.BOTH, expand=True)
         self.mainframe.winfo_toplevel().title('DSSolver')
         self.topmenu = None
+        self.rsm_settings = None
+        self.sel_obj_settings:extras.DSSSettingsFrame = None
+        self.selected_object = None
         self.canvas = None  # Changed later on
 
         self.listbox_results = None
@@ -46,9 +49,6 @@ class DSSGUI:
         self.zoom = 1
         self.ratio = 1
 
-        self.linewidth = settings.get_setting('dssgui.linewidth', 2.0)
-        self.scale = settings.get_setting('dssgui.scale', 50)
-        self._thebool = settings.get_setting('dssgui.helloworld', True)
         self.node_radius = 2.5
         self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
         if 'plugins' in kwargs:
@@ -60,7 +60,6 @@ class DSSGUI:
 
         self.build_grid()
         self.build_menu()
-        self.build_banner()
         self.build_rsmenu()
         self.build_canvas()
         #self.build_bc_menu()  # Outsourced
@@ -68,7 +67,7 @@ class DSSGUI:
         self.canvas.set_tool(tools.ToolSelect(self, self.canvas, root))
 
         if not self.problem.nodes:
-            self.problem.get_or_create_node((0,0))
+            self.canvas.add_object(self.problem.get_or_create_node((0,0)))
         self.draw_canvas()
 
         for plugin in self.plugins.values():
@@ -77,14 +76,8 @@ class DSSGUI:
     # Building functions
     def build_grid(self):
         self.mainframe.columnconfigure(0, weight=1)  #
-        self.mainframe.columnconfigure(1, weight=0)  # Quick menu
-        self.mainframe.rowconfigure(0, weight=0)  # 'DSSolver' banner
-        self.mainframe.rowconfigure(1, weight=1)  # Canvas (resizable)
-        self.mainframe.rowconfigure(2, weight=0)  # Output console?
-
-    def build_banner(self):
-        self.banner = tk.Label(self.mainframe, bg='white', text='DSSolver')
-        self.banner.grid(row=0, column=0)
+        self.mainframe.columnconfigure(1, weight=1)  # Quick menu
+        self.mainframe.rowconfigure(0, weight=1)  # Canvas (resizable)
 
     def build_menu(self):
         self.topmenu = tk.Menu(self.root)
@@ -147,7 +140,7 @@ class DSSGUI:
     def build_canvas(self):
         self.canvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
         self.canvas.dss = self # TODO: Remove
-        self.canvas.grid(row=1, column=0, sticky='nsew')
+        self.canvas.grid(row=0, column=0, sticky='nsew')
 
         #self.canvas.bind('<Button-1>', self._printcoords)
         #self.canvas.bind('<Button-3>', self.rightclickmenu)
@@ -155,17 +148,21 @@ class DSSGUI:
     def build_rsmenu(self):
         color1 = 'gray74'
         color2 = 'gray82'
-        self.rsm = tk.Frame(self.mainframe, bg=color1, width=256)
-        self.rsm.grid(row=1, column=1, sticky='nsew')
+        self.rsm = tk.Frame(self.mainframe, bg=color1, width=400)
+        self.rsm.grid(row=0, column=1, sticky='nsew')
 
         self.listbox_results = extras.DSSListbox(self.rsm)
         self.listbox_results.grid(row=1, column=0)
         self.listbox_results.bind('<Double-Button-1>', self.view_results)
 
-        rsm_settings = tk.Frame(self.rsm, bg=color2, width=255)
-        rsm_settings.grid(row=3, column=0, sticky='nw')
-        rsm_shm_label = tk.Label(rsm_settings, text='Settings', bg=color2)
+        self.rsm_settings = tk.Frame(self.rsm, bg=color2, width=400)
+        self.rsm_settings.grid(row=3, column=0, sticky='nw')
+        #self.rsm_settings.grid_propagate(False)
+        rsm_shm_label = tk.Label(self.rsm_settings, text='Settings', bg=color2)
         rsm_shm_label.grid(row=0, column=1, columnspan=3, sticky='ew')
+
+        rsm_shm_label2 = tk.Label(self.rsm_settings, text='Selected object', bg=color2)
+        rsm_shm_label2.grid(row=4, column=1, columnspan=3, sticky='ew')
 
         buttons = ['Shear \n diagram', 'Moment \n diagram']
 
@@ -174,13 +171,29 @@ class DSSGUI:
 
         i = 0
         for b,v in zip(buttons, vars):
-            button = tk.Checkbutton(rsm_settings, text=b, variable=v, bg=color2,
+            button = tk.Checkbutton(self.rsm_settings, text=b, variable=v, bg=color2,
                                            highlightthickness=0, justify=tk.LEFT)
             button.grid(row=int(i/2+1), column=i%2, sticky='wns')
             i += 1
 
-        plugin_settings_frame = extras.DSSSettingsFrame(rsm_settings, settings.get_by_category('dssgui'), settings.set_setting)
+        self.set_settings_default()
+
+    def set_settings_default(self):
+        if self.sel_obj_settings:
+            self.sel_obj_settings.destroy()
+        plugin_settings_frame = extras.DSSSettingsFrame.from_settings(self.rsm_settings, 'dssgui')
         plugin_settings_frame.grid(row=3, columnspan=2, sticky='ew')
+
+    def set_settings(self, obj):
+        if self.sel_obj_settings:
+            self.sel_obj_settings.destroy()
+        self.sel_obj_settings = extras.DSSSettingsFrame.from_object(self.rsm_settings, obj)
+        self.sel_obj_settings.grid(row=5, columnspan=2, sticky='nsew')
+        self.root.update()
+
+    def set_selection(self, obj):
+        self.set_settings(obj)
+        self.selected_object = obj
 
     def view_results(self, *args):
         result = self.listbox_results.get_selected()
@@ -210,8 +223,8 @@ class DSSGUI:
             s,c = np.sin(beam.angle), np.cos(beam.angle)
             R = np.array([[c, -s], [s, c]])
 
-            v1 = (beam.transform(beam.angle)@beam.forces)[1]
-            v2 = -(beam.transform(beam.angle)@beam.forces)[4]
+            v1 = (beam.problem_to_canvas(beam.angle) @ beam.forces)[1]
+            v2 = -(beam.problem_to_canvas(beam.angle) @ beam.forces)[4]
 
             p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale]) * v1
             p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale]) * v2

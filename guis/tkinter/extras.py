@@ -4,6 +4,7 @@ import numpy as np
 from typing import Iterable, Tuple, Callable
 from numpy.linalg import solve
 import drawing
+from core import settings
 
 # a subclass of Canvas for dealing with resizing of windows
 # credit: ebarr @ StackOverflow
@@ -47,6 +48,7 @@ class DSSCanvas(tk.Canvas):
             self.dss = kwargs['dss']
 
         self.objects = []
+        self.snap_objs = {}
         self.bind_on_resize()
 
     def bind_on_resize(self):
@@ -66,27 +68,27 @@ class DSSCanvas(tk.Canvas):
         self.tool.activate()
 
     def draw_node(self, pt, radius, *args, **kwargs):
-        pt_canvas = self.transform(pt)
+        pt_canvas = self.problem_to_canvas(pt)
         super().create_oval(*np.hstack((pt_canvas - radius, pt_canvas + radius)), *args, **kwargs)
 
     def draw_point(self, pt, radius, *args, **kwargs):
-        pt_canvas = self.transform(pt)
+        pt_canvas = self.problem_to_canvas(pt)
         super().create_oval(*np.hstack((pt_canvas - radius, pt_canvas + radius)), *args, **kwargs)
 
     def draw_oval(self, pt1, pt2, *args, **kwargs):
-        pt1_canvas = self.transform(pt1)
-        pt2_canvas = self.transform(pt2)
+        pt1_canvas = self.problem_to_canvas(pt1)
+        pt2_canvas = self.problem_to_canvas(pt2)
         super().create_oval(*np.hstack((pt1_canvas, pt2_canvas)), *args, **kwargs)
 
     def draw_line(self, pt1, pt2, *args, **kwargs):
-        r1 = self.transform(pt1)
-        r2 = self.transform(pt2)
+        r1 = self.problem_to_canvas(pt1)
+        r2 = self.problem_to_canvas(pt2)
         super().create_line(*np.hstack((r1, r2)), *args, **kwargs)
 
     def draw_arc(self, arc_start, arc_mid, arc_end, **kwargs):
-        arc_start = self.transform(arc_start)
-        arc_mid = self.transform(arc_mid)
-        arc_end = self.transform(arc_end)
+        arc_start = self.problem_to_canvas(arc_start)
+        arc_mid = self.problem_to_canvas(arc_mid)
+        arc_end = self.problem_to_canvas(arc_end)
         super().create_line(*arc_start, *arc_mid, *arc_end, **kwargs)
 
     def draw_polygon(self, pts, *args, **kwargs):
@@ -97,16 +99,21 @@ class DSSCanvas(tk.Canvas):
         self.create_polygon(*canvas_pts, *args, **kwargs)
 
     def draw_text(self, pt, text, *args, **kwargs):
-        canvas_pt = self.transform(pt)
+        canvas_pt = self.problem_to_canvas(pt)
         self.create_text(*canvas_pt, text=text, *args, **kwargs)
 
-    def transform(self, pt):
+    def problem_to_canvas(self, pt):
         return np.linalg.solve(self.transformation_matrix, np.array([*pt, 1]))[0:2]
+
+    def canvas_to_problem(self, pt):
+        return (self.transformation_matrix @ pt)[0:2]
 
     def redraw(self):
         self.delete('all')
+        self.snap_objs.clear()
         for obj in self.objects:
-            drawing.get_drawer(obj).draw_on_canvas(obj, self)
+            snap_pt = drawing.get_drawer(obj).draw_on_canvas(obj, self)
+            self.snap_objs[obj] = snap_pt
 
     def move(self, event):
         if self.prev_x is None or self.prev_y is None:
@@ -171,7 +178,14 @@ class DSSCanvas(tk.Canvas):
 
     def add_object(self, obj):
         self.objects.append(obj)
-        drawing.get_drawer(obj).draw_on_canvas(obj, self)
+        snap_pt = drawing.get_drawer(obj).draw_on_canvas(obj, self)
+        self.snap_objs[obj] = snap_pt
+
+    def get_closest(self, pt_canvas):
+        pt_model = self.problem_to_canvas(pt_canvas)
+        closest_obj = min_by(self.snap_objs.items(), lambda kvp: np.linalg.norm(kvp[1] - pt_model))
+        if closest_obj:
+            return closest_obj[0]
 
     def scaleup(self, event):
         self.transformation_matrix[0:2, 0:2] = self.transformation_matrix[0:2, 0:2]*0.8
@@ -242,7 +256,7 @@ class DSSSettingsFrame(tk.Frame):
         if not 'cnf' in kwargs:
             kwargs['cnf'] = {}
         kwargs['bg'] = 'gray82'
-        super().__init__(master, **kwargs)
+        super().__init__(master, width=120, **kwargs)
         self._refs = []
         self._cnt = 0
 
@@ -279,6 +293,17 @@ class DSSSettingsFrame(tk.Frame):
 
     def _get_callback(self, key, parse_func):
         pass
+
+    @classmethod
+    def from_settings(cls, master, category):
+        return cls(master, settings.get_by_category(category), settings.set_setting)
+
+    @classmethod
+    def from_object(cls, master, obj):
+        kvps = ((k,v) for k,v in obj.__dict__.items() if not k.startswith('_'))
+        setter = lambda k,v: setattr(obj, k, v)
+        return cls(master, kvps, setter)
+
 
 
 
@@ -323,3 +348,12 @@ def R(angle):
     return np.array([[c, -s],
                      [s, c]])
 
+def min_by(iterable, func):
+    min_val = 2**31
+    cur_item = None
+    for item in iterable:
+        k = func(item)
+        if k < min_val:
+            min_val = k
+            cur_item = item
+    return cur_item

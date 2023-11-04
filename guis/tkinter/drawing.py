@@ -25,6 +25,8 @@ class NodeDrawer:
         if NodeDrawer.settings['Boundary conditions']:
             NodeDrawer.draw_boundary_condition(self, canvas, **kwargs)
 
+        return self.r
+
     @staticmethod
     def draw_loads(self, canvas: extras.DSSCanvas):
         scale = 100
@@ -168,6 +170,7 @@ class ElementDrawer:
             canvas.draw_line(self.node1.r + self.node1.displacements[0:2],
                              self.node2.r + self.node2.displacements[0:2],
                              fill='red', dash=(1,), **kwargs)
+        return 0.5 * (self.node1.r + self.node2.r)
 
 
 _register[Node] = NodeDrawer

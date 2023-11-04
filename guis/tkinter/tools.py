@@ -50,6 +50,10 @@ class ToolSelect(Tool):
         self.canvas.bind('<ButtonRelease-1>', self.canvas.on_lbuttonup)
 
     def on_click(self, event):
+        obj = self.canvas.get_closest((event.x, event.y))
+        print(f'Selected obj: {obj}')
+        if obj:
+            self.gui.set_settings(obj)
         self.set_closest_node((event.x, event.y))
         print("Clicked at canvas", [event.x, event.y], 'problem',
               (self.canvas.transformation_matrix @ [event.x, event.y, 1])[0:2])
