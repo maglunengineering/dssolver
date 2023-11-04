@@ -10,6 +10,7 @@ import numpy as np
 from core import problem, elements
 from guis.tkinter import extras, plugin_base
 from plugins import solvers
+import tools
 
 from results_viewer import ResultsViewer
 from drawing import NodeDrawer, ElementDrawer
@@ -30,16 +31,15 @@ class DSSGUI:
         self.mainframe.winfo_toplevel().title('DSSolver')
         self.topmenu = None
         self.canvas = None  # Changed later on
-        self.rcm = None
+
         self.listbox_results = None
-        self.bcm = None
+
         self.bm = None
         self.lm = None
         self.rsm = None
         self.click_x = None
         self.click_y = None
-        self.r1 = None
-        self.r2 = None  # For self.start_or_end_beam()
+
         self.closest_node_label = None
         # [problem coords] = [[T]] @ [canvas coords]
         self.tx = 0; self.ty = 0  # Translation
@@ -62,7 +62,9 @@ class DSSGUI:
         self.build_banner()
         self.build_rsmenu()
         self.build_canvas()
-        self.build_bc_menu()  # Outsourced
+        #self.build_bc_menu()  # Outsourced
+
+        self.canvas.set_tool(tools.ToolSelect(self, self.canvas, root))
 
         if not self.problem.nodes:
             self.problem.get_or_create_node((0,0))
@@ -141,48 +143,13 @@ class DSSGUI:
         #                 command = lambda : ResultsViewer(self.root, results, icon=self.icon))
         self.listbox_results.add(results)
 
-    def build_bc_menu(self):
-        """
-        Coordinates on these labels are updated when the left mouse button
-        is clicked on the canvas. (See self.rightclickmenu )
-        """
-        self.rcm = tk.Menu(root, tearoff=0)
-
-        self.lm = tk.Menu(self.rcm, tearoff=0)  # Load menu
-        self.rcm.add_cascade(label='Apply load', menu=self.lm)
-
-        self.lm.add_command(label='Apply point load at {}'.format(self.closest_node_label),
-                            command=lambda: LoadInputMenu(self, self.problem))
-
-        self.bcm = tk.Menu(self.rcm, tearoff=0)  # Boundary condition menu
-        self.rcm.add_cascade(label='Apply boundary condition', menu=self.bcm)
-        self.bcm.add_command(label='Fix node at {}'.format(self.closest_node_label),
-                             command=lambda: self.boundary_condition('fix'))
-        self.bcm.add_command(label='Pin node at {}'.format(self.closest_node_label),
-                             command=lambda: self.boundary_condition('pin'))
-        self.bcm.add_command(label='Roller node at {}'.format(self.closest_node_label),
-                             command=lambda: self.boundary_condition('roller'))
-        self.bcm.add_command(label='Rotation lock node at {}'.format(self.closest_node_label),
-                             command=lambda: self.boundary_condition('locked'))
-        self.bcm.add_command(label='Glider node at {}'.format(self.closest_node_label),
-                             command=lambda: self.boundary_condition('glider'))
-
-        self.bm = tk.Menu(self.rcm, tearoff=0)  # Beam menu
-        self.rcm.add_cascade(label='Start/end element', menu=self.bm)
-        self.bm.add_command(label='Start element at {}'.format((None, None)),
-                             command=lambda: self.start_or_end_beam
-                             (r=(self.canvas.transformation_matrix@[self.click_x, self.click_y,1])[0:2]))
-        self.bm.add_command(label='Start element at closest',
-                            command=lambda: self.start_or_end_beam
-                             (r=self.closest_node_label))
-
     def build_canvas(self):
         self.canvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
         self.canvas.dss = self # TODO: Remove
         self.canvas.grid(row=1, column=0, sticky='nsew')
 
-        self.canvas.bind('<Button-1>', self._printcoords)
-        self.canvas.bind('<Button-3>', self.rightclickmenu)
+        #self.canvas.bind('<Button-1>', self._printcoords)
+        #self.canvas.bind('<Button-3>', self.rightclickmenu)
 
     def build_rsmenu(self):
         color1 = 'gray74'
@@ -215,29 +182,6 @@ class DSSGUI:
         plugin_settings_frame.grid(row=3, columnspan=2, sticky='ew')
         for cls in self.plugins.keys():
             plugin_settings_frame.add_settings(cls)
-
-    def rightclickmenu(self, event):
-        self.click_x = event.x  # Canvas coordinates
-        self.click_y = event.y
-        self._closest_node((event.x, event.y))
-
-        self.bcm.entryconfigure(0, label='Fix node at {}'.format(self.closest_node_label))
-        self.bcm.entryconfigure(1, label='Pin node at {}'.format(self.closest_node_label))
-        self.bcm.entryconfigure(2, label='Roller node at {}'.format(self.closest_node_label))
-        self.bcm.entryconfigure(3, label='Rotation lock node at {}'.format(self.closest_node_label))
-        self.bcm.entryconfigure(4, label='Glider node at {}'.format(self.closest_node_label))
-
-        self.bm.entryconfigure(0, label='Start element at {}'.format((self.canvas.transformation_matrix@[event.x, event.y, 1])[0:2]))
-        self.bm.entryconfigure(1, label='Start element at closest: {}'.format(self.closest_node_label))
-
-        self.lm.entryconfigure(0, label='Apply point load at {}'.format(self.closest_node_label))
-
-        if self.r1 is not None and np.any(self.r2) is None:  # End distr loads or elements
-            self.bm.entryconfigure(0, label='End element at {}'.format((self.canvas.transformation_matrix@[event.x, event.y, 1])[0:2]))
-            self.bm.entryconfigure(1, label='End element at closest: {}'.format(self.closest_node_label))
-
-        self.rcm.grab_release()
-        self.rcm.tk_popup(event.x_root, event.y_root, 0)
 
     def view_results(self, *args):
         result = self.listbox_results.get_selected()
@@ -338,26 +282,6 @@ class DSSGUI:
         self.draw_canvas()
 
     # Mechanical functions
-    def start_or_end_beam(self, r):  # r: Problem coordinates
-        if self.r1 is None:  # If r1 does not exist
-            self.r1 = np.array(r)
-
-        elif self.r1 is not None and self.r2 is None:  # If r1 does exist and r2 does not exist
-            self.r2 = np.array(r)
-            BeamInputMenu(self, self.problem,
-                          def_r1=self.r1,
-                          def_r2=self.r2)
-            self.r1 = self.r2 = None
-
-    def _closest_node(self, xy):
-        event_r = np.array(xy)  # xy: Canvas coordinate
-        event_r_ = (self.canvas.transformation_matrix @ np.hstack((event_r, 1)))[0:2]  # Problem coordinate
-        event_to_node = event_r_ - self.problem.nodal_coordinates
-        event_to_node_norm = np.apply_along_axis(np.linalg.norm, axis=1, arr=event_to_node)
-        node_id = np.where(event_to_node_norm == np.min(event_to_node_norm))[0][0]
-
-        self.closest_node_label = np.array(self.problem.nodes[node_id].r)  # Problem coordinates
-
     def boundary_condition(self, bc):
         """
         :param bc: 'fixed', 'fix', 'pinned', 'locked', 'pin', 'roller', 'lock'
@@ -378,12 +302,6 @@ class DSSGUI:
         self.problem = problem.Problem()
         self.draw_canvas()
 
-    def _printcoords(self, event):
-        self._closest_node((event.x, event.y))
-        print("Clicked at canvas", [event.x, event.y], 'problem', (self.canvas.transformation_matrix@[event.x,event.y,1])[0:2])
-        print('Closest node', self.closest_node_label)
-        print('r1, r2', self.r1, self.r2)
-
     # Open and save
     def save_problem(self):
         filename = tk.filedialog.asksaveasfilename()
@@ -399,6 +317,18 @@ class DSSGUI:
 
         self.autoscale()
 
+    def node_from_pt(self, pt):
+        for node in self.problem.nodes:
+            if np.allclose(np.r, pt):
+                return node
+        return None
+
+    def create_beam_dlg(self, r1, r2):
+        return BeamInputMenu(self, self.problem, r1, r2)
+
+    def create_load_dlg(self, node):
+        LoadInputMenu(self, self.problem, node)
+
 class DSSInputMenu:
     def __init__(self, window, problem, *args, **kwargs):
         self.top = tk.Toplevel(root)
@@ -408,7 +338,7 @@ class DSSInputMenu:
         self.problem = problem
 
 class LoadInputMenu(DSSInputMenu):
-    def __init__(self, window, problem):
+    def __init__(self, window, problem, node):
         """
         :param window: The DSSolver main window (passed as 'self' from class Window)
         :param root: root is the root = tkinter.Tk() (passed as 'self.root')
@@ -418,6 +348,7 @@ class LoadInputMenu(DSSInputMenu):
         self.top.winfo_toplevel().title('Apply load')
         self.label = tk.Label(self.top, text='Apply load at node')
         self.label.grid(row=0, column=0)
+        self.node = node
 
         entrykeys = ['Fx', 'Fy', 'M']
         entries = [self.e_fx, self.e_fy, self.e_m] = [tk.Entry(self.top) for _ in range(3)]
@@ -430,7 +361,7 @@ class LoadInputMenu(DSSInputMenu):
 
         for idx, entry in enumerate((self.e_fx, self.e_fy, self.e_m)):
             try:
-                entry.insert(0, self.problem.node_at(self.window.closest_node_label).loads[idx])
+                entry.insert(0, node.loads[idx])
             except:
                 entry.insert(0, 0)
 
@@ -441,7 +372,7 @@ class LoadInputMenu(DSSInputMenu):
         self.b.grid(row=4, column=0)
 
     def cleanup(self):
-        self.problem.load_node( self.problem.node_at(self.window.closest_node_label),
+        self.problem.load_node( self.node,
                                 load = (eval(self.e_fx.get()),
                                         eval(self.e_fy.get()),
                                         eval(self.e_m.get()))

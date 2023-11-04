@@ -30,10 +30,6 @@ class DSSCanvas(tk.Canvas):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
 
-        self.bind('<B1-Motion>', self.move)
-        self.bind('<Double-Button-1>', self.scaleup)
-        self.bind('<Double-Button-2>', self.scaledown)
-        self.bind('<ButtonRelease-1>', self.on_lbuttonup)
         self.height = 512
         self.width = 768
 
@@ -63,6 +59,10 @@ class DSSCanvas(tk.Canvas):
         self.height = event.height
 
         self.config(width=self.width, height=self.height)
+
+    def set_tool(self, tool):
+        self.tool = tool
+        self.tool.activate()
 
     def draw_node(self, pt, radius, *args, **kwargs):
         pt_canvas = self.transform(pt)
