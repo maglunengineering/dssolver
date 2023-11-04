@@ -1,7 +1,8 @@
 import numpy as np
 
 class DSSModelObject:
-    pass
+    def __hash__(self):
+        return id(self)
 
 class Node(DSSModelObject):
     def __init__(self, xy):
@@ -230,9 +231,6 @@ class Beam(FiniteElement2Node):
 
     def clone(self, newnode1, newnode2):
         return Beam(newnode1, newnode2, self.E, self.A, self.I, self.z)
-
-    def __eq__(self, other):
-        return np.allclose(np.array([self.r1, self.r2]), np.array([other.r1, other.r2]))
 
 class Rod(FiniteElement2Node):
     def __init__(self, r1, r2, E=2e5, A=1e5, *args, **kwargs):

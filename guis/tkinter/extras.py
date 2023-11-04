@@ -50,6 +50,7 @@ class DSSCanvas(tk.Canvas):
         self.objects = []
         self.snap_objs = {}
         self.bind_on_resize()
+        self.selected_object = None
 
     def bind_on_resize(self):
         self.bind("<Configure>", self.on_resize)
@@ -66,6 +67,9 @@ class DSSCanvas(tk.Canvas):
     def set_tool(self, tool):
         self.tool = tool
         self.tool.activate()
+
+    def set_selection(self, obj):
+        self.selected_object = obj
 
     def draw_node(self, pt, radius, *args, **kwargs):
         pt_canvas = self.problem_to_canvas(pt)
@@ -106,7 +110,7 @@ class DSSCanvas(tk.Canvas):
         return np.linalg.solve(self.transformation_matrix, np.array([*pt, 1]))[0:2]
 
     def canvas_to_problem(self, pt):
-        return (self.transformation_matrix @ pt)[0:2]
+        return (self.transformation_matrix @ np.array([*pt, 1]))[0:2]
 
     def redraw(self):
         self.delete('all')
@@ -114,6 +118,10 @@ class DSSCanvas(tk.Canvas):
         for obj in self.objects:
             snap_pt = drawing.get_drawer(obj).draw_on_canvas(obj, self)
             self.snap_objs[obj] = snap_pt
+        if self.selected_object and self.selected_object in self.snap_objs:
+            pt = self.snap_objs[self.selected_object]
+            scale = 4*np.abs(self.transformation_matrix[0,0] * self.transformation_matrix[1,1])
+            self.draw_oval(pt - scale*np.ones(2), pt + scale*np.ones(2), outline='red')
 
     def move(self, event):
         if self.prev_x is None or self.prev_y is None:
@@ -153,6 +161,11 @@ class DSSCanvas(tk.Canvas):
             if node.r[1] > ymax:
                 ymax = node.r[1]
 
+        if np.isclose(xmin, xmax) and np.isclose(ymin, ymax):
+            self.transformation_matrix = np.eye(3)
+            self.redraw()
+            return
+
         w = self.width
         h = self.height
 
@@ -182,7 +195,7 @@ class DSSCanvas(tk.Canvas):
         self.snap_objs[obj] = snap_pt
 
     def get_closest(self, pt_canvas):
-        pt_model = self.problem_to_canvas(pt_canvas)
+        pt_model = self.canvas_to_problem(pt_canvas)
         closest_obj = min_by(self.snap_objs.items(), lambda kvp: np.linalg.norm(kvp[1] - pt_model))
         if closest_obj:
             return closest_obj[0]
@@ -283,7 +296,7 @@ class DSSSettingsFrame(tk.Frame):
             btn.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
             var.trace_add('write', lambda *_: self.setter(key, val.get()))
 
-        elif isinstance(val, int) or isinstance(val, float):
+        elif isinstance(val, int) or isinstance(val, float) or isinstance(val, str):
             t = type(val)
             entry = tk.Entry(self)
             entry.insert(0, val)

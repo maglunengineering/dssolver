@@ -45,15 +45,21 @@ class ToolSelect(Tool):
         self.canvas.bind('<Button-1>', self.on_click)
         self.canvas.bind('<Button-3>', self.on_rclick)
         self.canvas.bind('<B1-Motion>', self.canvas.move)
-        self.canvas.bind('<Double-Button-1>', self.canvas.scaleup)
-        self.canvas.bind('<Double-Button-2>', self.canvas.scaledown)
+        def on_mousewheel(event):
+            if event.delta > 0:
+                self.canvas.scaleup(event)
+            else:
+                self.canvas.scaledown(event)
+        self.canvas.bind('<MouseWheel>', on_mousewheel)
+        #self.canvas.bind('<Double-Button-1>', self.canvas.scaleup)
+        #self.canvas.bind('<Double-Button-2>', self.canvas.scaledown)
         self.canvas.bind('<ButtonRelease-1>', self.canvas.on_lbuttonup)
 
     def on_click(self, event):
         obj = self.canvas.get_closest((event.x, event.y))
         print(f'Selected obj: {obj}')
         if obj:
-            self.gui.set_settings(obj)
+            self.gui.set_selection(obj)
         self.set_closest_node((event.x, event.y))
         print("Clicked at canvas", [event.x, event.y], 'problem',
               (self.canvas.transformation_matrix @ [event.x, event.y, 1])[0:2])

@@ -193,7 +193,8 @@ class DSSGUI:
 
     def set_selection(self, obj):
         self.set_settings(obj)
-        self.selected_object = obj
+        self.canvas.set_selection(obj)
+        self.draw_canvas()
 
     def view_results(self, *args):
         result = self.listbox_results.get_selected()
@@ -203,18 +204,14 @@ class DSSGUI:
     def draw_canvas(self, *args, **kwargs):
         self.canvas.delete('all')  # Clear the canvas
 
-        self.draw_nodes()
-        self.draw_elements()
-
+        self.canvas.redraw()
         self.draw_csys()
 
-    def draw_elements(self):
-        for element in self.problem.elements:
-            ElementDrawer.draw_on_canvas(element, self.canvas)
-
-    def draw_nodes(self):
-        for node in self.problem.nodes:
-            NodeDrawer.draw_on_canvas(node, self.canvas)
+    def update_canvas(self):
+        for obj in self.problem.nodes:
+            self.canvas.add_object(obj)
+        for obj in self.problem.elements:
+            self.canvas.add_object(obj)
 
     def draw_shear_diagram(self):
         max_shear = np.max(np.abs(np.array([self.problem.forces[:, 1], self.problem.forces[:, 4]])))
@@ -261,29 +258,33 @@ class DSSGUI:
     # Scaling and moving functions
     def autoscale(self):
         # TODO: Replace with DSSCanvas.autoscale when objects are added to the canvas
-        x_ = (np.max(self.problem.nodal_coordinates[:, 0]) + np.min(self.problem.nodal_coordinates[:, 0])) / 2
-        y_ = (np.max(self.problem.nodal_coordinates[:, 1]) + np.min(self.problem.nodal_coordinates[:, 1])) / 2
 
-        w = self.canvas.width
-        h = self.canvas.height
+        self.update_canvas()
+        self.canvas.autoscale()
 
-        a = self.problem.model_size()*0.7
-
-        r0 = np.array([x_, y_, 1]) - np.array([a / 2, a / 2, 0])  # Problem bounding square SW corner
-        r0_ = np.array([w / 5, 4 * h / 5, 1])  # Canvas subsquare SW corner
-
-        r = np.array([x_, y_, 1])  # Problem midpoint
-        r_ = np.array([w / 5, 4 * h / 5, 1]) + np.array([h / 3, -h / 3, 0])  # Canvas subsquare midpoint
-
-        r1 = np.array([x_, y_, 1]) + np.array([0, a / 2, 0])  # Problem bounding square N centerpoint
-        r1_ = r_ + np.array([0, -h / 3, 0])  # Canvas subsquare N centerpoint
-
-        R = np.array([r0, r, r1]).T
-        R_ = np.array([r0_, r_, r1_]).T
-        # R and R_ must be invertible, or T will not be invertible
-
-        self.canvas.transformation_matrix = R@inv(R_)
-        self.draw_canvas()
+        #x_ = (np.max(self.problem.nodal_coordinates[:, 0]) + np.min(self.problem.nodal_coordinates[:, 0])) / 2
+        #y_ = (np.max(self.problem.nodal_coordinates[:, 1]) + np.min(self.problem.nodal_coordinates[:, 1])) / 2
+#
+        #w = self.canvas.width
+        #h = self.canvas.height
+#
+        #a = self.problem.model_size()*0.7
+#
+        #r0 = np.array([x_, y_, 1]) - np.array([a / 2, a / 2, 0])  # Problem bounding square SW corner
+        #r0_ = np.array([w / 5, 4 * h / 5, 1])  # Canvas subsquare SW corner
+#
+        #r = np.array([x_, y_, 1])  # Problem midpoint
+        #r_ = np.array([w / 5, 4 * h / 5, 1]) + np.array([h / 3, -h / 3, 0])  # Canvas subsquare midpoint
+#
+        #r1 = np.array([x_, y_, 1]) + np.array([0, a / 2, 0])  # Problem bounding square N centerpoint
+        #r1_ = r_ + np.array([0, -h / 3, 0])  # Canvas subsquare N centerpoint
+#
+        #R = np.array([r0, r, r1]).T
+        #R_ = np.array([r0_, r_, r1_]).T
+        ## R and R_ must be invertible, or T will not be invertible
+#
+        #self.canvas.transformation_matrix = R@inv(R_)
+        #self.draw_canvas()
 
     def move_to(self, xy=(50, -150)):
         # Moves the problem csys origin to canvas csys (xy)
@@ -390,6 +391,7 @@ class LoadInputMenu(DSSInputMenu):
                                         eval(self.e_m.get()))
                                 )
 
+        self.window.update_canvas()
         self.window.draw_canvas()
 
         self.top.destroy()
@@ -511,6 +513,7 @@ class BeamInputMenu(DSSInputMenu):
 
         self.window.autoscale()
         self.top.destroy()
+        self.window.update_canvas()
 
 
 class SectionManager(DSSInputMenu):
