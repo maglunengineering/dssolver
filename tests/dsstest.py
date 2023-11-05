@@ -126,6 +126,25 @@ class PerformanceTest(unittest.TestCase):
     def test_timeit_both(self):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
 
+    @timeit
+    def _test_270_arc(self):
+        # 5/11-23: 20.2 s
+        p = problem.Problem()
+        start = np.deg2rad(225)
+        end = np.deg2rad(-45)
+        n = 31
+        node_angles = np.linspace(start, end, n)
+        node_points = 500 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + np.array([0, 500])
+
+        for r1, r2 in zip(node_points, node_points[1:]):
+            p.create_beam(r1, r2)
+
+        p.nodes[0].pin()
+        p.nodes[-1].fix()
+        p.load_node(p.nodes[n//2], np.array([0, -200000, 0]))
+        solver = solvers.NonLinearSolver(self)
+        solver.solve(p)
+
 class SampleProblems(unittest.TestCase):
     def setUp(self):
         self.p = problem.Problem();
