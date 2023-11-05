@@ -93,18 +93,7 @@ class Problem:
     def remove_dofs(self):  # Interpret boundary conditions
         self.constrained_dofs = []
         for node in self.nodes:
-            if node.boundary_condition == 'fixed':
-                self.constrained_dofs.extend(node.dofs)
-            elif node.boundary_condition == 'pinned':
-                self.constrained_dofs.extend(node.dofs[0:2])
-            elif node.boundary_condition == 'roller':
-                self.constrained_dofs.append(node.dofs[1])
-            elif node.boundary_condition == 'locked':
-                self.constrained_dofs.append(node.dofs[2])
-            elif node.boundary_condition == 'glider':
-                self.constrained_dofs.extend((node.dofs[0], node.dofs[2]))
-            elif node.boundary_condition == 'roller90':
-                self.constrained_dofs.append(node.dofs[0])
+            self.constrained_dofs.extend(node.dofs[node.constrained_dofs])
 
     def load_node(self, node, load):
         # Load : global (Nx, Ny, M)

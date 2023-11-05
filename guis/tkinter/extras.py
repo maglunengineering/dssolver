@@ -1,5 +1,7 @@
 import collections
 import tkinter as tk
+import typing
+
 import numpy as np
 from typing import Iterable, Tuple, Callable
 from numpy.linalg import solve
@@ -306,7 +308,19 @@ class DSSSettingsFrame(tk.Frame):
             entry.insert(0, val)
             entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
             entry.bind('<FocusOut>', lambda *_: self.setter(key, t(entry.get())))
+        elif (isinstance(val, typing.MutableSequence) or isinstance(val, np.ndarray)) and len(val) > 0:
+            if isinstance(val[0], int) or isinstance(val[0], float):
+                t = type(val[0])
+                entry = tk.Entry(self)
+                entry.insert(0, ';'.join(map(str, val)))
+                entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
+                entry.bind('<FocusOut>', lambda *_: self.setter(key, self._recreate_sequence(t, entry.get())))
+
         self._cnt += 1
+
+    @staticmethod
+    def _recreate_sequence(T, content):
+        return [T(item) for item in content.split(';')]
 
     def _get_callback(self, key, parse_func):
         pass

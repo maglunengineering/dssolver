@@ -61,7 +61,7 @@ class NodeDrawer:
         linewidth = 2
         pos = self.r
 
-        if self.boundary_condition == 'fixed':
+        if self.constrained_dofs == [0,1,2]:
             angle_vector = sum(n.r - self.r for n in self.connected_nodes())
             angle = np.arctan2(*angle_vector[::-1])
             c, s = np.cos(-angle), np.sin(-angle)
@@ -74,7 +74,7 @@ class NodeDrawer:
                                  (pos + rotation @ [0, -scale + offset] + rotation @ [-scale / 2, scale / 2]),
                                  width=linewidth, fill='black', tag='bc')
 
-        elif self.boundary_condition == 'pinned' or self.boundary_condition == 'roller':
+        elif self.constrained_dofs == [0,1] or self.constrained_dofs == [1]:
             k = 1.5  # constant - triangle diameter
 
             canvas.draw_oval((pos - scale / 4), (self.r + scale / 5))
@@ -94,7 +94,7 @@ class NodeDrawer:
                                      + np.array([1.4 / (k * scale), 0])
                                      ) * k * scale),
                              width=linewidth, fill='black', tag='bc')
-            if self.boundary_condition == 'roller':
+            if self.constrained_dofs == [1]:
                 canvas.draw_line((pos + np.array([-np.sin(np.deg2rad(30)),
                                                   np.cos(np.deg2rad(30))]) * k * scale
                                   + np.array([-scale / 2, scale / 4])),
@@ -103,7 +103,7 @@ class NodeDrawer:
                                  + np.array([scale / 2, scale / 4]),
                                  width=linewidth, fill='black', tag='bc')
 
-        elif self.boundary_condition == 'roller90':
+        elif self.constrained_dofs == [0]:
             k = 1.5  # constant - triangle diameter
 
             canvas.draw_oval((pos - scale / 4), (self.r + scale / 5))
@@ -130,14 +130,14 @@ class NodeDrawer:
                              width=linewidth, fill='black', tag='bc')
 
 
-        elif self.boundary_condition == 'locked':
+        elif self.constrained_dofs == [2]:
             canvas.draw_oval((pos + np.array([-scale, -scale])),
                              (pos - np.array([-scale, -scale])),
                              width=linewidth, tag='bc')
             canvas.draw_line(pos, (pos + np.array([scale / 2, -scale]) * 1.4),
                              width=linewidth, fill='black', tag='bc')
 
-        elif self.boundary_condition == 'glider':
+        elif self.constrained_dofs == [0,2]:
             angle = 0  # Could be pi
             c, s = np.cos(-angle), np.sin(-angle)
             rotation = np.array([[c, -s], [s, c]])

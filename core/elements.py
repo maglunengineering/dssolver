@@ -15,7 +15,7 @@ class Node(DSSModelObject):
 
         self.number = None  # (node id) assigned on creation
         self.dofs:np.ndarray = None  # self.dofs (dof1, dof2, dof3) assigned on creation
-        self.boundary_condition = None  # 'fixed', 'pinned', 'roller', 'locked', 'glider'
+        self.constrained_dofs = []  # 'fixed', 'pinned', 'roller', 'locked', 'glider'
 
     def add_element(self, beam):
         self.elements.append(beam)
@@ -33,28 +33,28 @@ class Node(DSSModelObject):
         return other_nodes
 
     def fix(self):
-        self.boundary_condition = 'fixed'
+        self.constrained_dofs = [0,1,2]
 
     def pin(self):
-        self.boundary_condition = 'pinned'
+        self.constrained_dofs = [0,1]
 
     def roller(self):
-        self.boundary_condition = 'roller'
+        self.constrained_dofs = [1]
 
     def roller90(self):
-        self.boundary_condition = 'roller90'
+        self.constrained_dofs = [0]
 
     def lock(self):
-        self.boundary_condition = 'locked'
+        self.constrained_dofs = [2]
 
     def glider(self):
-        self.boundary_condition = 'glider'
+        self.constrained_dofs = [0,2]
 
     def copy(self):
         new_node = Node(self.r)
         new_node.dofs = self.dofs
         new_node.loads = self.loads
-        new_node.boundary_condition = self.boundary_condition
+        new_node.constrained_dofs = self.constrained_dofs
         return new_node
 
     def __str__(self):
