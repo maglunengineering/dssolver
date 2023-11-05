@@ -200,6 +200,10 @@ class DSSCanvas(tk.Canvas):
         if closest_obj:
             return closest_obj[0]
 
+    def clear(self):
+        self.objects.clear()
+        self.snap_objs.clear()
+
     def scaleup(self, event):
         self.transformation_matrix[0:2, 0:2] = self.transformation_matrix[0:2, 0:2]*0.8
         self.redraw()

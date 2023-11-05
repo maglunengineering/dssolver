@@ -313,6 +313,7 @@ class DSSGUI:
 
     def new_problem(self):
         self.problem = problem.Problem()
+        self.canvas.clear()
         self.draw_canvas()
 
     # Open and save
