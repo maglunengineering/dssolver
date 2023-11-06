@@ -5,6 +5,7 @@ from typing import Dict, Callable
 from guis.tkinter.plugin_base import DSSPlugin
 from core.problem import Problem
 import core.results as results
+import core.settings as settings
 
 
 class Solver(DSSPlugin):
@@ -65,13 +66,13 @@ class NonLinearSolver(Solver):
         displacements = np.zeros(len(problem.nodes) * 3)
         loads = np.zeros_like(displacements)
 
-        # displ_storage = np.zeros((steps, 3 * len(problem.nodes)))
         displ_storage = []
         force_storage = []
 
         i = 0
         while i < steps and A < max_A:
-            print("Predictor step {}".format(i))
+            if settings.get_setting('dss.verbose'):
+                print("Predictor step {}".format(i))
             K = problem.K(True)
             wq0 = np.linalg.solve(K, q)
             f = np.sqrt(1 + wq0 @ wq0)
@@ -127,7 +128,7 @@ class NonLinearSolver(Solver):
     def get_internal_forces(self, problem):
         ndofs = 3 * len(problem.nodes)
         forces = np.zeros(ndofs)
-        for element in problem.elements:
+        for element in problem._elements:
             forces[element.dofs] += element.get_forces()
         #    forces = forces + element.expand(element.get_forces(), ndofs)
 
@@ -180,7 +181,7 @@ class DynamicSolver(Solver):
         gravity = 9810
         for node in problem.nodes:
             mass = 0
-            for element in node.elements:
+            for element in node._elements:
                 mass += np.linalg.norm(
                     element.r2 - element.r1) * element.A * 7.86e-9  # Density of steel in tonnes / mm^3
             node.loads += np.array([0, -mass * gravity * 0.5, 0])
@@ -188,7 +189,7 @@ class DynamicSolver(Solver):
     def get_internal_forces(self, problem):
         ndofs = 3 * len(problem.nodes)
         forces = np.zeros(ndofs)
-        for element in problem.elements:
+        for element in problem._elements:
             forces[element.dofs] += element.get_forces()
 
         return forces
@@ -299,111 +300,6 @@ class DynamicSolver(Solver):
                 print(f'Step {i}: t = {np.round(t, 3)}. Displacements {u[free_dofs]}')
                 print(f'f={self.get_internal_forces(problem)[free_dofs]}')
                 disp_history.append(np.array(u))
-
-        return results.ResultsDynamicTimeIntegration(problem, np.asarray(disp_history))
-
-    def solve_whoknows(self, problem):
-        problem.reassign_dofs()
-        problem.remove_dofs()
-        dt = 1e-3
-        ndofs = 3 * len(problem.nodes)
-        num_steps = 300
-        free_dofs = problem.free_dofs()
-        ndofs_free = len(free_dofs)
-
-        self.load_by_structural_weight(problem)
-        set_displacements = lambda: self.set_displacements(u, problem)
-
-        f = problem.loads[free_dofs]
-        u = np.zeros(ndofs)
-        v = np.zeros(ndofs)
-        a = np.zeros(ndofs)
-
-        ur = np.zeros(ndofs_free)
-        vr = np.zeros(ndofs_free)
-        ar = np.zeros(ndofs_free)
-
-        K = problem.K(True)
-        M = problem.M(True)
-        C = 0.01 * K
-        invM = np.linalg.inv(M)
-
-        disp_history = []
-
-        def get_strain_energy_for(reduced_displacements):
-            uu = np.zeros(ndofs)
-            uu[free_dofs] = reduced_displacements
-            old_disps = {}
-            for node in problem.nodes:
-                old_disps[node] = node.displacements
-                node.displacements = uu[node.dofs]
-            strain_energy = sum(e.get_strain_energy() for e in problem.elements)
-            for node in problem.nodes:
-                node.displacements = old_disps[node]
-            return strain_energy
-
-        t = 0
-        i = 0
-        tmax = 1
-        nonlinear = True
-        total_work = 0
-        strain_energy = 0
-        kinetic_energy = 0
-        while t < tmax:
-            K = problem.K(True)
-            M = problem.M(True)
-            C = 0.01 * K
-            invM = np.linalg.inv(M)
-
-            ar = invM @ (f - K @ ur)
-            delta_ur = vr * dt + 0.5 * ar * dt ** 2
-            ur += delta_ur
-            vr += ar * dt
-            vr += 0.5 * ar * dt
-
-            u[free_dofs] = ur
-
-            set_displacements()
-
-            strain_energy_rate = dt * vr @ K @ vr
-            kinetic_energy_rate = vr @ M @ ar
-            rel_kinetic_energy_rate = kinetic_energy_rate / (kinetic_energy_rate + strain_energy_rate)
-
-            diff_work = f @ delta_ur
-            total_work += diff_work
-
-            # Diff ratio must equal rate ratio from before the step
-            target_kinetic_energy = kinetic_energy + rel_kinetic_energy_rate * diff_work
-            target_strain_energy = strain_energy + (1 - rel_kinetic_energy_rate) * diff_work
-
-            # Iterate on the force to get the correct strain energy
-            residual = self.get_internal_forces(problem)[free_dofs]
-            residual_acceleration = - invM @ residual
-
-            j = 1e-6
-            dj = 1e-8
-            while not np.isclose(strain_energy, target_strain_energy):
-                derivative = (get_strain_energy_for(ur + (j + dj) * residual_acceleration) - get_strain_energy_for(
-                    ur + j * residual_acceleration)) / dj
-                j += (target_strain_energy - strain_energy) / derivative
-                u[free_dofs] = ur + j * residual_acceleration
-                total_work += f @ (j * residual_acceleration)
-                set_displacements()
-                strain_energy = sum(e.get_strain_energy() for e in problem.elements)
-
-            ur = u[free_dofs]
-            while kinetic_energy and not np.isclose(kinetic_energy, target_kinetic_energy):
-                ratio = kinetic_energy / target_kinetic_energy
-                vr /= np.sqrt(ratio)
-                kinetic_energy = 0.5 * vr.T @ M @ vr
-
-            strain_energy = sum(e.get_strain_energy() for e in problem.elements)
-            kinetic_energy = 0.5 * vr @ M @ vr
-
-            print(f'Work done: {total_work}, Strain energy: {strain_energy}, kinetic energy: {kinetic_energy}')
-
-            disp_history.append(np.array(u))
-            t += dt
 
         return results.ResultsDynamicTimeIntegration(problem, np.asarray(disp_history))
 

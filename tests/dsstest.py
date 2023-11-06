@@ -44,7 +44,7 @@ class ElementTest(unittest.TestCase):
         self.p.create_beam(self.n1, self.n2)
         self.n1.fix()
         f = 10
-        self.p.load_node(self.n2, np.array([0, -f, 0]))
+        self.n2.loads = np.array([0, -f, 0])
         self.p.reassign_dofs()
         self.p.remove_dofs()
         solver = solvers.LinearSolver(None)
@@ -59,7 +59,7 @@ class ElementTest(unittest.TestCase):
         self.p.create_beam(self.n1, self.n2)
         self.n1.fix()
         f = 5
-        self.p.load_node(self.n2, np.array([0, -f, 0]))
+        self.n2.loads = np.array([0, -f, 0])
         self.p.reassign_dofs()
         self.p.remove_dofs()
         solver = solvers.LinearSolver(None)
@@ -141,7 +141,7 @@ class PerformanceTest(unittest.TestCase):
 
         p.nodes[0].pin()
         p.nodes[-1].fix()
-        p.load_node(p.nodes[n//2], np.array([0, -200000, 0]))
+        p.nodes[n//2].loads = np.array([0, -200000, 0])
         solver = solvers.NonLinearSolver(self)
         solver.solve(p)
 
@@ -167,7 +167,7 @@ class SampleProblems(unittest.TestCase):
 
         self.p.nodes[0].roller()
         self.p.nodes[-1].pin()
-        self.p.load_node(self.p.nodes[0], np.array([0.01, 0, 0]))
+        self.p.nodes[0].loads = np.array([0.01, 0, 0])
 
         res = self.p.solve()
         print(f'Amplitude: {ampl} - Displacement: {res.displacements[0]}')

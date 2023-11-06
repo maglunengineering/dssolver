@@ -13,7 +13,6 @@ from plugins import solvers
 import tools
 
 from results_viewer import ResultsViewer
-from drawing import NodeDrawer, ElementDrawer
 
 np.set_printoptions(precision=2, suppress=True)
 inv = np.linalg.inv
@@ -33,23 +32,12 @@ class DSSGUI:
         self.rsm_settings = None
         self.sel_obj_settings:extras.DSSSettingsFrame = None
         self.selected_object = None
-        self.canvas = None  # Changed later on
-
         self.listbox_results = None
-
-        self.bm = None
-        self.lm = None
         self.rsm = None
-        self.click_x = None
-        self.click_y = None
+        self.canvas:extras.DSSCanvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
+        self.canvas.dss = self # TODO: Remove
+        self.canvas.grid(row=0, column=0, sticky='nsew')
 
-        self.closest_node_label = None
-        # [problem coords] = [[T]] @ [canvas coords]
-        self.tx = 0; self.ty = 0  # Translation
-        self.zoom = 1
-        self.ratio = 1
-
-        self.node_radius = 2.5
         self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
         if 'plugins' in kwargs:
             plugins: Iterable[plugin_base.DSSPlugin] = kwargs['plugins']
@@ -102,23 +90,14 @@ class DSSGUI:
             return lambda : this.call_and_add_to_results(*args)
 
         menu_plugins = tk.Menu(topmenu)
-        self.topmenu.add_cascade(label='Plugins', menu=menu_plugins)
-        self.menus['Plugins'] = menu_plugins
         for cls, instance in self.plugins.items():
             menu = menu_plugins if not issubclass(cls, solvers.Solver) else menu_solve
             for key,value in instance.get_functions().items():
                 menu.add_command(label = key,
                                  command = callback_factory(self, value))
 
-        menu_results = tk.Menu(topmenu)
-        self.topmenu.add_cascade(label='Results', menu=menu_results)
-        self.menus['Results'] = menu_results
-
         topmenu.add_separator()
-
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale() )
-
-        #topmenu.add_command(label='Func', command=lambda: self.upd_rsmenu())
 
     def add_topmenu_item(self, menu_title:str, cmd_title:str, cmd:Callable):
         if menu_title not in self.menus:
@@ -132,18 +111,8 @@ class DSSGUI:
 
     def call_and_add_to_results(self, func:Callable):
         results = func()
-        #menu_results = self.menus['Results']
-        #menu_results.add_command(label=results.__class__.__name__,
-        #                 command = lambda : ResultsViewer(self.root, results, icon=self.icon))
         self.listbox_results.add(results)
 
-    def build_canvas(self):
-        self.canvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
-        self.canvas.dss = self # TODO: Remove
-        self.canvas.grid(row=0, column=0, sticky='nsew')
-
-        #self.canvas.bind('<Button-1>', self._printcoords)
-        #self.canvas.bind('<Button-3>', self.rightclickmenu)
 
     def build_rsmenu(self):
         color1 = 'gray74'
@@ -157,24 +126,11 @@ class DSSGUI:
 
         self.rsm_settings = tk.Frame(self.rsm, bg=color2, width=400)
         self.rsm_settings.grid(row=3, column=0, sticky='nw')
-        #self.rsm_settings.grid_propagate(False)
         rsm_shm_label = tk.Label(self.rsm_settings, text='Settings', bg=color2)
         rsm_shm_label.grid(row=0, column=1, columnspan=3, sticky='ew')
 
         rsm_shm_label2 = tk.Label(self.rsm_settings, text='Selected object', bg=color2)
         rsm_shm_label2.grid(row=4, column=1, columnspan=3, sticky='ew')
-
-        buttons = ['Shear \n diagram', 'Moment \n diagram']
-
-        #vars = [self.settings['shear'], self.settings['moment']]
-        vars = []
-
-        i = 0
-        for b,v in zip(buttons, vars):
-            button = tk.Checkbutton(self.rsm_settings, text=b, variable=v, bg=color2,
-                                           highlightthickness=0, justify=tk.LEFT)
-            button.grid(row=int(i/2+1), column=i%2, sticky='wns')
-            i += 1
 
         self.set_settings_default()
 
@@ -213,38 +169,6 @@ class DSSGUI:
         for obj in self.problem.elements:
             self.canvas.add_object(obj)
 
-    def draw_shear_diagram(self):
-        max_shear = np.max(np.abs(np.array([self.problem.forces[:, 1], self.problem.forces[:, 4]])))
-        scale = 100/max_shear
-        for beam in self.problem.elements:
-            s,c = np.sin(beam.angle), np.cos(beam.angle)
-            R = np.array([[c, -s], [s, c]])
-
-            v1 = (beam.problem_to_canvas(beam.angle) @ beam.forces)[1]
-            v2 = -(beam.problem_to_canvas(beam.angle) @ beam.forces)[4]
-
-            p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale]) * v1
-            p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale]) * v2
-            self.canvas.create_line(*p1, *p2,
-                                    tag='sheardiagram')
-            self.canvas.create_text(*p1, text='{}'.format(np.round(v1, 2)), anchor='sw')
-
-    def draw_moment_diagram(self):
-        max_moment = np.max(np.abs(np.array([self.problem.forces[:, 2], self.problem.forces[:, 5]])))
-        scale = 100/max_moment
-        for beam in self.problem.elements:
-            s,c = np.sin(beam.angle), np.cos(beam.angle)
-            R = np.array([[c, -s], [s, c]])
-
-            v1 = beam.forces[2]
-            v2 = -beam.forces[5]
-
-            p1 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r1, 1)))[0:2] + R.T @ np.array([0, -scale]) * v1
-            p2 = (inv(self.canvas.transformation_matrix) @ np.hstack((beam.r2, 1)))[0:2] + R.T @ np.array([0, -scale]) * v2
-            self.canvas.create_line(*p1, *p2,
-                                    tag='momentdiagram')
-            self.canvas.create_text(*p1, text='{}'.format(np.round(v1, 2)), anchor='sw')
-
     def draw_csys(self):
         self.canvas.create_line(10, self.canvas.height-10,
                                 110, self.canvas.height-10,
@@ -257,34 +181,8 @@ class DSSGUI:
 
     # Scaling and moving functions
     def autoscale(self):
-        # TODO: Replace with DSSCanvas.autoscale when objects are added to the canvas
-
         self.update_canvas()
         self.canvas.autoscale()
-
-        #x_ = (np.max(self.problem.nodal_coordinates[:, 0]) + np.min(self.problem.nodal_coordinates[:, 0])) / 2
-        #y_ = (np.max(self.problem.nodal_coordinates[:, 1]) + np.min(self.problem.nodal_coordinates[:, 1])) / 2
-#
-        #w = self.canvas.width
-        #h = self.canvas.height
-#
-        #a = self.problem.model_size()*0.7
-#
-        #r0 = np.array([x_, y_, 1]) - np.array([a / 2, a / 2, 0])  # Problem bounding square SW corner
-        #r0_ = np.array([w / 5, 4 * h / 5, 1])  # Canvas subsquare SW corner
-#
-        #r = np.array([x_, y_, 1])  # Problem midpoint
-        #r_ = np.array([w / 5, 4 * h / 5, 1]) + np.array([h / 3, -h / 3, 0])  # Canvas subsquare midpoint
-#
-        #r1 = np.array([x_, y_, 1]) + np.array([0, a / 2, 0])  # Problem bounding square N centerpoint
-        #r1_ = r_ + np.array([0, -h / 3, 0])  # Canvas subsquare N centerpoint
-#
-        #R = np.array([r0, r, r1]).T
-        #R_ = np.array([r0_, r_, r1_]).T
-        ## R and R_ must be invertible, or T will not be invertible
-#
-        #self.canvas.transformation_matrix = R@inv(R_)
-        #self.draw_canvas()
 
     def move_to(self, xy=(50, -150)):
         # Moves the problem csys origin to canvas csys (xy)
@@ -292,23 +190,6 @@ class DSSGUI:
         self.canvas.transformation_matrix[0:3,2] = np.array([self.canvas.transformation_matrix[0, 0] * (x - 1),
                                                                            self.canvas.transformation_matrix[1,1] * (y-1),
                                                                            1])
-        self.draw_canvas()
-
-    # Mechanical functions
-    def boundary_condition(self, bc):
-        """
-        :param bc: 'fixed', 'fix', 'pinned', 'locked', 'pin', 'roller', 'lock'
-        """
-        if bc == 'fix':
-            self.problem.node_at(self.closest_node_label).fix()
-        elif bc == 'pin':
-            self.problem.node_at(self.closest_node_label).pin()
-        elif bc == 'roller':
-            self.problem.node_at(self.closest_node_label).roller()
-        elif bc == 'locked':
-            self.problem.node_at(self.closest_node_label).lock()
-        elif bc == 'glider':
-            self.problem.node_at(self.closest_node_label).glider()
         self.draw_canvas()
 
     def new_problem(self):
@@ -386,11 +267,7 @@ class LoadInputMenu(DSSInputMenu):
         self.b.grid(row=4, column=0)
 
     def cleanup(self):
-        self.problem.load_node( self.node,
-                                load = (eval(self.e_fx.get()),
-                                        eval(self.e_fy.get()),
-                                        eval(self.e_m.get()))
-                                )
+        self.node.loads = np.array([float(self.e_fx.get()), float(self.e_fy.get()), float(self.e_m.get())])
 
         self.window.update_canvas()
         self.window.draw_canvas()

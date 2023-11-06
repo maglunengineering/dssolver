@@ -6,19 +6,18 @@ class DSSModelObject:
 
 class Node(DSSModelObject):
     def __init__(self, xy):
-        self.x, self.y = xy
         self._r = np.array(xy)
 
-        self.elements = list()
+        self._elements = list()
         self.loads = np.zeros(3) # self.loads (global Fx, Fy, M) assigned on loading
         self.displacements = np.zeros(3)
 
         self.number = None  # (node id) assigned on creation
-        self.dofs:np.ndarray = None  # self.dofs (dof1, dof2, dof3) assigned on creation
+        self.dofs = []  # self.dofs (dof1, dof2, dof3) assigned on creation
         self.constrained_dofs = []  # 'fixed', 'pinned', 'roller', 'locked', 'glider'
 
     def add_element(self, beam):
-        self.elements.append(beam)
+        self._elements.append(beam)
 
     @property
     def r(self):
@@ -26,7 +25,7 @@ class Node(DSSModelObject):
 
     def connected_nodes(self):
         other_nodes = []
-        for element in self.elements:
+        for element in self._elements:
             for node in element.nodes:
                 if not node == self:
                     other_nodes.append(node)
@@ -58,7 +57,7 @@ class Node(DSSModelObject):
         return new_node
 
     def __str__(self):
-        return f'Node(({self.x},{self.y}))'
+        return f'Node(({self._r[0]},{self._r[1]}))'
 
     def __hash__(self):
         return id(self)
@@ -116,12 +115,12 @@ class FiniteElement2Node(FiniteElement):
         e1 = ((self.node2.r + self.node2.displacements[:2]) -
               (self.node1.r + self.node1.displacements[0:2])) / self._deformed_length()
         e2 = R(np.deg2rad(90)) @ e1 # TODO: Just make it like [-e2, e1] or whatever
-        T = np.array([[*e1, 0, *np.zeros(3)],
-                      [*e2, 0, *np.zeros(3)],
-                      [0, 0, 1,*np.zeros(3)],
-                      [*np.zeros(3), *e1, 0],
-                      [*np.zeros(3), *e2, 0],
-                      [*np.zeros(3), 0, 0, 1]])
+        T = np.array([[e1[0], e1[1], 0, 0, 0, 0],
+                      [e2[0], e2[1], 0, 0, 0, 0],
+                      [0, 0, 1, 0, 0, 0],
+                      [0, 0, 0, e1[0], e1[1], 0],
+                      [0, 0, 0, e2[0], e2[1], 0],
+                      [0, 0, 0, 0, 0, 1]])
         return T
 
     def stiffness_matrix_global(self):

@@ -16,7 +16,6 @@ class Problem:
         self.constrained_dofs = []
         self.forces = None  # Forces (at all nodes, incl removed dofs)
         self.displacements = None  # Assigned at solution ( self.solve() )
-        self.solved = False
 
         # For incremental analysis
         self.incremental_loads = None
@@ -86,19 +85,14 @@ class Problem:
         Rotation locks all nodes where only Rod elements meet. Useful for truss analysis.
         """
         for node in self.nodes:
-            if np.all([type(element)==Rod for element in node.elements])\
-                    and node.boundary_condition is None:
-                node.lock()
+            if all(type(element)==Rod for element in node._elements) and 2 not in node.constrained_dofs:
+                node.constrained_dofs.append(2)
+
 
     def remove_dofs(self):  # Interpret boundary conditions
         self.constrained_dofs = []
         for node in self.nodes:
             self.constrained_dofs.extend(node.dofs[node.constrained_dofs])
-
-    def load_node(self, node, load):
-        # Load : global (Nx, Ny, M)
-        node.loads = np.array(load)
-        node.draw = True
 
     def model_size(self):
         xy = self.nodal_coordinates
@@ -129,33 +123,21 @@ class Problem:
             return matrix[np.ix_(free_dofs, free_dofs)]
 
     def solve(self) -> results.ResultsStaticLinear:
-        #raise PendingDeprecationWarning()
         self.reassign_dofs()
         self.remove_dofs()
         free_dofs = self.free_dofs()
 
         Kr = self.K(reduced=True)
         Fr = self.loads[free_dofs]
-        #print('Fr', Fr)
-        #print('Reduced stiffness matrix size', np.shape(Kr))
         dr = np.linalg.solve(Kr, Fr)
 
         displacements = np.zeros(3 * len(self.nodes))
         displacements[free_dofs] = dr
 
         self.displacements = displacements
-        #self.ext_forces = self.K() @ self.displacements
 
         self.upd_obj_displacements()
 
-        #print('Nodal displacements', self.displacements)
-        #print('Nodal loads', self.loads)
-        #print('Member loads', self.member_loads)
-
-        #self.forces = np.array([beam.forces for beam in self.elements])
-        # forces.shape == (n, 6), n: no. of elements
-
-        self.solved = True
         return results.ResultsStaticLinear(self, displacements)
 
     def plot(self):
