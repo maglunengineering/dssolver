@@ -71,7 +71,7 @@ class NonLinearSolver(Solver):
 
         i = 0
         while i < steps and A < max_A:
-            if settings.get_setting('dss.verbose'):
+            if settings.get_setting('dss.verbose', False):
                 print("Predictor step {}".format(i))
             K = problem.K(True)
             wq0 = np.linalg.solve(K, q)
@@ -128,7 +128,7 @@ class NonLinearSolver(Solver):
     def get_internal_forces(self, problem):
         ndofs = 3 * len(problem.nodes)
         forces = np.zeros(ndofs)
-        for element in problem._elements:
+        for element in problem.elements:
             forces[element.dofs] += element.get_forces()
         #    forces = forces + element.expand(element.get_forces(), ndofs)
 

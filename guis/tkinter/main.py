@@ -49,7 +49,6 @@ class DSSGUI:
         self.build_grid()
         self.build_menu()
         self.build_rsmenu()
-        self.build_canvas()
         #self.build_bc_menu()  # Outsourced
 
         self.canvas.set_tool(tools.ToolSelect(self, self.canvas, root))
