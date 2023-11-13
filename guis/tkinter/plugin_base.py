@@ -6,13 +6,8 @@ class DSSPlugin:
     def __init__(self, owner:'DSS'):
         self.dss: 'DSS' = owner
 
-    @classmethod
-    def load_plugin(cls, owner:'DSS'):
-        owner.plugins[cls] = DSSPlugin(owner) # Placeholder for plugins that are not instantiated
-        if cls.instantiate:
-            instance = cls(owner)
-            owner.plugins[cls] = instance
-            instance.load_instance()
+    def load_plugin(self):
+        pass
 
     @classmethod
     def get_settings(cls) -> Dict[str, bool]:

@@ -38,16 +38,12 @@ class DSSGUI:
         self.canvas.dss = self # TODO: Remove
         self.canvas.grid(row=0, column=0, sticky='nsew')
 
-        self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
-        if 'plugins' in kwargs:
-            plugins: Iterable[plugin_base.DSSPlugin] = kwargs['plugins']
-            for plugin in plugins:
-                plugin.load_plugin(self)
+        settings.add_setting('dssgui.running_animation', True)
 
         self.menus = {}
 
         self.build_grid()
-        self.build_menu()
+        self.build_menu(kwargs.get('plugins', {}))
         self.build_rsmenu()
         #self.build_bc_menu()  # Outsourced
 
@@ -57,8 +53,11 @@ class DSSGUI:
             self.canvas.add_object(self.problem.get_or_create_node((0,0)))
         self.draw_canvas()
 
-        for plugin in self.plugins.values():
-            plugin.on_after_dss_built()
+        self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
+        plugins = kwargs.get('plugins', {})
+        for plugin in plugins:
+            instance = plugin(self)
+            instance.load_plugin()
 
     # Building functions
     def build_grid(self):
@@ -66,7 +65,7 @@ class DSSGUI:
         self.mainframe.columnconfigure(1, weight=1)  # Quick menu
         self.mainframe.rowconfigure(0, weight=1)  # Canvas (resizable)
 
-    def build_menu(self):
+    def build_menu(self, plugins):
         self.topmenu = tk.Menu(self.root)
         topmenu = self.topmenu
         self.root.config(menu=topmenu)
@@ -89,11 +88,11 @@ class DSSGUI:
             return lambda : this.call_and_add_to_results(*args)
 
         menu_plugins = tk.Menu(topmenu)
-        for cls, instance in self.plugins.items():
-            menu = menu_plugins if not issubclass(cls, solvers.Solver) else menu_solve
-            for key,value in instance.get_functions().items():
-                menu.add_command(label = key,
-                                 command = callback_factory(self, value))
+        #for cls, instance in plugins.items():
+        for plugin in plugins:
+            instance = plugin(self)
+            if isinstance(instance, solvers.Solver) and type(instance) != solvers.Solver:
+                self.add_topmenu_item('Solve', plugin.__name__, callback_factory(self, instance.solve))
 
         topmenu.add_separator()
         topmenu.add_command(label='Autoscale', command=lambda: self.autoscale() )
@@ -109,8 +108,16 @@ class DSSGUI:
 
 
     def call_and_add_to_results(self, func:Callable):
-        results = func()
-        self.listbox_results.add(results)
+        for x in func():
+            if x:
+                results = x
+                self.listbox_results.add(results)
+                if settings.get_setting('dssgui.running_animation', True):
+                    self.draw_canvas()
+                break
+            self.draw_canvas()
+            if settings.get_setting('dssgui.running_animation', True):
+                self.canvas.update()
 
 
     def build_rsmenu(self):

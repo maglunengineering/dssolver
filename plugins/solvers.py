@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from typing import Dict, Callable
+from typing import Dict, Callable, Iterable, Optional
 
 from guis.tkinter.plugin_base import DSSPlugin
 from core.problem import Problem
@@ -15,15 +15,12 @@ class Solver(DSSPlugin):
         super().__init__(owner)
         self.results = None
 
-    def solve(self, problem: Problem) -> results.Results:
+    def solve(self) -> Iterable[Optional[results.Results]]:
         pass
-
-    def on_after_dss_built(self):
-        pass
-
 
 class LinearSolver(Solver):
-    def solve(self, problem: 'Problem') -> results.ResultsStaticLinear:
+    def solve(self) -> Iterable[Optional[results.Results]]:
+        problem = self.dss.problem
         problem.reassign_dofs()
         problem.remove_dofs()
 
@@ -43,14 +40,11 @@ class LinearSolver(Solver):
         problem.displacements = displacements
         problem.upd_obj_displacements()  # To be removed
 
-        return results.ResultsStaticLinear(problem, displacements)
-
-    def get_functions(self) -> Dict[str, Callable]:
-        return {'Linear': lambda: self.solve(self.dss.problem.clone())}
-
+        yield results.ResultsStaticLinear(problem, displacements)
 
 class NonLinearSolver(Solver):
-    def solve(self, problem: Problem) -> results.ResultsStaticNonlinear:
+    def solve(self) -> results.ResultsStaticNonlinear:
+        problem = self.dss.problem
         steps = 500
         arclength = 45
         A = 0
@@ -107,6 +101,7 @@ class NonLinearSolver(Solver):
             displ_storage.append(np.array(displacements))
             loads[free_dofs] = q * A
             force_storage.append(A)
+            yield None
             i += 1
 
             # print(f"Finished in {k} corrector steps (stepped {dA}, arclength {arclength})")
@@ -119,10 +114,11 @@ class NonLinearSolver(Solver):
 
         t1 = time.time()
         dt = t1 - t0
-        print(np.asarray(displ_storage))
-        print(f"Ended at A = {A} in {dt} seconds")
+        if settings.get_setting('dss.verbose', False):
+            print(np.asarray(displ_storage))
+            print(f"Ended at A = {A} in {dt} seconds")
 
-        return results.ResultsStaticNonlinear(problem, np.asarray(displ_storage),
+        yield results.ResultsStaticNonlinear(problem, np.asarray(displ_storage),
                                               np.asarray(force_storage))
 
     def get_internal_forces(self, problem):
@@ -134,10 +130,6 @@ class NonLinearSolver(Solver):
 
         return forces
 
-    def get_functions(self) -> Dict[str, Callable]:
-        return {'Nonlinear': lambda: self.solve(self.dss.problem.clone())}
-
-
 class ModalSolver(Solver):
     def __init__(self, owner):
         super().__init__(owner)
@@ -145,7 +137,8 @@ class ModalSolver(Solver):
         self.eigenvalues = np.zeros(0)
         self.eigenvectors = np.zeros((0, 0))
 
-    def solve(self, problem: Problem):
+    def solve(self):
+        problem = self.dss.problem
         problem.reassign_dofs()
         M = problem.M(True)
         K = problem.K(True)
@@ -169,10 +162,6 @@ class ModalSolver(Solver):
 
         return results.ResultsModal(problem, eigenvalues, full_eigenvectors)
 
-    def get_functions(self) -> Dict[str, Callable]:
-        return {'Modal': lambda: self.solve(self.dss.problem.clone())}
-
-
 class DynamicSolver(Solver):
     def __init__(self, owner):
         super().__init__(owner)
@@ -193,6 +182,9 @@ class DynamicSolver(Solver):
             forces[element.dofs] += element.get_forces()
 
         return forces
+
+    def solve(self):
+        return self.solve_explicit(self.dss.problem)
 
     def solve_explicit(self, problem):
         problem.reassign_dofs()
@@ -239,6 +231,7 @@ class DynamicSolver(Solver):
             for node in problem.nodes:
                 node.displacements = u[node.dofs]
 
+            yield
             t += dt
             i += 1
             if i % interval == 0:
@@ -306,8 +299,3 @@ class DynamicSolver(Solver):
     def set_displacements(self, displ, prob):
         for node in prob.nodes:
             node.displacements = displ[node.dofs]
-
-    def get_functions(self) -> Dict[str, Callable]:
-        return {'Explicit time integration': lambda: self.solve_explicit(self.dss.problem.clone()),
-                'Implicit time integration': lambda: self.solve_implicit(self.dss.problem.clone()),
-                'WIP algorithm': lambda: self.solve_whoknows(self.dss.problem.clone())}

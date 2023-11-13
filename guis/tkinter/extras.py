@@ -258,7 +258,7 @@ class DSSSettingsFrame(tk.Frame):
             self._refs.append(var) # Bug in Tkinter? This reference is somehow needed
             btn = tk.Checkbutton(self, variable=var, bg='gray82')
             btn.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
-            var.trace_add('write', lambda *_: self.setter(key, val.get()))
+            var.trace_add('write', lambda *_: self.setter(key, var.get()))
 
         elif isinstance(val, int) or isinstance(val, float) or isinstance(val, str):
             t = type(val)

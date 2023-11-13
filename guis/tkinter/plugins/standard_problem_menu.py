@@ -13,7 +13,7 @@ class StandardProblemMenu(DSSPlugin):
 
         self.menu_stdcases:tk.Menu
 
-    def on_after_dss_built(self):
+    def load_plugin(self):
         self.dss.add_topmenu_item('Standard problems', 'Cantilever beam', self.cantilever_beam)
         self.dss.add_topmenu_item('Standard problems', 'Deep arch', self.deep_arch_half)
         self.dss.add_topmenu_item('Standard problems', 'Deep arch (full)', self.deep_arch)
