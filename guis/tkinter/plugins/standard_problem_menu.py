@@ -100,7 +100,7 @@ class StandardProblemMenu(DSSPlugin):
         n1.pin()
         n2.roller90()
         n3.glider()
-        n3 = np.array([0, -4000, 0])
+        n3.loads = np.array([0, -4000, 0])
         self.dss.autoscale()
 
     def von_mises_truss_springbc(self):
