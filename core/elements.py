@@ -70,10 +70,13 @@ class FiniteElement(DSSModelObject):
             node.add_element(self)
 
         self.stiffness_matrix_local = np.zeros((6,6))
+        self._dofs = None # Cached
 
     @property
     def dofs(self):
-        return np.hstack([n.dofs for n in self.nodes])
+        if self._dofs is None:
+            self._dofs = np.hstack([n.dofs for n in self.nodes])
+        return self._dofs
 
     def get_displacements(self):
         return np.hstack([n.displacements for n in self.nodes])
@@ -114,7 +117,7 @@ class FiniteElement2Node(FiniteElement):
     def transform(self):
         e1 = ((self.node2.r + self.node2.displacements[:2]) -
               (self.node1.r + self.node1.displacements[0:2])) / self._deformed_length()
-        e2 = R(np.deg2rad(90)) @ e1 # TODO: Just make it like [-e2, e1] or whatever
+        e2 = [-e1[1], e1[0]]
         T = np.array([[e1[0], e1[1], 0, 0, 0, 0],
                       [e2[0], e2[1], 0, 0, 0, 0],
                       [0, 0, 1, 0, 0, 0],
@@ -288,6 +291,7 @@ class Rod(FiniteElement2Node):
 
 class Quad4(FiniteElement):
     def __init__(self, node1, node2, node3, node4, E, v, t):
+        super().__init__([node1, node2, node3, node4])
         self.nodes = [node1, node2, node3, node4]
         self.E = E
         self.v = v

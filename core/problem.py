@@ -112,10 +112,17 @@ class Problem:
         return self.assemble(lambda e: e.stiffness_matrix_global(), reduced)
 
     def assemble(self, elem_func, reduced=False):
-        self.remove_dofs()
+        if not self.constrained_dofs:
+            self.remove_dofs()
 
         num_dofs = 3 * len(self.nodes)
-        matrix = sum(e.expand(elem_func(e), num_dofs) for e in self.elements)
+
+        matrix = np.zeros((num_dofs, num_dofs))
+        for e in self.elements:
+            edofs = e.dofs
+            contrib = elem_func(e)
+            matrix[np.ix_(edofs, edofs)] += contrib
+
         if not reduced:
             return matrix
         else:

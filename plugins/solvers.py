@@ -18,6 +18,11 @@ class Solver(DSSPlugin):
     def solve(self) -> Iterable[Optional[results.Results]]:
         pass
 
+    def solveall(self) -> results.Results:
+        for x in self.solve():
+            if x:
+                return x
+
 class LinearSolver(Solver):
     def solve(self) -> Iterable[Optional[results.Results]]:
         problem = self.dss.problem

@@ -5,6 +5,16 @@ from plugins import solvers
 
 from core.elements import *
 
+def profile(func):
+    """
+    Decorator that causes the decorated function to be run using cProfile. Output is printed to stdout
+    """
+    def inner(*args, **kwargs):
+        import cProfile
+        cProfile.runctx('func(self)', locals={'self':args[0], 'func':func}, globals=globals())
+    return inner
+
+
 class ElementTest(unittest.TestCase):
     def setUp(self):
         self.p = problem.Problem()
@@ -47,8 +57,8 @@ class ElementTest(unittest.TestCase):
         self.n2.loads = np.array([0, -f, 0])
         self.p.reassign_dofs()
         self.p.remove_dofs()
-        solver = solvers.LinearSolver(None)
-        solver.solve(self.p)
+        solver = solvers.LinearSolver(self)
+        solver.solve()
         work = -self.n2.displacements[1] * f * 0.5
 
         self.assertAlmostEqual(work, self.p.elements[0].get_strain_energy(), places=2)
@@ -62,8 +72,8 @@ class ElementTest(unittest.TestCase):
         self.n2.loads = np.array([0, -f, 0])
         self.p.reassign_dofs()
         self.p.remove_dofs()
-        solver = solvers.LinearSolver(None)
-        solver.solve(self.p)
+        solver = solvers.LinearSolver(self)
+        solver.solve()
 
         e = self.p.elements[0]
         u = e.get_displacements()
@@ -126,9 +136,10 @@ class PerformanceTest(unittest.TestCase):
     def test_timeit_both(self):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
 
-    @timeit
+    @profile
     def _test_270_arc(self):
         # 5/11-23: 20.2 s
+        # 17/11-23: 17s
         p = problem.Problem()
         start = np.deg2rad(225)
         end = np.deg2rad(-45)
@@ -142,8 +153,9 @@ class PerformanceTest(unittest.TestCase):
         p.nodes[0].pin()
         p.nodes[-1].fix()
         p.nodes[n//2].loads = np.array([0, -200000, 0])
+        self.problem = p
         solver = solvers.NonLinearSolver(self)
-        solver.solve(p)
+        solver.solveall()
 
 class SampleProblems(unittest.TestCase):
     def setUp(self):
@@ -192,6 +204,33 @@ class SampleProblems(unittest.TestCase):
         self.p.solve()
 
         self.assertAlmostEqual(-P*L**3 / (3*E*I), self.p.node_at((1000,0)).displacements[1], places=5)
+
+    def test_von_mises_truss(self):
+        p = self.problem = self.p
+        n1 = p.get_or_create_node((0,0))
+        n2 = p.get_or_create_node((1000,200))
+        p.create_beam(n1, n2, A=10)
+        n1.pin()
+        n2.roller90()
+        n2.loads = np.array([0, -10000, 0])
+        solver = solvers.NonLinearSolver(self)
+        res = solver.solveall()
+        self.assertAlmostEqual(-482.59459618768216, res.displacements[-1, 4], places=1)
+
+    def test_snapback_von_mises_truss(self):
+        p = self.problem = self.p
+        n1 = p.get_or_create_node((0, 0))
+        n2 = p.get_or_create_node((1000, 200))
+        n3 = p.get_or_create_node((1000, 600))
+        p.create_beam(n1, n2, A=10)
+        p.create_rod(n2, n3, A=0.05)
+        n1.pin()
+        n2.roller90()
+        n3.glider()
+        n3.loads = np.array([0, -4000, 0])
+        solver = solvers.NonLinearSolver(self)
+        res = solver.solveall()
+        self.assertAlmostEqual(-442.62588512549337, res.displacements[-1, 4], places=1)
 
 
 
