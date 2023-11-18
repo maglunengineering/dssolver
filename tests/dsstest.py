@@ -136,10 +136,11 @@ class PerformanceTest(unittest.TestCase):
     def test_timeit_both(self):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
 
-    @profile
+    @timeit
     def _test_270_arc(self):
         # 5/11-23: 20.2 s
         # 17/11-23: 17s
+        # 18/11-23: 11s
         p = problem.Problem()
         start = np.deg2rad(225)
         end = np.deg2rad(-45)

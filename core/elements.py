@@ -107,8 +107,8 @@ class FiniteElement2Node(FiniteElement):
         self._undeformed_length = np.linalg.norm(self.r2 - self.r1)
 
         self._deformed_length = self._update_deformed_length()
-        #self._transform = self._update_transform()
-        #self._stiffness = self._update_stiffness()
+        self._transform = self._update_transform()
+        self._stiffness = self._update_stiffness()
 
 
     @property
@@ -121,14 +121,14 @@ class FiniteElement2Node(FiniteElement):
 
     def nonlin_update(self):
         self._update_deformed_length()
-        #self._update_transform()
-        #self._update_stiffness()
+        self._update_transform()
+        self._update_stiffness()
         pass
 
     def get_forces(self):
-        return self.transform().T @ self._get_forces_local()
+        return self._transform.T @ self._get_forces_local()
 
-    def transform(self):
+    def _update_transform(self):
         e1 = ((self.node2.r + self.node2.displacements[:2]) -
               (self.node1.r + self.node1.displacements[0:2])) / self._deformed_length
         e2 = [-e1[1], e1[0]]
@@ -138,25 +138,24 @@ class FiniteElement2Node(FiniteElement):
                       [0, 0, 0, e1[0], e1[1], 0],
                       [0, 0, 0, e2[0], e2[1], 0],
                       [0, 0, 0, 0, 0, 1]])
-        return T
+        self._transform = T
+        return self._transform
+
+    def _update_stiffness(self):
+        self._stiffness = self._transform.T @ (self.stiffness_matrix_local + self._get_stiffness_geometric()) @ self._transform
+        return self._stiffness
 
     def stiffness_matrix_global(self):
-        T = self.transform()
-        return T.T @ self.stiffness_matrix_local @ T + self.stiffness_matrix_geometric()
+        return self._stiffness
 
-    def stiffness_matrix_geometric(self):
+    def _get_stiffness_geometric(self):
         fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local()
-        deformed_length = self._deformed_length
-
         forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
-        G = np.array([0, -1/deformed_length, 0, 0, 1/deformed_length, 0])
-        T = self.transform()
-        kg = np.outer(forces_permuted, G)
-        #kg = 0.5 * (kg + kg.T)
-        return T.T @ np.outer(forces_permuted, G) @ T
+        G = np.array([0, -1/self._deformed_length, 0, 0, 1/self._deformed_length, 0])
+        return np.outer(forces_permuted, G)
 
     def mass_matrix_global(self):
-        T = self.transform()
+        T = self._transform
         density = 7.86e-9 # Density of steel in tonnes / mm^3
         half_mass = self.A * self._undeformed_length * density / 2
         rot_mass = 1/50 * half_mass * self._undeformed_length ** 2 # Felippa: IFEM Ch.31
@@ -225,7 +224,7 @@ class Beam(FiniteElement2Node):
                              [0,     1/self.A,   0]])
         self.cpl[0:3, 0:3] = self.cpl[3:6, 3:6] = self.cpl_
 
-        #self._stiffness = self._update_stiffness()
+        self._stiffness = self._update_stiffness()
 
     def get_strain_energy(self):
         """
@@ -239,7 +238,7 @@ class Beam(FiniteElement2Node):
         M1,M2 = forces[2], forces[5]
         bending_strain_energy = c*(M1**2 + M1*M2 + M2**2)*self._undeformed_length
 
-        axial_strain = 1 - self._deformed_length()/self._undeformed_length
+        axial_strain = 1 - self._deformed_length/self._undeformed_length
         axial_stress = self.E * axial_strain
         axial_strain_energy = 0.5 * axial_stress * axial_strain * self.A * self._undeformed_length
 
