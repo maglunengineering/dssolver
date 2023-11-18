@@ -72,6 +72,7 @@ class NonLinearSolver(Solver):
         while i < steps and A < max_A:
             if settings.get_setting('dss.verbose', False):
                 print("Predictor step {}".format(i))
+            problem.nonlin_update()
             K = problem.K(True)
             wq0 = np.linalg.solve(K, q)
             f = np.sqrt(1 + wq0 @ wq0)
@@ -87,8 +88,10 @@ class NonLinearSolver(Solver):
 
             # Corrector
             k = 0
+            problem.nonlin_update()
             residual = self.get_internal_forces(problem)[free_dofs] - q * A
             while np.linalg.norm(residual) > 1e-3 and k < max_it:
+                problem.nonlin_update()
                 K = problem.K(True)
                 wq = np.linalg.solve(K, q)
                 wr = np.linalg.solve(K, -residual)
@@ -100,6 +103,7 @@ class NonLinearSolver(Solver):
                     node.displacements = displacements[node.dofs]
                 k += 1
 
+                problem.nonlin_update()
                 residual = self.get_internal_forces(problem)[free_dofs] - q * A
 
             # displ_storage[i] = displacements

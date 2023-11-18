@@ -94,6 +94,10 @@ class Problem:
         for node in self.nodes:
             self.constrained_dofs.extend(node.dofs[node.constrained_dofs])
 
+    def nonlin_update(self):
+        for e in self.elements:
+            e.nonlin_update()
+
     def model_size(self):
         xy = self.nodal_coordinates
         if not np.any(xy):
