@@ -116,8 +116,10 @@ class FiniteElement2Node(FiniteElement):
     def nonlin_update(self):
         self._update_deformed_length()
         self._update_transform()
-        self._update_stiffness()
         self._update_forces_local()
+        self._update_stiffness()
+
+
 
     def get_forces(self):
         return self._transform.T @ self._get_forces_local()
@@ -168,7 +170,6 @@ class FiniteElement2Node(FiniteElement):
         return self._deformed_length
 
     def _get_forces_local(self):
-        self._update_forces_local() # TODO: Remove but slightly breaks the mises truss tests
         return self._forces_local
 
     def _update_forces_local(self):
