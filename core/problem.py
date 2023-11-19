@@ -123,9 +123,8 @@ class Problem:
 
         matrix = np.zeros((num_dofs, num_dofs))
         for e in self.elements:
-            edofs = e.dofs
             contrib = elem_func(e)
-            matrix[np.ix_(edofs, edofs)] += contrib
+            matrix[e.ix()] += contrib
 
         if not reduced:
             return matrix

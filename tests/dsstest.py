@@ -137,10 +137,11 @@ class PerformanceTest(unittest.TestCase):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
 
     @timeit
-    def _test_270_arc(self):
+    def test_270_arc(self):
         # 5/11-23: 20.2 s
         # 17/11-23: 17s
         # 18/11-23: 11s
+        # 19/11-23: 9s, 6s
         p = problem.Problem()
         start = np.deg2rad(225)
         end = np.deg2rad(-45)
@@ -160,7 +161,7 @@ class PerformanceTest(unittest.TestCase):
 
 class SampleProblems(unittest.TestCase):
     def setUp(self):
-        self.p = problem.Problem();
+        self.p = problem.Problem()
 
     def curved_spring(self, ampl):
         length = 10.5 #mm
@@ -216,7 +217,7 @@ class SampleProblems(unittest.TestCase):
         n2.loads = np.array([0, -10000, 0])
         solver = solvers.NonLinearSolver(self)
         res = solver.solveall()
-        self.assertAlmostEqual(-482.59459618768216, res.displacements[-1, 4], places=1)
+        self.assertAlmostEqual(-482.59459618768216, res.displacements[-1, 4], delta=1)
 
     def test_snapback_von_mises_truss(self):
         p = self.problem = self.p
@@ -231,7 +232,7 @@ class SampleProblems(unittest.TestCase):
         n3.loads = np.array([0, -4000, 0])
         solver = solvers.NonLinearSolver(self)
         res = solver.solveall()
-        self.assertAlmostEqual(-442.62588512549337, res.displacements[-1, 4], places=1)
+        self.assertAlmostEqual(-442.62588512549337, res.displacements[-1, 4], delta=1)
 
 
 
