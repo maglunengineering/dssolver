@@ -51,9 +51,9 @@ class NonLinearSolver(Solver):
     def solve(self) -> results.ResultsStaticNonlinear:
         problem = self.dss.problem
         steps = 500
-        arclength = 45
+        arclength = 1000
         A = 0
-        max_it = 35
+        max_it = 15
         t0 = time.time()
 
         problem.reassign_dofs()
@@ -69,7 +69,7 @@ class NonLinearSolver(Solver):
         force_storage = []
 
         i = 0
-        while i < steps and A < max_A:
+        while A < max_A:
             if settings.get_setting('dss.verbose', False):
                 print("Predictor step {}".format(i))
             problem.nonlin_update()
@@ -77,8 +77,9 @@ class NonLinearSolver(Solver):
             wq0 = np.linalg.solve(K, q)
             f = np.sqrt(1 + wq0 @ wq0)
 
-            sign = np.sign(wq0 @ v0 if i > 1 else 1)
+            sign = np.sign(wq0 @ v0) if i > 1 else 1
             dA = arclength / f * sign
+            dA = min(0.1*max_A, dA, max_A - A)
             v0 = dA * wq0
             A += dA
 
@@ -87,11 +88,9 @@ class NonLinearSolver(Solver):
                 node.displacements = displacements[node.dofs]
 
             # Corrector
-            k = 0
             problem.nonlin_update()
             residual = self.get_internal_forces(problem)[free_dofs] - q * A
-            while np.linalg.norm(residual) > 1e-3 and k < max_it:
-                problem.nonlin_update()
+            for k in range(max_it):
                 K = problem.K(True)
                 wq = np.linalg.solve(K, q)
                 wr = np.linalg.solve(K, -residual)
@@ -101,25 +100,30 @@ class NonLinearSolver(Solver):
                 displacements[free_dofs] = displacements[free_dofs] + (wr + dA_ * wq)
                 for node in problem.nodes:
                     node.displacements = displacements[node.dofs]
-                k += 1
 
                 problem.nonlin_update()
                 residual = self.get_internal_forces(problem)[free_dofs] - q * A
+                if np.linalg.norm(residual) < 1e-3:
+                    break
+            else:
+                displacements = displ_storage.pop()
+                A = force_storage.pop()
+                for node in problem.nodes:
+                    node.displacements = displacements[node.dofs]
+                arclength /= 2
+                #if settings.get_setting('dss.verbose', False):
+                print(f'Resetting displacements and split arclength. {arclength=} {A=}')
+                continue
 
-            # displ_storage[i] = displacements
+            #if settings.get_setting('dss.verbose', False):
+            print(f'Increasing arclength')
+            arclength *= 1.2
+
             displ_storage.append(np.array(displacements))
             loads[free_dofs] = q * A
             force_storage.append(A)
             yield None
             i += 1
-
-            # print(f"Finished in {k} corrector steps (stepped {dA}, arclength {arclength})")
-            if k < 4:
-                arclength *= 1.05
-            elif k > 8:
-                arclength *= 0.6
-            else:
-                arclength *= 0.85
 
         t1 = time.time()
         dt = t1 - t0
