@@ -47,6 +47,7 @@ class DSSGUI:
         self.build_rsmenu()
         #self.build_bc_menu()  # Outsourced
 
+        self.add_topmenu_item('Tools', 'ToolSelect', lambda: self.canvas.set_tool(tools.ToolSelect(self, self.canvas, root)))
         self.canvas.set_tool(tools.ToolSelect(self, self.canvas, root))
 
         if not self.problem.nodes:
