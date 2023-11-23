@@ -1,6 +1,8 @@
 import tkinter as tk
 import numpy as np
 
+from core import elements
+
 class Tool:
     def __init__(self, canvas, root):
         self.canvas = canvas
@@ -132,3 +134,51 @@ class ToolSelect(Tool):
             self.r2 = np.array(r)
             self.gui.create_beam_dlg(self.r1, self.r2)
             self.r1 = self.r2 = None
+
+
+class ToolDispl(Tool):
+    def __init__(self, gui, canvas, root):
+        super().__init__(canvas, root)
+        self.gui:'DSSGUI' = gui
+
+        self._dragging = False
+        self._snap_obj = None
+        self._last_click_xy = np.empty(2)
+
+
+    def activate(self):
+        self.canvas.bind('<Button-1>', self.on_click)
+        self.canvas.bind('<Button-3>', self.on_rclick)
+        self.canvas.bind('<B1-Motion>', self._drag)
+
+        def on_mousewheel(event):
+            if event.delta > 0:
+                self.canvas.scaleup(event)
+            else:
+                self.canvas.scaledown(event)
+
+        self.canvas.bind('<MouseWheel>', on_mousewheel)
+        self.canvas.bind('<ButtonRelease-1>', self.on_lbuttonup)
+
+    def _drag(self, event):
+        if not self._dragging:
+            return
+        if not self._snap_obj:
+            obj = self.canvas.get_closest((event.x, event.y))
+            if isinstance(obj, elements.Node):
+                self._snap_obj = obj
+            else:
+                return
+
+        pt = self.canvas.canvas_to_problem((event.x, event.y))
+        self._snap_obj.displacements = pt - self._last_click_xy
+        self.gui.draw_canvas()
+        print(f'Set {self._snap_obj.displacements=}')
+
+    def on_click(self, event):
+        self._dragging = True
+        self._last_click_xy = self.canvas.canvas_to_problem((event.x, event.y))
+
+    def on_lbuttonup(self, event):
+        self._dragging = False
+        self._last_click_xy = np.empty(2)
