@@ -7,9 +7,8 @@ from typing import Callable, Iterable, Dict
 
 import numpy as np
 
-from core import problem, elements, settings
+from core import problem, elements, settings, solvers
 from guis.tkinter import extras, plugin_base
-from plugins import solvers
 import tools
 
 from results_viewer import ResultsViewer
@@ -85,6 +84,7 @@ class DSSGUI:
         menu_solve = tk.Menu(topmenu)
         self.menus['Solve'] = menu_solve
         topmenu.add_cascade(label='Solve', menu=menu_solve)
+        self.add_topmenu_item('Solve', 'p.solve', self.problem.solve)
 
         def callback_factory(this, *args):
             return lambda : this.call_and_add_to_results(*args)

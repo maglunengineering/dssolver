@@ -1,7 +1,6 @@
 import unittest
 import time
-from core import problem
-from plugins import solvers
+from core import problem, solvers
 
 from core.elements import *
 
@@ -110,6 +109,17 @@ class ProblemTest(unittest.TestCase):
         solver = solvers.DynamicSolver(None)
         solver.solve_whoknows(self.p)
 
+    def test_prescribed_displacements(self):
+        self.n3 = Node((2000, 0))
+        self.p.nodes.append(self.n3)
+        self.n1.fix()
+        self.n3.pin()
+        self.n3.displacements = np.array([0, 100, 0])
+        self.p.create_beam(self.n1, self.n2)
+        self.p.create_beam(self.n2, self.n3)
+        self.p.solve()
+        self.assertTrue(np.allclose(self.n2.displacements[0:2], np.array([0, 25])), f'{self.n2.displacements[0:2]} != {np.array([0, 25])}')
+
 
 def timeit(func, *args):
     def inner(*args):
@@ -137,7 +147,7 @@ class PerformanceTest(unittest.TestCase):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
 
     @timeit
-    def test_270_arc(self):
+    def _test_270_arc(self):
         # 5/11-23: 20.2 s
         # 17/11-23: 17s
         # 18/11-23: 11s

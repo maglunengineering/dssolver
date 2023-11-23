@@ -1,7 +1,7 @@
 import tkinter as tk
 import numpy as np
 
-from core import elements
+from core import elements, solvers
 
 class Tool:
     def __init__(self, canvas, root):
@@ -144,6 +144,7 @@ class ToolDispl(Tool):
         self._dragging = False
         self._snap_obj = None
         self._last_click_xy = np.empty(2)
+        self._solver = solvers.LinearSolver(gui)
 
 
     def activate(self):
@@ -161,24 +162,24 @@ class ToolDispl(Tool):
         self.canvas.bind('<ButtonRelease-1>', self.on_lbuttonup)
 
     def _drag(self, event):
-        if not self._dragging:
+        if not self._dragging or not self._snap_obj:
             return
-        if not self._snap_obj:
-            obj = self.canvas.get_closest((event.x, event.y))
-            if isinstance(obj, elements.Node):
-                self._snap_obj = obj
-            else:
-                return
 
         pt = self.canvas.canvas_to_problem((event.x, event.y))
-        self._snap_obj.displacements = pt - self._last_click_xy
+        self._snap_obj.displacements = np.array([*(pt - self._last_click_xy), 0])
         self.gui.draw_canvas()
-        print(f'Set {self._snap_obj.displacements=}')
+        self._solver.solveall()
 
     def on_click(self, event):
         self._dragging = True
         self._last_click_xy = self.canvas.canvas_to_problem((event.x, event.y))
+        if not self._snap_obj:
+            obj = self.canvas.get_closest((event.x, event.y))
+            if isinstance(obj, elements.Node):
+                self._snap_obj = obj
+                self._snap_obj.constrained_dofs = [0, 1]
 
     def on_lbuttonup(self, event):
         self._dragging = False
         self._last_click_xy = np.empty(2)
+        self._snap_obj = None

@@ -136,17 +136,25 @@ class Problem:
         self.reassign_dofs()
         self.remove_dofs()
         free_dofs = self.free_dofs()
+        constrained_dofs = self.constrained_dofs
 
-        Kr = self.K(reduced=True)
-        Fr = self.loads[free_dofs]
-        dr = np.linalg.solve(Kr, Fr)
+        K = self.K()
+        K11 = K[np.ix_(free_dofs, free_dofs)]
+        K12 = K[np.ix_(free_dofs, constrained_dofs)]
+        K21 = K[np.ix_(constrained_dofs, free_dofs)]
+        K22 = K[np.ix_(constrained_dofs, constrained_dofs)]
 
-        displacements = np.zeros(3 * len(self.nodes))
-        displacements[free_dofs] = dr
+        # Assemble displacements
+        displacements = np.hstack(tuple(node.displacements for node in self.nodes))
+        forces = self.loads
 
+        displacements[free_dofs] = np.linalg.solve(K11, forces[free_dofs] - K12 @ displacements[constrained_dofs])
+        forces[constrained_dofs] = K21 @ displacements[free_dofs] + K22 @ displacements[constrained_dofs]
+
+        for node in self.nodes:
+            node.loads = forces[node.dofs]
+            node.displacements = displacements[node.dofs]
         self.displacements = displacements
-
-        self.upd_obj_displacements()
 
         return results.ResultsStaticLinear(self, displacements)
 
@@ -196,7 +204,7 @@ class Problem:
         return nodal_coordinates
 
     @property
-    def loads(self):
+    def loads(self): # TODO : Should not be a property
         return np.hstack(tuple(node.loads for node in self.nodes))
 
     def __copy__(self):

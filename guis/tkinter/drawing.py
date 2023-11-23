@@ -52,14 +52,14 @@ class NodeDrawer:
                             smooth=True,
                             arrow=arrow, fill='blue', tag='mech')
             canvas.draw_text(arc_start,
-                             text='{}'.format(self.loads[2]),
+                             text='{}'.format(np.round(self.loads[2], 0)),
                              anchor='ne', tag='mech')
 
     @staticmethod
     def draw_boundary_condition(self, canvas: extras.DSSCanvas):
         scale = 50
         linewidth = 2
-        pos = self.r
+        pos = self.r + self.displacements[0:2]
 
         if self.constrained_dofs == [0,1,2]:
             angle_vector = sum(n.r - self.r for n in self.connected_nodes())
@@ -67,7 +67,7 @@ class NodeDrawer:
             c, s = np.cos(-angle), np.sin(-angle)
             rotation = np.array([[c, -s], [s, c]])
 
-            canvas.draw_line((pos + rotation @ [0, scale]), (self.r + rotation @ [0, -scale]),
+            canvas.draw_line((pos + rotation @ [0, scale]), (pos + rotation @ [0, -scale]),
                              width=linewidth, fill='black', tag='bc')
             for offset in np.linspace(0, 2 * scale, 6):
                 canvas.draw_line((pos + rotation @ [0, -scale + offset]),
@@ -77,7 +77,7 @@ class NodeDrawer:
         elif self.constrained_dofs == [0,1] or self.constrained_dofs == [1]:
             k = 1.5  # constant - triangle diameter
 
-            canvas.draw_oval((pos - scale / 4), (self.r + scale / 5))
+            canvas.draw_oval((pos - scale / 4), (pos + scale / 5))
             canvas.draw_line(pos, (pos + np.array([-np.sin(np.deg2rad(30)),
                                                    np.cos(np.deg2rad(30))]) * k * scale),
                              width=linewidth, fill='black', tag='bc')
@@ -106,7 +106,7 @@ class NodeDrawer:
         elif self.constrained_dofs == [0]:
             k = 1.5  # constant - triangle diameter
 
-            canvas.draw_oval((pos - scale / 4), (self.r + scale / 5))
+            canvas.draw_oval((pos - scale / 4), (pos + scale / 5))
             canvas.draw_line(pos, (pos + np.array([np.cos(np.deg2rad(30)), np.sin(np.deg2rad(30))]) * k * scale),
                              width=linewidth, fill='black', tag='bc')
             canvas.draw_line(pos, (pos + np.array([np.cos(np.deg2rad(30)), -np.sin(np.deg2rad(30))]) * k * scale),

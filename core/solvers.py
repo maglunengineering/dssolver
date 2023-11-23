@@ -29,21 +29,25 @@ class LinearSolver(Solver):
         problem.reassign_dofs()
         problem.remove_dofs()
 
-        ndofs = 3 * len(problem.nodes)
         free_dofs = problem.free_dofs()
-        stiffness_matrix = problem.K(reduced=True)
-        loads = problem.loads[free_dofs]
+        constrained_dofs = problem.constrained_dofs
 
-        reduced_displacements = np.linalg.solve(stiffness_matrix, loads)
-        displacements = np.zeros(ndofs)
-        displacements[free_dofs] = reduced_displacements
+        K = problem.K()
+        K11 = K[np.ix_(free_dofs, free_dofs)]
+        K12 = K[np.ix_(free_dofs, constrained_dofs)]
+        K21 = K[np.ix_(constrained_dofs, free_dofs)]
+        K22 = K[np.ix_(constrained_dofs, constrained_dofs)]
+
+        # Assemble forces and displacements
+        displacements = np.hstack(tuple(node.displacements for node in problem.nodes))
+        forces = problem.loads
+
+        displacements[free_dofs] = np.linalg.solve(K11, forces[free_dofs] - K12 @ displacements[constrained_dofs])
+        forces[constrained_dofs] = K21 @ displacements[free_dofs] + K22 @ displacements[constrained_dofs]
 
         for node in problem.nodes:
+            node.loads = forces[node.dofs]
             node.displacements = displacements[node.dofs]
-
-        # To be removed:
-        problem.displacements = displacements
-        problem.upd_obj_displacements()  # To be removed
 
         yield results.ResultsStaticLinear(problem, displacements)
 
