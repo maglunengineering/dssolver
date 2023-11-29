@@ -73,7 +73,6 @@ class Problem:
 
     def reassign_dofs(self):
         for i,node in enumerate(self.nodes):
-            node.number = i
             node.dofs = np.array([3*i, 3*i+1, 3*i+2])
 
     def upd_obj_displacements(self):

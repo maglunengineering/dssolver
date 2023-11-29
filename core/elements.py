@@ -12,9 +12,8 @@ class Node(DSSModelObject):
         self.loads = np.zeros(3) # self.loads (global Fx, Fy, M) assigned on loading
         self.displacements = np.zeros(3)
 
-        self.number = None  # (node id) assigned on creation
         self.dofs = []  # self.dofs (dof1, dof2, dof3) assigned on creation
-        self.constrained_dofs = []  # 'fixed', 'pinned', 'roller', 'locked', 'glider'
+        self.constrained_dofs = []
 
     def add_element(self, beam):
         self._elements.append(beam)
@@ -118,8 +117,6 @@ class FiniteElement2Node(FiniteElement):
         self._update_transform()
         self._update_forces_local()
         self._update_stiffness()
-
-
 
     def get_forces(self):
         return self._transform.T @ self._get_forces_local()

@@ -61,10 +61,6 @@ class DSSCanvas(tk.Canvas):
 
         self.config(width=self.width, height=self.height)
 
-    def set_tool(self, tool):
-        self.tool = tool
-        self.tool.activate()
-
     def set_selection(self, obj):
         self.selected_object = obj
 
@@ -137,7 +133,7 @@ class DSSCanvas(tk.Canvas):
         if self.dss:
             self.dss.draw_canvas()
 
-    def on_lbuttonup(self, event):
+    def on_mbuttonup(self, event):
         self.prev_x = None
         self.prev_y = None
 
@@ -202,10 +198,14 @@ class DSSCanvas(tk.Canvas):
         self.snap_objs.clear()
 
     def scaleup(self, event):
+        if self.prev_x is not None:
+            return # Don't scale while dragging mbutton because it is annoying as hell
         self.transformation_matrix[0:2, 0:2] = self.transformation_matrix[0:2, 0:2]*0.8
         self.redraw()
 
     def scaledown(self, event):
+        if self.prev_x is not None:
+            return
         self.transformation_matrix[0:2, 0:2] = self.transformation_matrix[0:2, 0:2]*1.2
         self.redraw()
 
@@ -270,7 +270,7 @@ class DSSSettingsFrame(tk.Frame):
             if isinstance(val[0], int) or isinstance(val[0], float):
                 t = type(val[0])
                 entry = tk.Entry(self)
-                entry.insert(0, ';'.join(map(str, val)))
+                entry.insert(0, ' '.join(map(str, val)))
                 entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
                 entry.bind('<FocusOut>', lambda *_: self.setter(key, self._recreate_sequence(t, entry.get())))
 
@@ -278,7 +278,7 @@ class DSSSettingsFrame(tk.Frame):
 
     @staticmethod
     def _recreate_sequence(T, content):
-        return [T(item) for item in content.split(';')]
+        return [T(item) for item in content.split(' ')]
 
     def _get_callback(self, key, parse_func):
         pass
@@ -293,28 +293,8 @@ class DSSSettingsFrame(tk.Frame):
         setter = lambda k,v: setattr(obj, k, v)
         return cls(master, kvps, setter)
 
-    def add_settings(self, cls):
-        def callback_factory(cls, name, bv):
-            return lambda *args: cls.set_setting(name, bv.get())
-
-        if not hasattr(cls, 'get_settings'):
-            return
-
-        settings = cls.get_settings()
-        for name,value in settings.items():
-            if name in self.settings:
-                continue
-
-            bv = tk.BooleanVar()
-            bv.set(value)
-            self.settings[name] = bv # Bug in Tkinter? This reference is somehow needed
-
-            # Add a trace to a lambda function that updates the setting
-            bv.trace_add("write", callback = callback_factory(cls, name, bv))
-            button = tk.Checkbutton(self, text=name, variable=bv,
-                                    bg='gray82', highlightthickness=0, justify=tk.LEFT)
-            button.grid(row=int(self.counter/2+1), column=self.counter % 2, sticky='wns')
-            self.counter += 1
+    def __len__(self):
+        return self._cnt
 
 record = collections.defaultdict(list)
 

@@ -29,6 +29,7 @@ class DSSGUI:
         self.mainframe.winfo_toplevel().title('DSSolver')
         self.topmenu = None
         self.rsm_settings = None
+        self._settings_frames = {}
         self.sel_obj_settings:extras.DSSSettingsFrame = None
         self.selected_object = None
         self.listbox_results = None
@@ -46,9 +47,10 @@ class DSSGUI:
         self.build_rsmenu()
         #self.build_bc_menu()  # Outsourced
 
-        self.add_topmenu_item('Tools', 'ToolSelect', lambda: self.canvas.set_tool(tools.ToolSelect(self, self.canvas, root)))
-        self.add_topmenu_item('Tools', 'ToolDispl', lambda: self.canvas.set_tool(tools.ToolDispl(self, self.canvas, root)))
-        self.canvas.set_tool(tools.ToolSelect(self, self.canvas, root))
+        self.tool = None
+        self.add_topmenu_item('Tools', 'ToolSelect', lambda: self.set_tool(tools.ToolSelect(self, self.canvas, root)))
+        self.add_topmenu_item('Tools', 'ToolDispl', lambda: self.set_tool(tools.ToolDispl(self, self.canvas, root)))
+        self.set_tool(tools.ToolSelect(self, self.canvas, root))
 
         if not self.problem.nodes:
             self.canvas.add_object(self.problem.get_or_create_node((0,0)))
@@ -134,13 +136,36 @@ class DSSGUI:
 
         self.rsm_settings = tk.Frame(self.rsm, bg=color2, width=400)
         self.rsm_settings.grid(row=3, column=0, sticky='nw')
-        rsm_shm_label = tk.Label(self.rsm_settings, text='Settings', bg=color2)
-        rsm_shm_label.grid(row=0, column=1, columnspan=3, sticky='ew')
+        #rsm_shm_label = tk.Label(self.rsm_settings, text='Settings', bg=color2)
+        #rsm_shm_label.grid(row=0, column=1, columnspan=3, sticky='ew')
+#
+        #rsm_shm_label2 = tk.Label(self.rsm_settings, text='Selected object', bg=color2)
+        #rsm_shm_label2.grid(row=4, column=1, columnspan=3, sticky='ew')
 
-        rsm_shm_label2 = tk.Label(self.rsm_settings, text='Selected object', bg=color2)
-        rsm_shm_label2.grid(row=4, column=1, columnspan=3, sticky='ew')
+        self.set_settings_('Settings', 'dss')
 
-        self.set_settings_default()
+        #self.set_settings_default()
+
+    def set_settings_(self, key, category_or_object):
+        if key in self._settings_frames:
+            self._settings_frames.pop(key).destroy()
+
+        if isinstance(category_or_object, str):
+            frame = extras.DSSSettingsFrame.from_settings(self.rsm_settings, category_or_object)
+        else:
+            frame = extras.DSSSettingsFrame.from_object(self.rsm_settings, category_or_object)
+
+        if len(frame) == 0:
+            return
+
+        self._settings_frames[key] = frame
+        index = len(self._settings_frames)
+
+        text = key if isinstance(category_or_object, str) else f'{key} ({category_or_object.__class__.__name__})'
+        label = tk.Label(self.rsm_settings, text=text, bg='gray82')
+        label.grid(row=2*index, column=1, columnspan=2, sticky='ew')
+
+        frame.grid(row=2*index+1, column=1, columnspan=2, sticky='ew')
 
     def set_settings_default(self):
         if self.sel_obj_settings:
@@ -149,16 +174,17 @@ class DSSGUI:
         plugin_settings_frame.grid(row=3, columnspan=2, sticky='ew')
 
     def set_settings(self, obj):
-        if self.sel_obj_settings:
-            self.sel_obj_settings.destroy()
-        self.sel_obj_settings = extras.DSSSettingsFrame.from_object(self.rsm_settings, obj)
-        self.sel_obj_settings.grid(row=5, columnspan=2, sticky='nsew')
-        self.root.update()
+        self.set_settings_('Selection', obj)
 
     def set_selection(self, obj):
         self.set_settings(obj)
         self.canvas.set_selection(obj)
         self.draw_canvas()
+
+    def set_tool(self, tool):
+        self.tool = tool
+        self.tool.activate()
+        self.set_settings_('Tool', self.tool)
 
     def view_results(self, *args):
         result = self.listbox_results.get_selected()
