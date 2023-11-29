@@ -41,7 +41,7 @@ class NodeDrawer:
                              anchor='sw', tag='mech')
 
         # If moment, draw a circular arrow
-        if self.loads[2] != 0:
+        if len(self.loads) >= 3 and self.loads[2] != 0:
             sign = np.sign(self.loads[2])
             arc_start = pos + np.array([0, -scale / 2]) * sign
             arc_mid = pos + np.array([scale / 2, 0]) * sign
@@ -165,12 +165,21 @@ class ElementDrawer:
 
     @staticmethod
     def draw_on_canvas(self, canvas, **kwargs):
-        canvas.draw_line(self.node1.r, self.node2.r, **kwargs)
-        if ElementDrawer.settings['Displaced']:
-            canvas.draw_line(self.node1.r + self.node1.displacements[0:2],
-                             self.node2.r + self.node2.displacements[0:2],
-                             fill='red', dash=(1,), **kwargs)
-        return 0.5 * (self.node1.r + self.node2.r)
+        nodes = list(self.nodes)
+        for node1, node2 in zip(self.nodes, self.nodes[1:]):
+            canvas.draw_line(node1.r, node2.r, **kwargs)
+            if ElementDrawer.settings['Displaced']:
+                canvas.draw_line(node1.r + node1.displacements[0:2],
+                                 node2.r + node2.displacements[0:2],
+                                 fill='red', dash=(1,), **kwargs)
+        if len(self.nodes) > 2:
+            canvas.draw_line(self.nodes[-1].r, self.nodes[0].r, **kwargs)
+            if ElementDrawer.settings['Displaced']:
+                canvas.draw_line(self.nodes[-1].r + self.nodes[-1].displacements[0:2],
+                                 self.nodes[0].r + self.nodes[0].displacements[0:2],
+                                 fill='red', dash=(1,), **kwargs)
+
+        return 1/len(self.nodes) * sum(node.r for node in self.nodes)
 
 
 _register[Node] = NodeDrawer

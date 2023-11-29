@@ -72,8 +72,11 @@ class Problem:
         print('No node at {}'.format(r))
 
     def reassign_dofs(self):
-        for i,node in enumerate(self.nodes):
-            node.dofs = np.array([3*i, 3*i+1, 3*i+2])
+        i = 0
+        for node in self.nodes:
+            ndofs = node.ndofs()
+            node.dofs = np.arange(i, i+ndofs)
+            i += ndofs
 
     def upd_obj_displacements(self):
         for node in self.nodes:
@@ -106,7 +109,7 @@ class Problem:
             return model_size
 
     def free_dofs(self) -> np.ndarray:
-        return np.delete(np.arange(3*len(self.nodes)), self.constrained_dofs)
+        return np.delete(np.arange(sum(n.ndofs() for n in self.nodes)), self.constrained_dofs)
 
     def M(self, reduced=False):
         return self.assemble(lambda e: e.mass_matrix_global(), reduced)
@@ -118,7 +121,7 @@ class Problem:
         if not self.constrained_dofs:
             self.remove_dofs()
 
-        num_dofs = 3 * len(self.nodes)
+        num_dofs = sum(n.ndofs() for n in self.nodes)
 
         matrix = np.zeros((num_dofs, num_dofs))
         for e in self.elements:

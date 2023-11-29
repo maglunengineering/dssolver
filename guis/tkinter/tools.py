@@ -4,9 +4,8 @@ import numpy as np
 from core import elements, solvers
 
 class Tool:
-    def __init__(self, canvas, root):
+    def __init__(self, canvas):
         self._canvas = canvas
-        self._root = root
 
     def activate(self):
         pass
@@ -22,8 +21,9 @@ class Tool:
 
 class ToolSelect(Tool):
     def __init__(self, gui, canvas, root):
-        super().__init__(canvas, root)
+        super().__init__(canvas)
         self._gui: 'DSSGUI' = gui
+        self._root = root
         self._closest_node_label = None
         self._bcm:tk.Menu = None
         self._rcm:tk.Menu = None
@@ -137,8 +137,8 @@ class ToolSelect(Tool):
 
 
 class ToolDispl(Tool):
-    def __init__(self, gui, canvas, root):
-        super().__init__(canvas, root)
+    def __init__(self, gui, canvas):
+        super().__init__(canvas)
         self._gui:'DSSGUI' = gui
 
         self._dragging = False
@@ -146,7 +146,7 @@ class ToolDispl(Tool):
         self._last_click_xy = np.empty(2)
         self._solver = solvers.LinearSolver(gui)
 
-        self.displace = False
+        self.displace = True
 
 
     def activate(self):
@@ -183,9 +183,25 @@ class ToolDispl(Tool):
             if isinstance(obj, elements.Node):
                 self._snap_obj = obj
                 if self.displace:
-                    self._snap_obj.constrained_dofs = [0, 1]
+                    if 0 not in self._snap_obj.constrained_dofs:
+                        self._snap_obj.constrained_dofs.insert(0, 0)
+                    if 1 not in self._snap_obj.constrained_dofs:
+                        self._snap_obj.constrained_dofs.insert(0, 1)
 
     def on_lbuttonup(self, event):
         self._dragging = False
         self._last_click_xy = np.empty(2)
         self._snap_obj = None
+
+class ToolCreateNode(Tool):
+    def __init__(self, gui, canvas):
+        super().__init__(canvas)
+        self._gui = gui
+
+    def activate(self):
+        self._canvas.bind('<Button-1>', self.on_click)
+
+    def on_click(self, event):
+        pt = self._canvas.canvas_to_problem((event.x, event.y))
+        node = self._gui.problem.get_or_create_node(pt)
+        self._canvas.add_object(node)

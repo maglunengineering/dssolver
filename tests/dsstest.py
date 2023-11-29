@@ -20,11 +20,9 @@ class ElementTest(unittest.TestCase):
         self.n1 = Node((0, 0))
         self.n2 = Node((1000, 0))
 
+    def test_should_have_same_axial_stiffness_with_no_displacements(self):
         self.rod = Rod(self.n1, self.n2)
         self.beam = Beam(self.n1, self.n2)
-
-    def test_should_have_same_axial_stiffness_with_no_displacements(self):
-
         for indices in ([0,0],[0,3],[3,0],[3,3]):
             i,j = indices
             rod_k00 = self.rod.stiffness_matrix_global()[i,j]
@@ -33,6 +31,8 @@ class ElementTest(unittest.TestCase):
             self.assertEqual(rod_k00, beam_k00)
 
     def test_should_have_same_axial_stiffness_with_same_axial_displacements(self):
+        self.rod = Rod(self.n1, self.n2)
+        self.beam = Beam(self.n1, self.n2)
         self.n2.displacements = np.array([-10, 0, 0])
 
         for indices in ([0,0],[0,3],[3,0],[3,3]):
@@ -43,11 +43,15 @@ class ElementTest(unittest.TestCase):
             self.assertEqual(rod_k00, beam_k00)
 
     def test_should_have_same_forces_with_same_axial_displacements(self):
+        self.rod = Rod(self.n1, self.n2)
+        self.beam = Beam(self.n1, self.n2)
         self.n2.displacements = np.array([-10, 0, 0])
 
         self.assertTrue(np.allclose(self.rod.get_forces(), self.beam.get_forces()))
 
     def test_strain_energy_should_be_force_times_distance(self):
+        self.rod = Rod(self.n1, self.n2)
+        self.beam = Beam(self.n1, self.n2)
         self.p.nodes.append(self.n1)
         self.p.nodes.append(self.n2)
         self.p.create_beam(self.n1, self.n2)
@@ -63,6 +67,8 @@ class ElementTest(unittest.TestCase):
         self.assertAlmostEqual(work, self.p.elements[0].get_strain_energy(), places=2)
 
     def test_strain_energy_should_be_uTku(self):
+        self.rod = Rod(self.n1, self.n2)
+        self.beam = Beam(self.n1, self.n2)
         self.p.nodes.append(self.n1)
         self.p.nodes.append(self.n2)
         self.p.create_beam(self.n1, self.n2)
@@ -85,7 +91,7 @@ class ElementTest(unittest.TestCase):
         self.n3 = Node((1000, 1000))
         self.n4 = Node((0, 1000))
         self.quad = Quad4(self.n1, self.n2, self.n3, self.n4, 210e3, 0.3, 1)
-        Quad4.stiffness_matrix_global = lambda *args,**kwargs: np.random.random((12,12))
+        Quad4.stiffness_matrix_global = lambda *args,**kwargs: np.random.random((8,8))
         self.n1.pin()
         self.n2.pin()
         self.n3.loads = np.array([1000, 0, 0])
@@ -94,6 +100,17 @@ class ElementTest(unittest.TestCase):
 
         self.p.solve()
 
+    def test_quad4_should_compute_real(self):
+        self.n3 = Node((1000, 1000))
+        self.n4 = Node((0, 1000))
+        self.quad = Quad4(self.n1, self.n2, self.n3, self.n4, 210e3, 0.3, 1)
+        self.n1.pin()
+        self.n2.pin()
+        self.n3.loads = np.array([1000, 0])
+        self.p.nodes.extend((self.n1, self.n2, self.n3, self.n4))
+        self.p.elements.append(self.quad)
+
+        self.p.solve()
 
 class ProblemTest(unittest.TestCase):
     def setUp(self) -> None:

@@ -49,7 +49,8 @@ class DSSGUI:
 
         self.tool = None
         self.add_topmenu_item('Tools', 'ToolSelect', lambda: self.set_tool(tools.ToolSelect(self, self.canvas, root)))
-        self.add_topmenu_item('Tools', 'ToolDispl', lambda: self.set_tool(tools.ToolDispl(self, self.canvas, root)))
+        self.add_topmenu_item('Tools', 'ToolDispl', lambda: self.set_tool(tools.ToolDispl(self, self.canvas)))
+        self.add_topmenu_item('Tools', 'Create node', lambda: self.set_tool(tools.ToolCreateNode(self, self.canvas)))
         self.set_tool(tools.ToolSelect(self, self.canvas, root))
 
         if not self.problem.nodes:

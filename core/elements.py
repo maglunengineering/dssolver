@@ -1,3 +1,4 @@
+import inspect
 import numpy as np
 
 class DSSModelObject:
@@ -9,10 +10,10 @@ class Node(DSSModelObject):
         self._r = np.array(xy)
 
         self._elements = list()
-        self.loads = np.zeros(3) # self.loads (global Fx, Fy, M) assigned on loading
-        self.displacements = np.zeros(3)
+        self.loads = np.zeros(2) # self.loads (global Fx, Fy, M) assigned on loading
+        self.displacements = np.zeros(2)
 
-        self.dofs = []  # self.dofs (dof1, dof2, dof3) assigned on creation
+        self._dofs = []  # self.dofs (dof1, dof2, dof3) assigned on creation
         self.constrained_dofs = []
 
     def add_element(self, beam):
@@ -21,6 +22,29 @@ class Node(DSSModelObject):
     @property
     def r(self):
         return self._r
+
+    @r.setter
+    def r(self, value):
+        self._r = value
+        for e in self._elements:
+            e.reinit()
+
+    @property
+    def dofs(self):
+        return self._dofs
+
+    @dofs.setter
+    def dofs(self, value):
+        if self._dofs is not None:
+            self.loads = np.hstack((self.loads, np.zeros(len(value))))[:len(value)]
+            self.displacements = np.hstack((self.displacements, np.zeros(len(value))))[:len(value)]
+            while len(value) < len(self.constrained_dofs):
+                self.constrained_dofs.pop()
+        self._dofs = value
+
+
+    def ndofs(self):
+        return max(e.ndofs for e in self._elements)
 
     def connected_nodes(self):
         other_nodes = []
@@ -50,7 +74,7 @@ class Node(DSSModelObject):
 
     def copy(self):
         new_node = Node(self.r)
-        new_node.dofs = self.dofs
+        new_node._dofs = self._dofs
         new_node.loads = self.loads
         new_node.constrained_dofs = self.constrained_dofs
         return new_node
@@ -62,6 +86,7 @@ class Node(DSSModelObject):
         return id(self)
 
 class FiniteElement(DSSModelObject):
+    ndofs = 3
     def __init__(self, nodes):
         self.nodes = nodes
 
@@ -75,13 +100,13 @@ class FiniteElement(DSSModelObject):
     @property
     def dofs(self):
         if self._dofs is None:
-            self._dofs = np.hstack([n.dofs for n in self.nodes])
+            self._dofs = np.hstack([n.dofs[:self.ndofs] for n in self.nodes])
             self._ix = np.ix_(self._dofs, self._dofs)
         return self._dofs
 
     def ix(self):
         if self._dofs is None:
-            self._dofs = np.hstack([n.dofs for n in self.nodes])
+            self._dofs = np.hstack([n.dofs[:self.ndofs] for n in self.nodes])
             self._ix = np.ix_(self._dofs, self._dofs)
         return self._ix
 
@@ -90,6 +115,18 @@ class FiniteElement(DSSModelObject):
 
     def nonlin_update(self):
         pass
+
+    def reinit(self):
+        init_args = inspect.getfullargspec(self.__init__).args
+        kwargs = {}
+        for arg in init_args:
+            if hasattr(self, arg):
+                kwargs[arg] = getattr(self, arg)
+            elif hasattr(self, '_' + arg):
+                kwargs[arg] = getattr(self, '_' + arg)
+            else:
+                raise AttributeError(f'Cannot reinit {self.__class__.__name__}: Missing arg {arg}')
+        self.__init__(**kwargs)
 
 class FiniteElement2Node(FiniteElement):
     def __init__(self, node1:Node, node2:Node, A:float):
@@ -209,12 +246,9 @@ class Beam(FiniteElement2Node):
         self._stiffness = self._update_stiffness()
 
     def get_strain_energy(self):
-        """
-        Bending energy is
-        integral between (x=0, L) of M(x)/(2EI) dx
-        Am assuming
-        M(x) = M1(1-x/L) + M2(x/L)
-        """
+        """ Bending energy: integral (x=0, L, M(x)/(2EI), dx)
+            Am assuming M(x) = M1(1-x/L) + M2(x/L) """
+
         c = 1/(6 * self.E * self.I)
         forces = self._get_forces_local()
         M1,M2 = forces[2], forces[5]
@@ -250,50 +284,56 @@ class Rod(FiniteElement2Node):
         stress = self.E * strain
         return np.abs(0.5 * stress * strain * self.A * self._undeformed_length)
 
-    def draw_on_canvas(self, canvas, **kwargs):
-        if not self.settings['Displaced']:
-            r1 = self.node1.r
-            r2 = self.node2.r
-        else:
-            r1 = self.node1.r + self.node1.displacements[0:2]
-            r2 = self.node2.r + self.node2.displacements[0:2]
-
-        length = np.linalg.norm(self.r2 - self.r1)
-        dirvec = (r2 - r1) / length
-        normal = np.array([-dirvec[1], dirvec[0]]) * (length / self._deformed_length())**2
-        num_steps = 21
-        steplen = length * 1 / num_steps
-
-        pt1 = r1
-        pt2 = pt1 + normal * steplen * 0.5 + dirvec * steplen * 0.5
-        pts = [pt1, pt2]
-        sign = -1
-        for i in range(num_steps - 1):
-            new_pt = pts[-1] + sign * normal * steplen + dirvec * steplen
-            pts.append(new_pt)
-            sign *= -1
-        pts.append(r2)
-
-        if not self.settings['Displaced']:
-            for pt1, pt2 in zip(pts, pts[1:]):
-                canvas.draw_line(pt1, pt2)
-        else:
-            for pt1, pt2 in zip(pts, pts[1:]):
-                canvas.draw_line(pt1, pt2, fill='red', dash=(1,), **kwargs)
-
     def clone(self, newnode1, newnode2):
         return Rod(newnode1, newnode2, self.E, self.A)
 
 class Quad4(FiniteElement):
+    ndofs = 2
     def __init__(self, node1, node2, node3, node4, E, v, t):
         super().__init__([node1, node2, node3, node4])
         self.nodes = [node1, node2, node3, node4]
         self.E = E
         self.v = v
         self.t = t
+        self._r = np.array([node.r for node in self.nodes])
 
     def stiffness_matrix_global(self):
-        return np.zeros((12,12))
+        a = 1 / np.sqrt(3)
+        integration_points = [[-a, a], [a, a], [-a, -a], [a, -a]]
+
+        k = np.zeros((8, 8))
+        material_stiffness = self.E / (1 - self.v**2) * np.array([[1, self.v,   0],
+                                                                  [-self.v, 1,  0],
+                                                                  [0, 0, 1+self.v]])
+        for r in integration_points:
+            B = self.strain_displ(r)
+            k = k + B.T @ material_stiffness @ B * np.linalg.det(self.jacobian(r)) * self.t
+
+        return k
+
+    @staticmethod
+    def shape_functions(pt):
+        xi, eta = pt
+        return 0.25 * np.array([(1 - xi) * (1 - eta),
+                                (1 + xi) * (1 - eta),
+                                (1 + xi) * (1 + eta),
+                                (1 - xi) * (1 + eta)])
+
+    @staticmethod
+    def shape_functions_deriv(pt):
+        xi, eta = pt
+        return 0.25 * np.array([[-(1 - eta), 1 - eta,  1 + eta, -(1 + eta)],
+                                [-(1 - xi), -(1 + xi), 1 + xi,  1 - xi]])
+
+    def strain_displ(self, pt):
+        dNdx, dNdy = np.linalg.solve(self.jacobian(pt), self.shape_functions_deriv(pt))
+        return np.array([[dNdx[0], 0, dNdx[1], 0, dNdx[2], 0, dNdx[3], 0],
+                         [0, dNdy[0], 0, dNdy[1], 0, dNdy[2], 0, dNdy[3]],
+                         [dNdy[0], dNdx[0], dNdy[1], dNdx[1], dNdy[2], dNdx[2], dNdy[3], dNdx[3]]])
+
+    def jacobian(self, pt):
+        return Quad4.shape_functions_deriv(pt) @ self._r
+
 
 def beta(angle):
     s, c = np.sin(angle), np.cos(angle)

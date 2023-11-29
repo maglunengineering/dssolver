@@ -278,6 +278,8 @@ class DSSSettingsFrame(tk.Frame):
 
     @staticmethod
     def _recreate_sequence(T, content):
+        if not content:
+            return []
         return [T(item) for item in content.split(' ')]
 
     def _get_callback(self, key, parse_func):

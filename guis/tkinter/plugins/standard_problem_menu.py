@@ -3,6 +3,7 @@ import sys
 import tkinter as tk
 import numpy as np
 
+import core.elements as elements
 sys.path.append(os.path.dirname(__file__))
 from guis.tkinter.plugin_base import DSSPlugin
 
@@ -23,6 +24,7 @@ class StandardProblemMenu(DSSPlugin):
         self.dss.add_topmenu_item('Standard problems', '270 arch', self.arch_270)
         self.dss.add_topmenu_item('Standard problems', 'Pendulum', self.pendulum)
         self.dss.add_topmenu_item('Standard problems', 'von Mises Truss (spring BC)', self.von_mises_truss_springbc)
+        self.dss.add_topmenu_item('Standard problems', 'Quads', self.quads)
 
     def cantilever_beam(self):
         self.dss.new_problem()
@@ -156,5 +158,25 @@ class StandardProblemMenu(DSSPlugin):
         n2 = p.get_or_create_node((1000, 0))
         p.create_rod(n1, n2, A=10)
         n1.pin()
+
+        self.dss.autoscale()
+
+    def quads(self):
+        self.dss.new_problem()
+        p = self.dss.problem
+        nx = 6
+        ny = 3
+        arr = np.empty((nx, ny), dtype=object)
+        for i in range(nx):
+            for j in range(ny):
+                arr[i,j] = p.get_or_create_node((1000*i, 1000*j))
+
+        for i in range(nx - 1):
+            for j in range(ny - 1):
+                q = elements.Quad4(arr[i, j], arr[i+1, j], arr[i+1, j+1], arr[i, j+1], E=210000, v=0.3, t=1)
+                p.elements.append(q)
+
+        for node in arr[0]:
+            node.pin()
 
         self.dss.autoscale()
