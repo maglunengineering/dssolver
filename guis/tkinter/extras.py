@@ -4,7 +4,7 @@ import typing
 
 import numpy as np
 from typing import Iterable, Tuple, Callable
-from numpy.linalg import solve
+
 import drawing
 from core import settings
 

@@ -4,12 +4,15 @@ import pickle
 import importlib
 import tkinter as tk
 from typing import Callable, Iterable, Dict
-
 import numpy as np
 
-from core import problem, elements, settings, solvers
-from guis.tkinter import extras, plugin_base
+FILE_PATH = os.path.dirname(__file__)
+sys.path.append(os.path.join(FILE_PATH, '..', '..'))
+import extras
+import plugin_base
 import tools
+from core import problem, elements, settings, solvers
+
 
 from results_viewer import ResultsViewer
 
@@ -60,6 +63,7 @@ class DSSGUI:
         self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
         plugins = kwargs.get('plugins', {})
         for plugin in plugins:
+            print(f'loading plugin: {plugin=}')
             instance = plugin(self)
             instance.load_plugin()
 
@@ -518,12 +522,14 @@ class SectionManager(DSSInputMenu):
 if __name__ == '__main__':
     #self.icon = 'dss_icon.ico' if _platform == 'win32' or _platform == 'win64' else '@dss_icon.xbm'
     ext = 'ico' if sys.platform.startswith('win') else '.xbm'
-    icon = os.path.join(os.getcwd(), '..', 'gfx', f'dss_icon.{ext}')
+    icon = os.path.join(FILE_PATH, '..', 'gfx', f'dss_icon.{ext}')
 
     # Load plugin_types
     plugin_list = []
     modules = [elements, solvers]
-    for module_name in os.listdir('plugins'):
+    plugin_dir = os.path.join(FILE_PATH, 'plugins')
+
+    for module_name in os.listdir(plugin_dir):
         if module_name.endswith('.py'):
             module = importlib.import_module(f'plugins.{module_name[:-3]}')
             modules.append(module)

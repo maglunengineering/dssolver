@@ -1,7 +1,9 @@
+import os
+import sys
 import numpy as np
-from core.elements import Node, FiniteElement
-import extras
 
+from core import settings
+from core.elements import Node, FiniteElement
 
 _register = {}
 
@@ -15,7 +17,7 @@ class NodeDrawer:
         pass
 
     @staticmethod
-    def draw_on_canvas(self, canvas: extras.DSSCanvas, **kwargs):
+    def draw_on_canvas(self, canvas: 'DSSCanvas', **kwargs):
         canvas.draw_node(self.r, 2.5, **kwargs)
 
         # If lump force, draw an arrow
@@ -28,7 +30,7 @@ class NodeDrawer:
         return self.r
 
     @staticmethod
-    def draw_loads(self, canvas: extras.DSSCanvas):
+    def draw_loads(self, canvas: 'DSSCanvas'):
         scale = 100
         pos = self.r
         if np.any(np.round(self.loads[0:2])):
@@ -56,7 +58,7 @@ class NodeDrawer:
                              anchor='ne', tag='mech')
 
     @staticmethod
-    def draw_boundary_condition(self, canvas: extras.DSSCanvas):
+    def draw_boundary_condition(self, canvas: 'DSSCanvas'):
         scale = 50
         linewidth = 2
         pos = self.r + self.displacements[0:2]
