@@ -158,7 +158,7 @@ class Problem:
             node.displacements = displacements[node.dofs]
         self.displacements = displacements
 
-        yield results.ResultsStaticLinear(self, displacements)
+        return [results.ResultsStaticLinear(self, displacements)]
 
     def plot(self):
         nodal_coordinates = np.array([0,0])

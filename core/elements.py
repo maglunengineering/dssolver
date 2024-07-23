@@ -135,6 +135,10 @@ class FiniteElement2Node(FiniteElement):
         self.node2 = node2
         self.A = A
 
+        # Don't initialize with displaced node as we'll get "nonlinear" behavior
+        assert np.allclose(node1.displacements, 0)
+        assert np.allclose(node2.displacements, 0)
+
         self._undeformed_length = np.linalg.norm(self.r2 - self.r1)
         self._forces_local = np.zeros(6)
         self._deformed_length = self._update_deformed_length()

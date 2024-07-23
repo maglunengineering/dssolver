@@ -248,13 +248,17 @@ class DSSSettingsFrame(tk.Frame):
             entry.insert(0, val)
             entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
             entry.bind('<FocusOut>', lambda *_: self.setter(key, t(entry.get())))
-        elif (isinstance(val, typing.MutableSequence) or isinstance(val, np.ndarray)) and len(val) > 0:
-            if isinstance(val[0], int) or isinstance(val[0], float):
+        elif (isinstance(val, typing.MutableSequence) or isinstance(val, np.ndarray)) and len(val) > 0 and\
+             (isinstance(val[0], int) or isinstance(val[0], float) or isinstance(val[0], np.int32)):
                 t = type(val[0])
                 entry = tk.Entry(self)
                 entry.insert(0, ' '.join(map(str, val)))
                 entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
                 entry.bind('<FocusOut>', lambda *_: self.setter(key, self._recreate_sequence(t, entry.get())))
+        elif val is not None:
+            entry = tk.Label(self, text=str(val)[0:25])
+            entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
+
 
         self._cnt += 1
 
