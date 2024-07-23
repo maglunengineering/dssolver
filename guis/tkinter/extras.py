@@ -8,22 +8,6 @@ from typing import Iterable, Tuple, Callable
 import drawing
 from core import settings
 
-# a subclass of Canvas for dealing with resizing of windows
-# credit: ebarr @ StackOverflow
-
-
-class ResizingCanvas(tk.Canvas):
-    def __init__(self, parent, **kwargs):
-        super().__init__(parent, **kwargs)
-        self.bind("<Configure>", self.on_resize)
-        self.height = 512  # self.winfo_reqheight()
-        self.width = 768  # self.winfo_reqwidth()
-
-    def on_resize(self, event):
-        self.width = event.width
-        self.height = event.height
-        self.config(width=self.width, height=self.height)
-
 
 class DSSCanvas(tk.Canvas):
     def __init__(self, parent, **kwargs):
@@ -46,11 +30,9 @@ class DSSCanvas(tk.Canvas):
 
         self.objects = []
         self.snap_objs = {}
-        self.bind_on_resize()
+        self.bind("<Configure>", self.on_resize)
         self.selected_object = None
 
-    def bind_on_resize(self):
-        self.bind("<Configure>", self.on_resize)
 
     def unbind_on_resize(self):
         self.unbind("<Configure>")

@@ -3,7 +3,7 @@ import os
 import pickle
 import importlib
 import tkinter as tk
-from typing import Callable, Iterable, Dict
+from typing import Callable, Iterable, Dict, Optional
 import numpy as np
 
 FILE_PATH = os.path.dirname(__file__)
@@ -11,7 +11,7 @@ sys.path.append(os.path.join(FILE_PATH, '..', '..'))
 import extras
 import plugin_base
 import tools
-from core import problem, elements, settings, solvers
+from core import problem, elements, settings, solvers, results
 
 
 from results_viewer import ResultsViewer
@@ -91,13 +91,13 @@ class DSSGUI:
         menu_solve = tk.Menu(topmenu)
         self.menus['Solve'] = menu_solve
         topmenu.add_cascade(label='Solve', menu=menu_solve)
-        self.add_topmenu_item('Solve', 'p.solve', self.problem.solve)
+
 
         def callback_factory(this, *args):
             return lambda : this.call_and_add_to_results(*args)
 
-        menu_plugins = tk.Menu(topmenu)
-        #for cls, instance in plugins.items():
+        self.add_topmenu_item('Solve', 'p.solve', callback_factory(self, lambda : self.problem.solve()))
+
         for plugin in plugins:
             instance = plugin(self)
             if isinstance(instance, solvers.Solver) and type(instance) != solvers.Solver:
@@ -116,7 +116,7 @@ class DSSGUI:
             menu.add_command(label=cmd_title, command=cmd)
 
 
-    def call_and_add_to_results(self, func:Callable):
+    def call_and_add_to_results(self, func:Callable[[], Iterable[Optional[results.Results]]]):
         for x in func():
             if x:
                 results = x

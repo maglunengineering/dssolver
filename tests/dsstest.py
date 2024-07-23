@@ -244,7 +244,7 @@ class SampleProblems(unittest.TestCase):
         n1.pin()
         n2.roller90()
         n2.loads = np.array([0, -10000, 0])
-        solver = solvers.NonLinearSolver(self)
+        solver = solvers.NonLinearSolver(p)
         res = solver.solveall()
         self.assertAlmostEqual(-482.59459618768216, res.displacements[-1, 4], delta=2)
 
@@ -259,7 +259,7 @@ class SampleProblems(unittest.TestCase):
         n2.roller90()
         n3.glider()
         n3.loads = np.array([0, -4000, 0])
-        solver = solvers.NonLinearSolver(self)
+        solver = solvers.NonLinearSolver(p)
         res = solver.solveall()
         self.assertAlmostEqual(-442.62588512549337, res.displacements[-1, 4], delta=4)
 

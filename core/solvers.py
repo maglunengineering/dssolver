@@ -2,17 +2,15 @@ import time
 import numpy as np
 from typing import Dict, Callable, Iterable, Optional
 
-from guis.tkinter.plugin_base import DSSPlugin
-from core.problem import Problem
 import core.results as results
 import core.settings as settings
 
 
-class Solver(DSSPlugin):
+class Solver:
     instantiate = True
 
-    def __init__(self, owner):
-        super().__init__(owner)
+    def __init__(self, problem):
+        self.problem = problem
         self.results = None
 
     def solve(self) -> Iterable[Optional[results.Results]]:
@@ -25,7 +23,7 @@ class Solver(DSSPlugin):
 
 class LinearSolver(Solver):
     def solve(self) -> Iterable[Optional[results.Results]]:
-        problem = self.dss.problem
+        problem = self.problem
         problem.reassign_dofs()
         problem.remove_dofs()
 
@@ -53,7 +51,7 @@ class LinearSolver(Solver):
 
 class NonLinearSolver(Solver):
     def solve(self) -> results.ResultsStaticNonlinear:
-        problem = self.dss.problem
+        problem = self.problem
         steps = 500
         arclength = 1000
         A = 0
@@ -155,7 +153,7 @@ class ModalSolver(Solver):
         self.eigenvectors = np.zeros((0, 0))
 
     def solve(self):
-        problem = self.dss.problem
+        problem = self.problem
         problem.reassign_dofs()
         M = problem.M(True)
         K = problem.K(True)
@@ -201,7 +199,7 @@ class DynamicSolver(Solver):
         return forces
 
     def solve(self):
-        return self.solve_explicit(self.dss.problem)
+        return self.solve_explicit(self.problem)
 
     def solve_explicit(self, problem):
         problem.reassign_dofs()

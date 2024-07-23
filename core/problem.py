@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Iterable, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
@@ -134,7 +134,7 @@ class Problem:
             free_dofs = self.free_dofs()
             return matrix[np.ix_(free_dofs, free_dofs)]
 
-    def solve(self) -> results.ResultsStaticLinear:
+    def solve(self) -> Iterable[Optional[results.ResultsStaticLinear]]:
         self.reassign_dofs()
         self.remove_dofs()
         free_dofs = self.free_dofs()
@@ -158,7 +158,7 @@ class Problem:
             node.displacements = displacements[node.dofs]
         self.displacements = displacements
 
-        return results.ResultsStaticLinear(self, displacements)
+        yield results.ResultsStaticLinear(self, displacements)
 
     def plot(self):
         nodal_coordinates = np.array([0,0])
@@ -182,23 +182,6 @@ class Problem:
                       head_width=20 )
         except:
             pass
-
-    def clone(self):
-        node_clones = {}
-        for node in self.nodes:
-            copy = node.copy()
-            node_clones[node] = copy
-
-        cloned_elements = []
-        for element in self.elements:
-            node1 = node_clones[element.node1]
-            node2 = node_clones[element.node2]
-            cloned_elements.append(element.clone(node1, node2))
-
-        clone = Problem()
-        clone.elements = cloned_elements
-        clone.nodes = list(node_clones.values())
-        return clone
 
     @property
     def nodal_coordinates(self):
