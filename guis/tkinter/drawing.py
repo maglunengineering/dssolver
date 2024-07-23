@@ -18,7 +18,8 @@ class NodeDrawer:
 
     @staticmethod
     def draw_on_canvas(self, canvas: 'DSSCanvas', **kwargs):
-        canvas.draw_node(self.r, 2.5, **kwargs)
+        scale = canvas.get_size()
+        canvas.draw_node(self.r, 2.5e-3*scale, **kwargs)
 
         # If lump force, draw an arrow
         if NodeDrawer.settings['Loads']:
@@ -31,7 +32,7 @@ class NodeDrawer:
 
     @staticmethod
     def draw_loads(self, canvas: 'DSSCanvas'):
-        scale = 100
+        scale = 0.1*canvas.get_size()
         pos = self.r
         if np.any(np.round(self.loads[0:2])):
             arrow_start = pos
@@ -59,7 +60,7 @@ class NodeDrawer:
 
     @staticmethod
     def draw_boundary_condition(self, canvas: 'DSSCanvas'):
-        scale = 50
+        scale = 0.05 * canvas.get_size()
         linewidth = 2
         pos = self.r + self.displacements[0:2]
 
@@ -78,6 +79,7 @@ class NodeDrawer:
 
         elif self.constrained_dofs == [0,1] or self.constrained_dofs == [1]:
             k = 1.5  # constant - triangle diameter
+            k2 = 1.4e-3 * canvas.get_size() # Some other constant idk
 
             canvas.draw_oval((pos - scale / 4), (pos + scale / 5))
             canvas.draw_line(pos, (pos + np.array([-np.sin(np.deg2rad(30)),
@@ -89,11 +91,11 @@ class NodeDrawer:
 
             canvas.draw_line((pos + (np.array([-np.sin(np.deg2rad(30)),
                                                np.cos(np.deg2rad(30))])
-                                     + np.array([-1.4 / (k * scale), 0])
+                                     + np.array([-k2 / (k * scale), 0])
                                      ) * k * scale),
                              (pos + (np.array([np.sin(np.deg2rad(30)),
                                                np.cos(np.deg2rad(30))])
-                                     + np.array([1.4 / (k * scale), 0])
+                                     + np.array([k2 / (k * scale), 0])
                                      ) * k * scale),
                              width=linewidth, fill='black', tag='bc')
             if self.constrained_dofs == [1]:

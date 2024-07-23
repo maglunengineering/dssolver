@@ -119,13 +119,13 @@ class DSSCanvas(tk.Canvas):
         self.prev_x = None
         self.prev_y = None
 
-    def autoscale(self):
+    def _get_bounds(self) -> Tuple[float, float, float, float]:
         xmin = np.inf
         xmax = -np.inf
         ymin = np.inf
         ymax = -np.inf
 
-        nodes = (obj for obj in self.objects if obj.__class__.__name__ == 'Node') # Whatever
+        nodes = (obj for obj in self.objects if obj.__class__.__name__ == 'Node')  # Whatever
         for node in nodes:
             if node.r[0] < xmin:
                 xmin = node.r[0]
@@ -135,6 +135,14 @@ class DSSCanvas(tk.Canvas):
                 ymin = node.r[1]
             if node.r[1] > ymax:
                 ymax = node.r[1]
+        return xmax, xmin, ymax, ymin
+
+    def get_size(self):
+        xmax, xmin, ymax, ymin = self._get_bounds()
+        return (xmax - xmin) + (ymax - ymin)
+
+    def autoscale(self):
+        xmax, xmin, ymax, ymin = self._get_bounds()
 
         if np.isclose(xmin, xmax) and np.isclose(ymin, ymax):
             self.transformation_matrix = np.eye(3)
