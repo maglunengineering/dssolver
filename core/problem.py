@@ -17,18 +17,7 @@ class Problem:
         self.forces = None  # Forces (at all nodes, incl removed dofs)
         self.displacements = None  # Assigned at solution ( self.solve() )
 
-        # For incremental analysis
-        self.incremental_loads = None
-        self.incremental_displacements = None
-
     def create_beam(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
-        """
-        drawnode:
-        0 - Don't draw any nodes
-        1 - Draw node at r1
-        2 - Draw node at r2
-        3 - Draw nodes at r1 and r2
-        """
         if isinstance(node1, np.ndarray):
             node1 = self.get_or_create_node(node1)
         if isinstance(node2, np.ndarray):
@@ -69,7 +58,6 @@ class Problem:
         for node in self.nodes:
             if np.allclose(node.r, r):
                 return node
-        print('No node at {}'.format(r))
 
     def reassign_dofs(self):
         i = 0
@@ -81,15 +69,6 @@ class Problem:
     def upd_obj_displacements(self):
         for node in self.nodes:
             node.displacements = self.displacements[node.dofs]
-
-    def auto_rotation_lock(self):
-        """
-        Rotation locks all nodes where only Rod elements meet. Useful for truss analysis.
-        """
-        for node in self.nodes:
-            if all(type(element)==Rod for element in node._elements) and 2 not in node.constrained_dofs:
-                node.constrained_dofs.append(2)
-
 
     def remove_dofs(self):  # Interpret boundary conditions
         self.constrained_dofs = []

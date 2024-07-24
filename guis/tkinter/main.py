@@ -85,7 +85,6 @@ class DSSGUI:
         self.add_topmenu_item('File', 'New problem', self.new_problem)
 
         self.add_topmenu_item('Edit', 'Create element(s)', lambda: BeamInputMenu(self, self.problem))
-        self.add_topmenu_item('Edit', 'Auto rotation lock', self.problem.auto_rotation_lock)
         self.menus['Edit'].add_separator()
         self.add_topmenu_item('Edit', 'Redraw canvas', self.draw_canvas)
 
