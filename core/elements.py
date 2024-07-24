@@ -110,6 +110,9 @@ class FiniteElement(DSSModelObject):
             self._ix = np.ix_(self._dofs, self._dofs)
         return self._ix
 
+    def stiffness_matrix_global(self):
+        raise NotImplementedError(self.__class__.__name__)
+
     def get_displacements(self):
         return np.hstack([n.displacements for n in self.nodes])
 
@@ -290,6 +293,30 @@ class Rod(FiniteElement2Node):
 
     def clone(self, newnode1, newnode2):
         return Rod(newnode1, newnode2, self.E, self.A)
+
+class PenaltyBeam(FiniteElement):
+    def __init__(self, node1, node2):
+        super().__init__((node1, node2))
+        self.stiffness_matrix_local = np.zeros((6,6))
+
+
+    def stiffness_matrix_global(self):
+        return self.stiffness_matrix_local
+
+    def calibrate(self, max_global_stiffness):
+        # IFEM 9.2.3: 10**(k+p/2) where k is order of max stiffness and p is machine prec
+        stiff = 10 ** (np.log10(max_global_stiffness) + 7)
+        self.stiffness_matrix_local = np.array([
+            [stiff, 0, 0, -stiff, 0, 0],
+            [0, stiff, 0, 0, -stiff, 0],
+            [0, 0, stiff, 0, 0, -stiff],
+            [-stiff, 0, 0, stiff, 0, 0],
+            [0, -stiff, 0, 0, stiff, 0],
+            [0, 0, -stiff, 0, 0, stiff]
+        ])
+
+
+
 
 class Quad4(FiniteElement):
     ndofs = 2

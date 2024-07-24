@@ -10,8 +10,9 @@ np.set_printoptions(suppress=True)
 
 class Problem:
     def __init__(self):
-        self.nodes:List[Node] = list()
-        self.elements:List[FiniteElement] = list()
+        self.nodes:List[Node] = []
+        self.elements:List[FiniteElement] = []
+        self.constraints:List[FiniteElement] = []
 
         self.constrained_dofs = []
         self.forces = None  # Forces (at all nodes, incl removed dofs)
@@ -125,6 +126,12 @@ class Problem:
 
         matrix = np.zeros((num_dofs, num_dofs))
         for e in self.elements:
+            contrib = elem_func(e)
+            matrix[e.ix()] += contrib
+
+        max_stiff = matrix.max()
+        for e in self.constraints:
+            e.calibrate(max_stiff)
             contrib = elem_func(e)
             matrix[e.ix()] += contrib
 

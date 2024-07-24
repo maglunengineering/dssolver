@@ -139,6 +139,25 @@ class ProblemTest(unittest.TestCase):
         # ??? Should this not be 25 (1/4) if this is a parabola? Whatevs
         self.assertTrue(np.allclose(self.n2.displacements[0:2], np.array([0, 31.25])), f'{self.n2.displacements[0:2]} != {np.array([0, 25])}')
 
+    def test_constraint(self):
+        n3 = Node((2000,0))
+        n4 = Node((3000,0))
+        self.p.nodes.append(n3)
+        self.p.nodes.append(n4)
+
+        for n1,n2 in zip(self.p.nodes, self.p.nodes[1:]):
+            self.p.create_beam(n1, n2, E=2e5, A=1000)
+
+        self.n1.fix()
+        n4.loads = np.array([-1000, 0, 0])
+
+        self.p.solve()
+        self.assertAlmostEqual(-1000/(2e5*1000/3000), n4.displacements[0], places=5)
+
+        self.p.constraints.append(PenaltyBeam(self.n2, n3))
+        self.p.solve()
+        self.assertAlmostEqual(-1000 / (2e5 * 1000 / 2000), n4.displacements[0], places=5)
+
 
 def timeit(func, *args):
     def inner(*args):
