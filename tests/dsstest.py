@@ -185,7 +185,7 @@ class PerformanceTest(unittest.TestCase):
         p.nodes[-1].fix()
         p.nodes[n//2].loads = np.array([0, -200000, 0])
         self.problem = p
-        solver = solvers.NonLinearSolver(self)
+        solver = solvers.NonLinearSolver(p)
         res = solver.solveall()
 
         self.assertAlmostEqual(-1254.63, res.displacements[-1].min(), delta=10)
