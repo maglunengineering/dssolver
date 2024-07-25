@@ -10,10 +10,10 @@ class Node(DSSModelObject):
         self._r = np.array(xy)
 
         self._elements = list()
-        self.loads = np.zeros(2) # self.loads (global Fx, Fy, M) assigned on loading
-        self.displacements = np.zeros(2)
+        self.loads = np.zeros(3, dtype=float) # self.loads (global Fx, Fy, M) assigned on loading
+        self.displacements = np.zeros(3, dtype=float)
 
-        self._dofs = []  # self.dofs (dof1, dof2, dof3) assigned on creation
+        self._dofs = None
         self.constrained_dofs = []
 
     def add_element(self, beam):
@@ -35,13 +35,26 @@ class Node(DSSModelObject):
 
     @dofs.setter
     def dofs(self, value):
-        if self._dofs is not None:
-            self.loads = np.hstack((self.loads, np.zeros(len(value))))[:len(value)]
-            self.displacements = np.hstack((self.displacements, np.zeros(len(value))))[:len(value)]
-            while len(value) < len(self.constrained_dofs):
-                self.constrained_dofs.pop()
-        self._dofs = value
+        if self.loads.ndim == 1:
+            self.loads = self.loads.reshape((1, -1, 1))
+        if self.displacements.ndim == 1:
+            self.displacements = self.displacements.reshape((1, -1, 1))
 
+        if self.loads.shape[1] != len(value):
+            new_loads = np.zeros((self.loads.shape[0], len(value), 1), dtype=float)
+            new_loads[:, 0:min(self.loads.shape[1], len(value)), :] = self.loads[:, 0:min(self.loads.shape[1], len(value)), :]
+            self.loads = new_loads
+
+        if self.displacements.shape[1] != len(value):
+            new_displacements = np.zeros_like(self.loads)
+            new_displacements[0, 0:min(self.displacements.shape[1], len(value)), :] = self.displacements[0, 0:min(self.displacements.shape[1], len(value)), :]
+            self.displacements = new_displacements
+
+
+        while len(value) < len(self.constrained_dofs):
+            self.constrained_dofs.pop()
+
+        self._dofs = value
 
     def ndofs(self):
         return max(e.ndofs for e in self._elements)
@@ -166,8 +179,8 @@ class FiniteElement2Node(FiniteElement):
         return self._transform.T @ self._get_forces_local()
 
     def _update_transform(self):
-        e1 = ((self.node2.r + self.node2.displacements[:2]) -
-              (self.node1.r + self.node1.displacements[0:2])) / self._deformed_length
+        e1 = ((self.node2.r + self.node2.displacements.flatten()[:2]) - # Flatten to be agnostic to 1d or 3d (nlc, ndofs, 1) arr
+              (self.node1.r + self.node1.displacements.flatten()[0:2])) / self._deformed_length
         e2 = [-e1[1], e1[0]]
         T = np.array([[e1[0], e1[1], 0, 0, 0, 0],
                       [e2[0], e2[1], 0, 0, 0, 0],
@@ -219,10 +232,10 @@ class FiniteElement2Node(FiniteElement):
         dl = self._deformed_length - self._undeformed_length
 
         tan_e = (r2 - r1)/self._undeformed_length
-        tan_ed = (r2 + self.node2.displacements[0:2] -
-                  r1 - self.node1.displacements[0:2])/self._deformed_length
-        tan_1 = R(self.node1.displacements[2]) @ tan_e
-        tan_2 = R(self.node2.displacements[2]) @ tan_e
+        tan_ed = (r2 + self.node2.displacements.flatten()[0:2] -
+                  r1 - self.node1.displacements.flatten()[0:2])/self._deformed_length
+        tan_1 = R(self.node1.displacements.flatten()[2]) @ tan_e
+        tan_2 = R(self.node2.displacements.flatten()[2]) @ tan_e
 
         th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
         th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])

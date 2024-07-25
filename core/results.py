@@ -59,9 +59,10 @@ class ResultsStaticLinear(Results):
     def __init__(self, problem, displacements:np.ndarray):
         super().__init__(problem)
 
-        self.displacements = displacements.reshape((1, self.displacements.shape[0]))
+        self.num_displ_sets = displacements.shape[0]
+        self.displacements = displacements
         for node in self.nodes:
-            node.displacements = displacements[node.dofs]
+            node.displacements = displacements[self.current_displ_set, node.dofs, 0]
 
 
 class ResultsStaticNonlinear(Results):

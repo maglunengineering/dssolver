@@ -62,7 +62,7 @@ class ElementTest(unittest.TestCase):
         self.p.remove_dofs()
         solver = solvers.LinearSolver(self)
         solver.solve()
-        work = -self.n2.displacements[1] * f * 0.5
+        work = -self.n2.displacements[0, 1, 0] * f * 0.5
 
         self.assertAlmostEqual(work, self.p.elements[0].get_strain_energy(), places=2)
 
@@ -81,7 +81,7 @@ class ElementTest(unittest.TestCase):
         solver.solve()
 
         e = self.p.elements[0]
-        u = e.get_displacements()
+        u = e.get_displacements().flatten()
         k = e.stiffness_matrix_global()
         work = e.get_strain_energy()
 
@@ -138,6 +138,28 @@ class ProblemTest(unittest.TestCase):
 
         # ??? Should this not be 25 (1/4) if this is a parabola? Whatevs
         self.assertTrue(np.allclose(self.n2.displacements[0:2], np.array([0, 31.25])), f'{self.n2.displacements[0:2]} != {np.array([0, 25])}')
+
+    def test_load_cases(self):
+        loads = np.zeros((2, 3, 1))
+        # Conceptually: (n, rows, cols) Two vectors with 3 rows and 1 column. Will go on node 2
+        loads[0, :, 0] = np.array([0, -1000, 0])
+        loads[1, :, 0] = np.array([0, -1500, 0])
+        self.n2.loads = loads
+
+        self.n1.fix()
+        self.p.create_beam(self.n1, self.n2)
+        self.p.solve()
+
+        disp_lc1 = self.p.displacements[0, :, :]
+        disp_lc2 = self.p.displacements[1, :, :]
+
+        disp_lc1_z = disp_lc1[-2]
+        disp_lc2_z = disp_lc2[-2]
+
+        self.assertNotEqual(disp_lc1_z, 0.0)
+        self.assertNotEqual(disp_lc2_z, 0.0)
+        self.assertAlmostEqual(1.5, disp_lc2_z / disp_lc1_z, places=8)
+
 
     def test_constraint(self):
         n3 = Node((2000,0))

@@ -97,16 +97,13 @@ class Problem:
     def K(self, reduced=False):
         return self.assemble(lambda e: e.stiffness_matrix_global(), reduced)
 
-    def assemble_loads(self, reduced=False):
-        loads = np.zeros(sum(node.ndofs() for node in self.nodes))
-        for n in self.nodes:
-            loads[n.dofs] = n.loads
-        if not reduced:
-            return loads
-        else:
-            if not self.constrained_dofs:
-                self.remove_dofs()
-            return loads[self.free_dofs()]
+    def assemble_loads(self, min_max_dim=0):
+        max_dim = max(min_max_dim, max(node.loads.shape[0] if len(node.loads.shape) > 1 else 1 for node in self.nodes))
+        return np.hstack([np.broadcast_to(node.loads, (max_dim, node.ndofs(), 1)) for node in self.nodes])
+
+    def assemble_displacements(self, min_max_dim=0):
+        max_dim = max(min_max_dim, max(node.displacements.shape[0] if len(node.displacements.shape) > 1 else 1 for node in self.nodes))
+        return np.hstack([np.broadcast_to(node.displacements, (max_dim, node.ndofs(), 1)) for node in self.nodes])
 
     def assemble(self, elem_func, reduced=False):
         if not self.constrained_dofs:
@@ -144,15 +141,16 @@ class Problem:
         K22 = K[np.ix_(constrained_dofs, constrained_dofs)]
 
         # Assemble displacements
-        displacements = np.hstack(tuple(node.displacements for node in self.nodes))
         forces = self.assemble_loads()
+        displacements = self.assemble_displacements(forces.shape[0])
 
-        displacements[free_dofs] = np.linalg.solve(K11, forces[free_dofs] - K12 @ displacements[constrained_dofs])
-        forces[constrained_dofs] = K21 @ displacements[free_dofs] + K22 @ displacements[constrained_dofs]
+
+        displacements[:, free_dofs, :] = np.linalg.solve(K11, forces[:, free_dofs, :] - K12 @ displacements[:, constrained_dofs, :])
+        forces[:, constrained_dofs, :] = K21 @ displacements[:, free_dofs, :] + K22 @ displacements[:, constrained_dofs, :]
 
         for node in self.nodes:
-            node.loads = forces[node.dofs]
-            node.displacements = displacements[node.dofs]
+            node.loads = forces[:, node.dofs, :]
+            node.displacements = displacements[:, node.dofs, :]
         self.displacements = displacements
 
         return [results.ResultsStaticLinear(self, displacements)]
