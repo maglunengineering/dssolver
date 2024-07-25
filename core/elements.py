@@ -107,6 +107,7 @@ class FiniteElement(DSSModelObject):
             node.add_element(self)
 
         self.stiffness_matrix_local = np.zeros((6,6))
+        self.preload: np.ndarray = np.zeros((1,1,1))
         self._dofs = None # Cached
         self._ix = None # Cached
 
@@ -225,6 +226,10 @@ class FiniteElement2Node(FiniteElement):
 
     def _get_forces_local(self):
         return self._forces_local
+
+    def get_forces_local_lin(self):
+        disp_local = self._transform @ np.hstack((self.node1.displacements, self.node2.displacements))
+        return self.stiffness_matrix_local @ disp_local - self.preload
 
     def _update_forces_local(self):
         r1 = self.r1

@@ -105,6 +105,13 @@ class Problem:
         max_dim = max(min_max_dim, max(node.displacements.shape[0] if len(node.displacements.shape) > 1 else 1 for node in self.nodes))
         return np.hstack([np.broadcast_to(node.displacements, (max_dim, node.ndofs(), 1)) for node in self.nodes])
 
+    def assemble_preload(self, min_max_dim=0):
+        max_dim = max(min_max_dim, max(node.loads.shape[0] if len(node.loads.shape) > 1 else 1 for node in self.nodes))
+        preload = np.zeros((max_dim, sum(n.ndofs() for n in self.nodes), 1))
+        for el in self.elements:
+            preload[:, el.dofs, :] += el.preload
+        return preload
+
     def assemble(self, elem_func, reduced=False):
         if not self.constrained_dofs:
             self.remove_dofs()
@@ -143,13 +150,13 @@ class Problem:
         # Assemble displacements
         forces = self.assemble_loads()
         displacements = self.assemble_displacements(forces.shape[0])
+        preload = self.assemble_preload(forces.shape[0])
 
-
-        displacements[:, free_dofs, :] = np.linalg.solve(K11, forces[:, free_dofs, :] - K12 @ displacements[:, constrained_dofs, :])
+        displacements[:, free_dofs, :] = np.linalg.solve(K11, (forces+preload)[:, free_dofs, :] - K12 @ displacements[:, constrained_dofs, :])
         forces[:, constrained_dofs, :] = K21 @ displacements[:, free_dofs, :] + K22 @ displacements[:, constrained_dofs, :]
 
         for node in self.nodes:
-            node.loads = forces[:, node.dofs, :]
+            node.loads = (forces - preload)[:, node.dofs, :]
             node.displacements = displacements[:, node.dofs, :]
         self.displacements = displacements
 

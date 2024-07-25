@@ -49,6 +49,12 @@ class ElementTest(unittest.TestCase):
 
         self.assertTrue(np.allclose(self.rod.get_forces(), self.beam.get_forces()))
 
+    def test_beam_with_preload_should_give_preload_with_no_load(self):
+        self.beam = Beam(self.n1, self.n2)
+        self.beam.preload = np.array([1000, 0, 0, -1000, 0, 0])
+
+        self.assertTrue(np.allclose(-self.beam.preload, self.beam.get_forces_local_lin()))
+
     def test_strain_energy_should_be_force_times_distance(self):
         self.rod = Rod(self.n1, self.n2)
         self.beam = Beam(self.n1, self.n2)
@@ -278,6 +284,26 @@ class SampleProblems(unittest.TestCase):
         self.p.solve()
 
         self.assertAlmostEqual(-P*L**3 / (3*E*I), self.p.node_at((1000,0)).displacements[0,1,0], places=5)
+
+    def test_cantilever_bar_with_preload(self):
+        n1 = Node((0, 0))
+        n2 = Node((1000, 0))
+        self.p.nodes.append(n1)
+        self.p.nodes.append(n2)
+
+        P = 1000
+        L = 1000
+        E = 210e5
+        I = 1000
+        A = 100
+        beam = self.p.create_beam(n1, n2, E=E, I=I, A=A)
+        n1.fix()
+        beam.preload = np.array([P, 0, 0, -P, 0, 0]).reshape((1,6,1))
+
+        self.p.solve()
+
+        self.assertAlmostEqual(-P*L/(E*A), n2.displacements[0, 0, 0], places=5)
+        self.assertTrue(np.allclose(np.zeros(6), beam.get_forces_local_lin().flatten()), f'Nonzero: {beam.get_forces_local_lin().flatten()} ')
 
     def test_von_mises_truss(self):
         p = self.problem = self.p
