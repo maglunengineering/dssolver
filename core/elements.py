@@ -10,8 +10,8 @@ class Node(DSSModelObject):
         self._r = np.array(xy)
 
         self._elements = list()
-        self.loads = np.zeros(3, dtype=float) # self.loads (global Fx, Fy, M) assigned on loading
-        self.displacements = np.zeros(3, dtype=float)
+        self.loads = np.zeros((1,3,1), dtype=float) # self.loads (global Fx, Fy, M) assigned on loading
+        self.displacements = np.zeros((1,3,1), dtype=float)
 
         self._dofs = None
         self.constrained_dofs = []
@@ -219,8 +219,8 @@ class FiniteElement2Node(FiniteElement):
         return T.T @ local @ T
 
     def _update_deformed_length(self):
-        self._deformed_length = np.linalg.norm((self.node2.r + self.node2.displacements[:2] -
-                                                self.node1.r - self.node1.displacements[:2]))
+        self._deformed_length = np.linalg.norm((self.node2.r + self.node2.displacements.flatten()[:2] -
+                                                self.node1.r - self.node1.displacements.flatten()[:2]))
         return self._deformed_length
 
     def _get_forces_local(self):

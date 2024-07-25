@@ -256,13 +256,20 @@ class DSSSettingsFrame(tk.Frame):
             entry.insert(0, val)
             entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
             entry.bind('<FocusOut>', lambda *_: self.setter(key, t(entry.get())))
-        elif (isinstance(val, typing.MutableSequence) or isinstance(val, np.ndarray)) and len(val) > 0 and\
-             (isinstance(val[0], int) or isinstance(val[0], float) or isinstance(val[0], np.int32)):
-                t = type(val[0])
-                entry = tk.Entry(self)
-                entry.insert(0, ' '.join(map(str, val)))
-                entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
-                entry.bind('<FocusOut>', lambda *_: self.setter(key, self._recreate_sequence(t, entry.get())))
+        elif isinstance(val, typing.MutableSequence) and len(val) > 0 and not isinstance(val, np.ndarray):
+            t = type(val[0])
+            tseq = type(val)
+            entry = tk.Entry(self)
+            entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
+            entry.bind('<FocusOut>', lambda *_: self.setter(key, self._recreate_sequence(t, tseq, entry.get())))
+            entry.insert(0, ' '.join(map(str, val)))
+        elif isinstance(val, np.ndarray):
+            t = val.dtype
+            entry = tk.Entry(self)
+            entry.insert(0, ' '.join(map(str, val.flatten())))
+            entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
+            if isinstance(val, np.ndarray):
+                entry.bind('<FocusOut>', lambda *_: self.setter(key, self._recreate_sequence_ndarray(val.dtype, val.shape, entry.get())))
         elif val is not None:
             entry = tk.Label(self, text=str(val)[0:25])
             entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
@@ -271,10 +278,14 @@ class DSSSettingsFrame(tk.Frame):
         self._cnt += 1
 
     @staticmethod
-    def _recreate_sequence(T, content):
+    def _recreate_sequence(TItem, TSequence, content):
         if not content:
             return []
-        return [T(item) for item in content.split(' ')]
+        return TSequence([TItem(item) for item in content.split(' ')])
+
+    @staticmethod
+    def _recreate_sequence_ndarray(dtype, shape, content):
+        return np.array([dtype.type(item) for item in content.split(' ')], dtype=dtype).reshape(shape)
 
     def _get_callback(self, key, parse_func):
         pass

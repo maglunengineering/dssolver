@@ -6,7 +6,7 @@ from core import settings
 from core.elements import Node, FiniteElement
 
 _register = {}
-
+_lcase = 0 # Could be a setting to implement load cases in gui
 
 class NodeDrawer:
     settings = {'Loads': True,
@@ -34,18 +34,18 @@ class NodeDrawer:
     def draw_loads(self, canvas: 'DSSCanvas'):
         scale = 0.1*canvas.get_size()
         pos = self.r
-        if np.any(np.round(self.loads[0:2])):
+        if np.any(np.round(self.loads[_lcase, 0:2, 0])):
             arrow_start = pos
-            arrow_end = pos + self.loads[0:2] / np.linalg.norm(self.loads[0:2]) * scale
+            arrow_end = pos + self.loads[_lcase, 0:2, 0] / np.linalg.norm(self.loads[_lcase, 0:2, 0]) * scale
             canvas.draw_line(arrow_start, arrow_end,
                              arrow='last', fill='blue', tag='mech')
             canvas.draw_text((arrow_start + arrow_end) / 2,
-                             '{}'.format(self.loads[0:2]),
+                             '{}'.format(self.loads[_lcase, 0:2, 0]),
                              anchor='sw', tag='mech')
 
         # If moment, draw a circular arrow
-        if len(self.loads) >= 3 and self.loads[2] != 0:
-            sign = np.sign(self.loads[2])
+        if self.loads.shape[1] >= 3 and self.loads[_lcase, 2, 0] != 0:
+            sign = np.sign(self.loads[_lcase, 2, 0])
             arc_start = pos + np.array([0, -scale / 2]) * sign
             arc_mid = pos + np.array([scale / 2, 0]) * sign
             arc_end = pos + np.array([0, scale / 2]) * sign
@@ -55,14 +55,14 @@ class NodeDrawer:
                             smooth=True,
                             arrow=arrow, fill='blue', tag='mech')
             canvas.draw_text(arc_start,
-                             text='{}'.format(np.round(self.loads[2], 0)),
+                             text='{}'.format(np.round(self.loads[_lcase, 2, 0], 0)),
                              anchor='ne', tag='mech')
 
     @staticmethod
     def draw_boundary_condition(self, canvas: 'DSSCanvas'):
         scale = 0.05 * canvas.get_size()
         linewidth = 2
-        pos = self.r + self.displacements[0:2]
+        pos = self.r + self.displacements[_lcase, 0:2, 0]
 
         if self.constrained_dofs == [0,1,2]:
             angle_vector = sum(n.r - self.r for n in self.connected_nodes())
@@ -173,14 +173,14 @@ class ElementDrawer:
         for node1, node2 in zip(self.nodes, self.nodes[1:]):
             canvas.draw_line(node1.r, node2.r, **kwargs)
             if ElementDrawer.settings['Displaced']:
-                canvas.draw_line(node1.r + node1.displacements[0:2],
-                                 node2.r + node2.displacements[0:2],
+                canvas.draw_line(node1.r + node1.displacements[_lcase, 0:2, 0],
+                                 node2.r + node2.displacements[_lcase, 0:2, 0],
                                  fill='red', dash=(1,), **kwargs)
         if len(self.nodes) > 2:
             canvas.draw_line(self.nodes[-1].r, self.nodes[0].r, **kwargs)
             if ElementDrawer.settings['Displaced']:
-                canvas.draw_line(self.nodes[-1].r + self.nodes[-1].displacements[0:2],
-                                 self.nodes[0].r + self.nodes[0].displacements[0:2],
+                canvas.draw_line(self.nodes[-1].r + self.nodes[-1].displacements[_lcase, 0:2, 0],
+                                 self.nodes[0].r + self.nodes[0].displacements[_lcase, 0:2, 0],
                                  fill='red', dash=(1,), **kwargs)
 
         return 1/len(self.nodes) * sum(node.r for node in self.nodes)

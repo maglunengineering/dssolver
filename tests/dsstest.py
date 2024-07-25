@@ -137,7 +137,7 @@ class ProblemTest(unittest.TestCase):
         self.p.solve()
 
         # ??? Should this not be 25 (1/4) if this is a parabola? Whatevs
-        self.assertTrue(np.allclose(self.n2.displacements[0:2], np.array([0, 31.25])), f'{self.n2.displacements[0:2]} != {np.array([0, 25])}')
+        self.assertTrue(np.allclose(self.n2.displacements[0, 0:2, 0], np.array([0, 31.25])), f'{self.n2.displacements[0:2]} != {np.array([0, 25])}')
 
     def test_load_cases(self):
         loads = np.zeros((2, 3, 1))
@@ -174,11 +174,11 @@ class ProblemTest(unittest.TestCase):
         n4.loads = np.array([-1000, 0, 0])
 
         self.p.solve()
-        self.assertAlmostEqual(-1000/(2e5*1000/3000), n4.displacements[0], places=5)
+        self.assertAlmostEqual(-1000/(2e5*1000/3000), n4.displacements[0, 0, 0], places=5)
 
         self.p.constraints.append(PenaltyBeam(self.n2, n3))
         self.p.solve()
-        self.assertAlmostEqual(-1000 / (2e5 * 1000 / 2000), n4.displacements[0], places=5)
+        self.assertAlmostEqual(-1000 / (2e5 * 1000 / 2000), n4.displacements[0, 0, 0], places=5)
 
 
 def timeit(func, *args):
@@ -277,7 +277,7 @@ class SampleProblems(unittest.TestCase):
 
         self.p.solve()
 
-        self.assertAlmostEqual(-P*L**3 / (3*E*I), self.p.node_at((1000,0)).displacements[1], places=5)
+        self.assertAlmostEqual(-P*L**3 / (3*E*I), self.p.node_at((1000,0)).displacements[0,1,0], places=5)
 
     def test_von_mises_truss(self):
         p = self.problem = self.p

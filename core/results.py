@@ -44,9 +44,8 @@ class Results:
         pass
 
     def set_displacements(self):
-        displacements = self.displacements[self.current_displ_set]
         for node in self.nodes:
-            node.displacements = displacements[node.dofs]
+            node.displacements = self.displacements[self.current_displ_set, node.dofs, 0].reshape((1, -1, 1))
 
     def reset_animation(self):
         pass
@@ -62,7 +61,7 @@ class ResultsStaticLinear(Results):
         self.num_displ_sets = displacements.shape[0]
         self.displacements = displacements
         for node in self.nodes:
-            node.displacements = displacements[self.current_displ_set, node.dofs, 0]
+            node.displacements = displacements[self.current_displ_set, node.dofs, 0].reshape((1, -1, 1))
 
 
 class ResultsStaticNonlinear(Results):
