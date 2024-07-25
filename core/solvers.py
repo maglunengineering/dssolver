@@ -4,13 +4,14 @@ from typing import Dict, Callable, Iterable, Optional
 
 import core.results as results
 import core.settings as settings
+import core.problem as problem
 
 
 class Solver:
     instantiate = True
 
-    def __init__(self, problem):
-        self.problem = problem
+    def __init__(self, problem:problem.Problem):
+        self.problem:problem.Problem = problem
         self.results = None
 
     def solve(self) -> Iterable[Optional[results.Results]]:
@@ -38,7 +39,7 @@ class LinearSolver(Solver):
 
         # Assemble forces and displacements
         displacements = np.hstack(tuple(node.displacements for node in problem.nodes))
-        forces = problem.loads
+        forces = problem.assemble_loads()
 
         displacements[free_dofs] = np.linalg.solve(K11, forces[free_dofs] - K12 @ displacements[constrained_dofs])
         forces[constrained_dofs] = K21 @ displacements[free_dofs] + K22 @ displacements[constrained_dofs]
@@ -62,8 +63,8 @@ class NonLinearSolver(Solver):
         problem.remove_dofs()
         free_dofs = problem.free_dofs()
 
-        max_A = np.linalg.norm(problem.loads[free_dofs])
-        q = problem.loads[free_dofs] / max_A
+        max_A = np.linalg.norm(problem.assemble_loads()[free_dofs])
+        q = problem.assemble_loads()[free_dofs] / max_A
         displacements = np.zeros(len(problem.nodes) * 3)
         loads = np.zeros_like(displacements)
 
@@ -212,7 +213,7 @@ class DynamicSolver(Solver):
 
         self.load_by_structural_weight(problem)
 
-        f = problem.loads[free_dofs]
+        f = problem.assemble_loads()[free_dofs]
         u = np.zeros(ndofs)
 
         q = np.zeros(2 * ndofs_free)
@@ -267,7 +268,7 @@ class DynamicSolver(Solver):
 
         self.load_by_structural_weight(problem)
 
-        f = problem.loads[free_dofs]
+        f = problem.assemble_loads()[free_dofs]
         u = np.zeros(ndofs)
 
         q = np.zeros(2 * ndofs_free)

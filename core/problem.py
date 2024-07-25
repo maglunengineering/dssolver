@@ -45,7 +45,7 @@ class Problem:
             node2 = self.get_or_create_node(rj)
             self.create_beam(node1, node2, E, A, I, z)
 
-    def get_or_create_node(self, r):
+    def get_or_create_node(self, r) -> Node:
         for node in self.nodes:
             if np.allclose(r, node.r):
                 return node
@@ -97,6 +97,17 @@ class Problem:
     def K(self, reduced=False):
         return self.assemble(lambda e: e.stiffness_matrix_global(), reduced)
 
+    def assemble_loads(self, reduced=False):
+        loads = np.zeros(sum(node.ndofs() for node in self.nodes))
+        for n in self.nodes:
+            loads[n.dofs] = n.loads
+        if not reduced:
+            return loads
+        else:
+            if not self.constrained_dofs:
+                self.remove_dofs()
+            return loads[self.free_dofs()]
+
     def assemble(self, elem_func, reduced=False):
         if not self.constrained_dofs:
             self.remove_dofs()
@@ -134,7 +145,7 @@ class Problem:
 
         # Assemble displacements
         displacements = np.hstack(tuple(node.displacements for node in self.nodes))
-        forces = self.loads
+        forces = self.assemble_loads()
 
         displacements[free_dofs] = np.linalg.solve(K11, forces[free_dofs] - K12 @ displacements[constrained_dofs])
         forces[constrained_dofs] = K21 @ displacements[free_dofs] + K22 @ displacements[constrained_dofs]
@@ -173,10 +184,6 @@ class Problem:
     def nodal_coordinates(self):
         nodal_coordinates = np.array([node.r for node in self.nodes])
         return nodal_coordinates
-
-    @property
-    def loads(self): # TODO : Should not be a property
-        return np.hstack(tuple(node.loads for node in self.nodes))
 
     def __copy__(self):
         cls = self.__class__
