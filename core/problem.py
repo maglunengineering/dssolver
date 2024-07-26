@@ -89,11 +89,11 @@ class Problem:
     def free_dofs(self) -> np.ndarray:
         return np.delete(np.arange(sum(n.ndofs() for n in self.nodes)), self.constrained_dofs)
 
-    def M(self, reduced=False):
-        return self.assemble_matrix(lambda e: e.mass_matrix_global(), reduced)
+    def M(self):
+        return self.assemble_matrix(lambda e: e.mass_matrix_global())
 
-    def K(self, reduced=False):
-        return self.assemble_matrix(lambda e: e.stiffness_matrix_global(), reduced)
+    def K(self):
+        return self.assemble_matrix(lambda e: e.stiffness_matrix_global())
 
     def assemble_vector(self, collection:Iterable[T], func:Callable[[T], np.ndarray], min_max_dim=0):
         max_dim = max(min_max_dim, max(func(x).shape[0] if func(x).ndim > 1 else 1 for x in collection))
@@ -102,9 +102,8 @@ class Problem:
             assembly[:, item.dofs, :] += func(item)
         return assembly
 
-
-    def assemble_matrix(self, elem_func, reduced=False):
-        if reduced and not self.constrained_dofs:
+    def assemble_matrix(self, elem_func):
+        if not self.constrained_dofs:
             self.remove_dofs()
 
         num_dofs = sum(n.ndofs() for n in self.nodes)
@@ -114,11 +113,7 @@ class Problem:
             contrib = elem_func(e)
             matrix[e.ix()] += contrib
 
-        if not reduced:
-            return matrix
-        else:
-            free_dofs = self.free_dofs()
-            return matrix[np.ix_(free_dofs, free_dofs)]
+        return matrix
 
     def solve(self) -> Iterable[Optional[results.ResultsStaticLinear]]:
         self.reassign_dofs()

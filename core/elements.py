@@ -226,7 +226,7 @@ class FiniteElement2Node(FiniteElement):
         return self._stiffness
 
     def _get_stiffness_geometric(self):
-        fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local()
+        fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local().flatten()
         forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
         G = np.array([0, -1/self._deformed_length, 0, 0, 1/self._deformed_length, 0])
         return np.outer(forces_permuted, G)
@@ -271,7 +271,7 @@ class FiniteElement2Node(FiniteElement):
         th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
         th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])
 
-        displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2])
+        displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2]).reshape((1,6,1))
         self._forces_local = self.stiffness_matrix_local @ displacements_local
         return self._forces_local
 
