@@ -167,7 +167,7 @@ class ProblemTest(unittest.TestCase):
         self.assertAlmostEqual(1.5, disp_lc2_z / disp_lc1_z, places=8)
 
 
-    def test_constraint(self):
+    def test_constraint_penalty(self):
         n3 = Node((2000,0))
         n4 = Node((3000,0))
         self.p.nodes.append(n3)
@@ -182,9 +182,28 @@ class ProblemTest(unittest.TestCase):
         self.p.solve()
         self.assertAlmostEqual(-1000/(2e5*1000/3000), n4.displacements[0, 0, 0], places=5)
 
-        self.p.constraints.append(PenaltyBeam(self.n2, n3))
+        self.p.elements.append(PenaltyBeam(self.n2, n3))
         self.p.solve()
         self.assertAlmostEqual(-1000 / (2e5 * 1000 / 2000), n4.displacements[0, 0, 0], places=5)
+
+    def _test_constraint_penaltypreload(self):
+        n3 = Node((2000,0))
+        n4 = Node((3000,0))
+        self.p.nodes.append(n3)
+        self.p.nodes.append(n4)
+
+        for n1,n2 in zip(self.p.nodes, self.p.nodes[1:]):
+            self.p.create_beam(n1, n2, E=2e5, A=1000)
+
+        self.n1.fix()
+        n4.loads = np.array([-1000, 0, 0])
+
+        self.p.solve()
+        self.assertAlmostEqual(-1000/(2e5*1000/3000), n4.displacements[0, 0, 0], places=5)
+
+        #self.p.elements.append(PreloadPenaltyBeam(self.n2, n3)) # Not implemented
+        self.p.solve()
+        self.assertAlmostEqual(-1000/(2e5*1000/2000), n4.displacements[0, 0, 0], places=5)
 
 
 def timeit(func, *args):

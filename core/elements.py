@@ -147,12 +147,12 @@ class FiniteElement(DSSModelObject):
     def get_displacements(self):
         return np.hstack([n.displacements for n in self.nodes])
 
-    def nonlin_update(self):
+    def nonlin_update(self, behavior):
         pass
 
-    def do_iterate(self, itercnt:int) -> bool:
+    def do_iterate(self, global_K:np.ndarray, global_u:np.ndarray, global_f:np.ndarray) -> bool:
         """
-        :return: True if there was a state change (and iteration must be done again), otherwise False
+        :return: False if iteration should be done again, True if iteration is finished
         """
         if not ElementBehavior.ITERABLE in self.behavior:
             raise NotImplementedError(f'Called iterate on non-iterable {self.__class__.__name__}')
@@ -195,11 +195,12 @@ class FiniteElement2Node(FiniteElement):
     def r2(self):
         return self.node2.r
 
-    def nonlin_update(self):
-        self._update_deformed_length()
-        self._update_transform()
-        self._update_forces_local()
-        self._update_stiffness()
+    def nonlin_update(self, behavior):
+        if ElementBehavior.NONLIN_GEOM in behavior:
+            self._update_deformed_length()
+            self._update_transform()
+            self._update_forces_local()
+            self._update_stiffness()
 
     def get_forces(self):
         return self._transform.T @ self._get_forces_local()
@@ -338,17 +339,24 @@ class Rod(FiniteElement2Node):
         return Rod(newnode1, newnode2, self.E, self.A)
 
 class PenaltyBeam(FiniteElement):
+    behavior = FiniteElement.behavior.including(ElementBehavior.ITERABLE)
     def __init__(self, node1, node2):
         super().__init__((node1, node2))
         self.stiffness_matrix_local = np.zeros((6,6))
+        self._is_calibrated = False
 
 
     def stiffness_matrix_global(self):
         return self.stiffness_matrix_local
 
-    def calibrate(self, max_global_stiffness):
+    def do_iterate(self, global_K:np.ndarray, global_u:np.ndarray, global_f:np.ndarray) -> bool:
+        """
+        :return: False if iteration should be done again, True if iteration is finished
+        """
         # IFEM 9.2.3: 10**(k+p/2) where k is order of max stiffness and p is machine prec
-        stiff = 10 ** (np.log10(max_global_stiffness) + 7)
+        if self._is_calibrated:
+            return True
+        stiff = 10 ** (np.log10(global_K.max()) + 7)
         self.stiffness_matrix_local = np.array([
             [stiff, 0, 0, -stiff, 0, 0],
             [0, stiff, 0, 0, -stiff, 0],
@@ -357,7 +365,8 @@ class PenaltyBeam(FiniteElement):
             [0, -stiff, 0, 0, stiff, 0],
             [0, 0, -stiff, 0, 0, stiff]
         ])
-
+        self._is_calibrated = True
+        return False # Change needs to propagate
 
 
 

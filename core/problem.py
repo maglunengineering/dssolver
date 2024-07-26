@@ -2,7 +2,7 @@ from typing import List, Iterable, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
-from core.elements import FiniteElement, Node, Rod, Beam, beta
+from core.elements import FiniteElement, Node, Rod, Beam, ElementBehavior
 import core.results as results
 
 np.set_printoptions(suppress=True)
@@ -12,7 +12,6 @@ class Problem:
     def __init__(self):
         self.nodes:List[Node] = []
         self.elements:List[FiniteElement] = []
-        self.constraints:List[FiniteElement] = []
 
         self.constrained_dofs = []
         self.forces = None  # Forces (at all nodes, incl removed dofs)
@@ -78,7 +77,7 @@ class Problem:
 
     def nonlin_update(self):
         for e in self.elements:
-            e.nonlin_update()
+            e.nonlin_update(ElementBehavior.NONLIN_GEOM)
 
     def model_size(self):
         xy = self.nodal_coordinates
@@ -123,12 +122,6 @@ class Problem:
             contrib = elem_func(e)
             matrix[e.ix()] += contrib
 
-        max_stiff = matrix.max()
-        for e in self.constraints:
-            e.calibrate(max_stiff)
-            contrib = elem_func(e)
-            matrix[e.ix()] += contrib
-
         if not reduced:
             return matrix
         else:
@@ -141,24 +134,38 @@ class Problem:
         free_dofs = self.free_dofs()
         constrained_dofs = self.constrained_dofs
 
-        K = self.K()
-        K11 = K[np.ix_(free_dofs, free_dofs)]
-        K12 = K[np.ix_(free_dofs, constrained_dofs)]
-        K21 = K[np.ix_(constrained_dofs, free_dofs)]
-        K22 = K[np.ix_(constrained_dofs, constrained_dofs)]
+        iterables = [e for e in self.elements if ElementBehavior.ITERABLE in e.behavior]
+        max_iter = 8
+        itercnt = 0
 
-        # Assemble displacements
-        forces = self.assemble_loads()
-        displacements = self.assemble_displacements(forces.shape[0])
-        preload = self.assemble_preload(forces.shape[0])
+        while True:
+            K = self.K()
+            K11 = K[np.ix_(free_dofs, free_dofs)]
+            K12 = K[np.ix_(free_dofs, constrained_dofs)]
+            K21 = K[np.ix_(constrained_dofs, free_dofs)]
+            K22 = K[np.ix_(constrained_dofs, constrained_dofs)]
 
-        displacements[:, free_dofs, :] = np.linalg.solve(K11, (forces+preload)[:, free_dofs, :] - K12 @ displacements[:, constrained_dofs, :])
-        forces[:, constrained_dofs, :] = K21 @ displacements[:, free_dofs, :] + K22 @ displacements[:, constrained_dofs, :]
+            # Assemble displacements
+            forces = self.assemble_loads()
+            displacements = self.assemble_displacements(forces.shape[0])
+            preload = self.assemble_preload(forces.shape[0])
 
-        for node in self.nodes:
-            node.loads = (forces - preload)[:, node.dofs, :]
-            node.displacements = displacements[:, node.dofs, :]
-        self.displacements = displacements
+            displacements[:, free_dofs, :] = np.linalg.solve(K11, (forces+preload)[:, free_dofs, :] - K12 @ displacements[:, constrained_dofs, :])
+            forces[:, constrained_dofs, :] = K21 @ displacements[:, free_dofs, :] + K22 @ displacements[:, constrained_dofs, :]
+
+            for node in self.nodes:
+                node.loads = (forces - preload)[:, node.dofs, :]
+                node.displacements = displacements[:, node.dofs, :]
+            self.displacements = displacements
+
+            if not iterables:
+                break
+            elif itercnt >= max_iter:
+                break
+            else:
+                if all(iterable.do_iterate(K, displacements, forces) for iterable in iterables):
+                    break
+
 
         return [results.ResultsStaticLinear(self, displacements)]
 
