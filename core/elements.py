@@ -1,4 +1,5 @@
 import inspect
+from enum import IntFlag, auto
 import numpy as np
 
 class DSSModelObject:
@@ -98,8 +99,24 @@ class Node(DSSModelObject):
     def __hash__(self):
         return id(self)
 
+
+class ElementBehavior(IntFlag):
+    DISABLED = 1
+    ITERABLE = 2
+    NONLIN_GEOM = 4
+    #NONLIN_MATR = 8
+
+    def without(self, behavior):
+        return ElementBehavior(self - behavior) if behavior in self else self
+
+    def including(self, behavior):
+        return ElementBehavior(self + behavior) if not behavior in self else self
+
+
 class FiniteElement(DSSModelObject):
     ndofs = 3
+    behavior = ElementBehavior(0)
+
     def __init__(self, nodes):
         self.nodes = nodes
 
@@ -132,6 +149,14 @@ class FiniteElement(DSSModelObject):
 
     def nonlin_update(self):
         pass
+
+    def do_iterate(self, itercnt:int) -> bool:
+        """
+        :return: True if there was a state change (and iteration must be done again), otherwise False
+        """
+        if not ElementBehavior.ITERABLE in self.behavior:
+            raise NotImplementedError(f'Called iterate on non-iterable {self.__class__.__name__}')
+        return True
 
     def reinit(self):
         init_args = inspect.getfullargspec(self.__init__).args
