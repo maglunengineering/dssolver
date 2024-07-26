@@ -63,8 +63,8 @@ class NonLinearSolver(Solver):
         problem.remove_dofs()
         free_dofs = problem.free_dofs()
 
-        max_A = np.linalg.norm(problem.assemble_loads().flatten()[free_dofs])
-        q = problem.assemble_loads().flatten()[free_dofs] / max_A
+        max_A = np.linalg.norm(problem.assemble_vector(problem.nodes, lambda n:n.loads).flatten()[free_dofs])
+        q = problem.assemble_vector(problem.nodes, lambda n:n.loads).flatten()[free_dofs] / max_A
         displacements = np.zeros(len(problem.nodes) * 3)
         loads = np.zeros_like(displacements)
 

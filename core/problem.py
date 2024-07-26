@@ -1,4 +1,5 @@
-from typing import List, Iterable, Optional
+import typing
+from typing import List, Iterable, Optional, Callable
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
@@ -6,6 +7,8 @@ from core.elements import FiniteElement, Node, Rod, Beam, ElementBehavior
 import core.results as results
 
 np.set_printoptions(suppress=True)
+WithDofs = typing.Union[FiniteElement, Node]
+T = typing.TypeVar('T', bound=WithDofs)
 
 
 class Problem:
@@ -66,10 +69,6 @@ class Problem:
             node.dofs = np.arange(i, i+ndofs)
             i += ndofs
 
-    def upd_obj_displacements(self):
-        for node in self.nodes:
-            node.displacements = self.displacements[node.dofs]
-
     def remove_dofs(self):  # Interpret boundary conditions
         self.constrained_dofs = []
         for node in self.nodes:
@@ -91,28 +90,21 @@ class Problem:
         return np.delete(np.arange(sum(n.ndofs() for n in self.nodes)), self.constrained_dofs)
 
     def M(self, reduced=False):
-        return self.assemble(lambda e: e.mass_matrix_global(), reduced)
+        return self.assemble_matrix(lambda e: e.mass_matrix_global(), reduced)
 
     def K(self, reduced=False):
-        return self.assemble(lambda e: e.stiffness_matrix_global(), reduced)
+        return self.assemble_matrix(lambda e: e.stiffness_matrix_global(), reduced)
 
-    def assemble_loads(self, min_max_dim=0):
-        max_dim = max(min_max_dim, max(node.loads.shape[0] if len(node.loads.shape) > 1 else 1 for node in self.nodes))
-        return np.hstack([np.broadcast_to(node.loads, (max_dim, node.ndofs(), 1)) for node in self.nodes])
+    def assemble_vector(self, collection:Iterable[T], func:Callable[[T], np.ndarray], min_max_dim=0):
+        max_dim = max(min_max_dim, max(func(x).shape[0] if func(x).ndim > 1 else 1 for x in collection))
+        assembly = np.zeros((max_dim, sum(n.ndofs() for n in self.nodes), 1))
+        for item in collection:
+            assembly[:, item.dofs, :] += func(item)
+        return assembly
 
-    def assemble_displacements(self, min_max_dim=0):
-        max_dim = max(min_max_dim, max(node.displacements.shape[0] if len(node.displacements.shape) > 1 else 1 for node in self.nodes))
-        return np.hstack([np.broadcast_to(node.displacements, (max_dim, node.ndofs(), 1)) for node in self.nodes])
 
-    def assemble_preload(self, min_max_dim=0):
-        max_dim = max(min_max_dim, max(node.loads.shape[0] if len(node.loads.shape) > 1 else 1 for node in self.nodes))
-        preload = np.zeros((max_dim, sum(n.ndofs() for n in self.nodes), 1))
-        for el in self.elements:
-            preload[:, el.dofs, :] += el.preload
-        return preload
-
-    def assemble(self, elem_func, reduced=False):
-        if not self.constrained_dofs:
+    def assemble_matrix(self, elem_func, reduced=False):
+        if reduced and not self.constrained_dofs:
             self.remove_dofs()
 
         num_dofs = sum(n.ndofs() for n in self.nodes)
@@ -146,9 +138,9 @@ class Problem:
             K22 = K[np.ix_(constrained_dofs, constrained_dofs)]
 
             # Assemble displacements
-            forces = self.assemble_loads()
-            displacements = self.assemble_displacements(forces.shape[0])
-            preload = self.assemble_preload(forces.shape[0])
+            forces = self.assemble_vector(self.nodes, lambda n: n.loads)
+            displacements = self.assemble_vector(self.nodes, lambda n:n.displacements, forces.shape[0])
+            preload = self.assemble_vector(self.elements, lambda e:e.preload, forces.shape[0])
 
             displacements[:, free_dofs, :] = np.linalg.solve(K11, (forces+preload)[:, free_dofs, :] - K12 @ displacements[:, constrained_dofs, :])
             forces[:, constrained_dofs, :] = K21 @ displacements[:, free_dofs, :] + K22 @ displacements[:, constrained_dofs, :]
@@ -162,9 +154,10 @@ class Problem:
                 break
             elif itercnt >= max_iter:
                 break
-            else:
-                if all(iterable.do_iterate(K, displacements, forces) for iterable in iterables):
-                    break
+            elif all(iterable.do_iterate(K, displacements, forces) for iterable in iterables):
+                break
+
+            itercnt += 1
 
 
         return [results.ResultsStaticLinear(self, displacements)]
