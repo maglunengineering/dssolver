@@ -74,9 +74,9 @@ class Problem:
         for node in self.nodes:
             self.constrained_dofs.extend(node.dofs[node.constrained_dofs])
 
-    def nonlin_update(self):
+    def nonlin_update(self, i_lc):
         for e in self.elements:
-            e.nonlin_update(ElementBehavior.NONLIN_GEOM)
+            e.nonlin_update(ElementBehavior.NONLIN_GEOM, i_lc)
 
     def model_size(self):
         xy = self.nodal_coordinates

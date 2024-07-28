@@ -47,7 +47,7 @@ class ElementTest(unittest.TestCase):
         self.beam = Beam(self.n1, self.n2)
         self.n2.displacements = np.array([-10, 0, 0])
 
-        self.assertTrue(np.allclose(self.rod.get_forces(), self.beam.get_forces()))
+        self.assertTrue(np.allclose(self.rod.get_forces(0), self.beam.get_forces(0)))
 
     def test_beam_with_preload_should_give_preload_with_no_load(self):
         self.beam = Beam(self.n1, self.n2)
@@ -87,7 +87,7 @@ class ElementTest(unittest.TestCase):
         solver.solve()
 
         e = self.p.elements[0]
-        u = e.get_displacements().flatten()
+        u = e.get_displacements(0).flatten()
         k = e.stiffness_matrix_global()
         work = e.get_strain_energy()
 
@@ -350,6 +350,42 @@ class SampleProblems(unittest.TestCase):
         solver = solvers.NonLinearSolver(p)
         res = solver.solveall()
         self.assertAlmostEqual(-442.62588512549337, res.displacements[-1, 4], delta=4)
+
+    def test_path_dependent_mises_truss(self):
+        p = self.problem = self.p
+        n1 = p.get_or_create_node((0, 0))
+        n2 = p.get_or_create_node((-200, 1000))
+        n3 = p.get_or_create_node((0, 2000))
+        p.create_rod(n1, n2, A=10)
+        p.create_rod(n2, n3, A=10)
+        n1.fix()
+        n2.constrained_dofs = [2] # Rotation lock
+        n3.constrained_dofs = [0,2]
+
+        p.elements.append(BoundarySpring(n3, np.array([0, 10000, 0])))
+
+        #n2.loads[0, :3, 0] = np.array([10000, 0, 0])
+        #solver = solvers.NonLinearSolver(p)
+        #solver.solveall() # 10000 spring, 10000 force: v disp = 452
+
+
+        # Case 1: Load on middle node (n2) first, then on n3. Should snap through
+        for n in p.nodes:
+            n.loads = np.zeros((2,3,1))
+            n.displacements = np.zeros((2,3,1))
+        n2.loads[0, :3, 0] = np.array([11000, 0, 0])
+        n2.loads[1, :3, 0] = np.array([11000, 0, 0])
+
+        n3.loads[0, :3, 0] = np.array([0, 0, 0])
+        n3.loads[1, :3, 0] = np.array([0, -1000, 0])
+
+        solver = solvers.NonLinearSolver(p)
+        res = list(solver.solve())
+
+        self.assertGreater(n2.displacements[0, 0, 0], 450)
+        self.assertGreater(n2.displacements[1, 0, 0], n2.displacements[0, 0, 0])
+
+
 
 
 
