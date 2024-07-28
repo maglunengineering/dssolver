@@ -31,8 +31,6 @@ class NonLinearSolver(Solver):
         p = self.problem
         num_lc = max(n.loads.shape[0] for n in p.nodes)
 
-        accumulated_load = np.zeros(1)
-
         arclength = 1000
         for i_lc in range(num_lc):
 
@@ -44,19 +42,14 @@ class NonLinearSolver(Solver):
             p.remove_dofs()
             free_dofs = p.free_dofs()
 
-            target_load = p.assemble_vector(p.nodes, lambda n:n.loads)
-            displacements = p.assemble_vector(p.nodes, lambda n:n.displacements, min_max_dim=num_lc)
-
-            if displacements.ndim > 1:
-                displacements = displacements[i_lc - 1 if i_lc >= 1 else 0].flatten()
-
-            if target_load.ndim > 1:
-                target_load = target_load[i_lc].flatten()[free_dofs]
+            target_load = p.assemble_vector(p.nodes, lambda n:n.loads)[i_lc, free_dofs, 0]
+            displacements = p.assemble_vector(p.nodes, lambda n:n.displacements, min_max_dim=num_lc)[i_lc, :, 0]
 
             if i_lc == 0:
-                current_load = np.zeros_like(displacements) # Otherwise, just let it continue on
+                accumulated_load = np.zeros(1)
+                current_load = np.zeros(len(free_dofs)) # Otherwise, just let it continue on
             else:
-                accumulated_load = accumulated_load + current_load[free_dofs]
+                accumulated_load = accumulated_load + current_load
 
             max_A = np.linalg.norm(target_load - accumulated_load)
             q = (target_load - accumulated_load) / max_A
@@ -123,7 +116,7 @@ class NonLinearSolver(Solver):
                 arclength *= 1.2
 
                 displ_storage.append(np.array(displacements))
-                current_load[free_dofs] = q * A + accumulated_load
+                current_load = q * A + accumulated_load
                 force_storage.append(A)
                 yield None
                 i += 1

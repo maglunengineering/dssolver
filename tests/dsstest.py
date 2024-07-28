@@ -351,7 +351,7 @@ class SampleProblems(unittest.TestCase):
         res = solver.solveall()
         self.assertAlmostEqual(-442.62588512549337, res.displacements[-1, 4], delta=4)
 
-    def test_path_dependent_mises_truss(self):
+    def _set_up_path_dependent_mises_truss(self):
         p = self.problem = self.p
         n1 = p.get_or_create_node((0, 0))
         n2 = p.get_or_create_node((-200, 1000))
@@ -364,26 +364,49 @@ class SampleProblems(unittest.TestCase):
 
         p.elements.append(BoundarySpring(n3, np.array([0, 10000, 0])))
 
-        #n2.loads[0, :3, 0] = np.array([10000, 0, 0])
-        #solver = solvers.NonLinearSolver(p)
-        #solver.solveall() # 10000 spring, 10000 force: v disp = 452
-
-
         # Case 1: Load on middle node (n2) first, then on n3. Should snap through
         for n in p.nodes:
             n.loads = np.zeros((2,3,1))
             n.displacements = np.zeros((2,3,1))
+
+    def assertSmaller(self, a, b):
+        self.assertTrue(a < b, f'Assertion failed: {a} not smaller than {b}')
+        
+
+    def test_path_dependent_mises_truss_displ_right(self):
+        self._set_up_path_dependent_mises_truss()
+        n1,n2,n3 = self.p.nodes
+
         n2.loads[0, :3, 0] = np.array([11000, 0, 0])
         n2.loads[1, :3, 0] = np.array([11000, 0, 0])
 
         n3.loads[0, :3, 0] = np.array([0, 0, 0])
-        n3.loads[1, :3, 0] = np.array([0, -1000, 0])
+        n3.loads[1, :3, 0] = np.array([0, -1000000, 0])
 
-        solver = solvers.NonLinearSolver(p)
-        res = list(solver.solve())
+        solver = solvers.NonLinearSolver(self.p)
+        list(solver.solve())
 
         self.assertGreater(n2.displacements[0, 0, 0], 450)
         self.assertGreater(n2.displacements[1, 0, 0], n2.displacements[0, 0, 0])
+
+    def test_path_dependent_mises_truss_displ_left(self):
+        self._set_up_path_dependent_mises_truss()
+        n1,n2,n3 = self.p.nodes
+
+        n2.loads[0, :3, 0] = np.array([0, 0, 0])
+        n2.loads[1, :3, 0] = np.array([11000, 0, 0])
+
+        n3.loads[0, :3, 0] = np.array([0, -1000000, 0])
+        n3.loads[1, :3, 0] = np.array([0, -1000000, 0])
+
+        solver = solvers.NonLinearSolver(self.p)
+        list(solver.solve())
+
+
+        self.assertSmaller(n2.displacements[0, 0, 0], 0)
+        self.assertSmaller(n2.displacements[1, 0, 0], 0)
+        self.assertGreater(n2.displacements[1, 0, 0], n2.displacements[0, 0, 0])
+
 
 
 
