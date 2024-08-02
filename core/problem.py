@@ -96,10 +96,10 @@ class Problem:
         return self.assemble_matrix(lambda e: e.stiffness_matrix_global())
 
     def assemble_vector(self, collection:Iterable[T], func:Callable[[T], np.ndarray], min_max_dim=0):
-        max_dim = max(min_max_dim, max(func(x).shape[0] if func(x).ndim > 1 else 1 for x in collection))
-        assembly = np.zeros((max_dim, sum(n.ndofs() for n in self.nodes), 1))
+        max_dim = max(min_max_dim, max(func(x).shape[1] if func(x).ndim > 1 else 1 for x in collection))
+        assembly = np.zeros((sum(n.ndofs() for n in self.nodes), max_dim))
         for item in collection:
-            assembly[:, item.dofs, :] += func(item)
+            assembly[item.dofs, :] += func(item)
         return assembly
 
     def assemble_matrix(self, elem_func):
@@ -134,15 +134,15 @@ class Problem:
 
             # Assemble displacements
             forces = self.assemble_vector(self.nodes, lambda n: n.loads)
-            displacements = self.assemble_vector(self.nodes, lambda n:n.displacements, forces.shape[0])
-            preload = self.assemble_vector(self.elements, lambda e:e.preload, forces.shape[0])
+            displacements = self.assemble_vector(self.nodes, lambda n:n.displacements, forces.shape[1])
+            preload = self.assemble_vector(self.elements, lambda e:e.preload, forces.shape[1])
 
-            displacements[:, free_dofs, :] = np.linalg.solve(K11, (forces+preload)[:, free_dofs, :] - K12 @ displacements[:, constrained_dofs, :])
-            forces[:, constrained_dofs, :] = K21 @ displacements[:, free_dofs, :] + K22 @ displacements[:, constrained_dofs, :]
+            displacements[free_dofs, :] = np.linalg.solve(K11, (forces+preload)[free_dofs, :] - K12 @ displacements[constrained_dofs, :])
+            forces[constrained_dofs, :] = K21 @ displacements[free_dofs, :] + K22 @ displacements[constrained_dofs, :]
 
             for node in self.nodes:
-                node.loads = (forces - preload)[:, node.dofs, :]
-                node.displacements = displacements[:, node.dofs, :]
+                node.loads = (forces - preload)[node.dofs, :]
+                node.displacements = displacements[node.dofs, :]
             self.displacements = displacements
 
             if not iterables:

@@ -45,7 +45,7 @@ class Results:
 
     def set_displacements(self):
         for node in self.nodes:
-            node.displacements = self.displacements[self.current_displ_set, node.dofs, 0].reshape((1, -1, 1))
+            node.displacements = self.displacements[node.dofs, self.current_displ_set].reshape((-1, 1))
 
     def reset_animation(self):
         pass
@@ -58,10 +58,10 @@ class ResultsStaticLinear(Results):
     def __init__(self, problem, displacements:np.ndarray):
         super().__init__(problem)
 
-        self.num_displ_sets = displacements.shape[0]
+        self.num_displ_sets = displacements.shape[1]
         self.displacements = displacements
         for node in self.nodes:
-            node.displacements = displacements[self.current_displ_set, node.dofs, 0].reshape((1, -1, 1))
+            node.displacements = displacements[node.dofs, self.current_displ_set].reshape((-1, 1))
 
 
 class ResultsStaticNonlinear(Results):
