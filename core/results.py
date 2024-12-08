@@ -45,7 +45,7 @@ class Results:
 
     def set_displacements(self):
         for node in self.nodes:
-            node.displacements = self.displacements[node.dofs, self.current_displ_set].reshape((-1, 1))
+            node.displacements = self.displacements[self.current_displ_set, node.dofs].reshape((-1, 1))
 
     def reset_animation(self):
         pass
@@ -69,8 +69,8 @@ class ResultsStaticNonlinear(Results):
         super().__init__(problem)
 
         self.forces = forces
-        self.displacements = displacements
-        self.num_displ_sets = len(displacements)
+        self.displacements = displacements # [nsteps, ndofs]
+        self.num_displ_sets = displacements.shape[0]
 
     def quickplot(self):
         for node in self.nodes:

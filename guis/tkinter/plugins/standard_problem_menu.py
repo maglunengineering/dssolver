@@ -50,7 +50,7 @@ class StandardProblemMenu(DSSPlugin):
 
         p.reassign_dofs()
         p.constrained_dofs = [0, 1, 3*N - 3, 3*N - 1]
-        p.nodes[-1].loads = np.array([0, -3600, 0])
+        p.nodes[-1].loads = np.array([0, -3600, 0]).reshape((3,1))
 
         p.nodes[0].pin()
         p.nodes[-1].glider()
@@ -74,7 +74,7 @@ class StandardProblemMenu(DSSPlugin):
 
         p.reassign_dofs()
         #p.constrained_dofs = [0, 1, 3*N-2, 3*N-1]
-        p.nodes[len(p.nodes)//2].loads = np.array([0, -1000, 0])
+        p.nodes[len(p.nodes)//2].loads = np.array([0, -1000, 0]).reshape((3,1))
 
         p.nodes[0].pin()
         p.nodes[-1].pin()
@@ -89,7 +89,7 @@ class StandardProblemMenu(DSSPlugin):
         p.create_beam(n1, n2, A=10)
         n1.pin()
         n2.roller90()
-        n2.loads = np.array([0, -10000, 0])
+        n2.loads = np.array([0, -10000, 0]).reshape((3,1))
         self.dss.autoscale()
 
     def von_mises_truss_snapback(self):
@@ -103,7 +103,7 @@ class StandardProblemMenu(DSSPlugin):
         n1.pin()
         n2.roller90()
         n3.glider()
-        n3.loads = np.array([0, -4000, 0])
+        n3.loads = np.array([0, -4000, 0]).reshape((3,1))
         self.dss.autoscale()
 
     def von_mises_truss_springbc(self):
@@ -120,7 +120,7 @@ class StandardProblemMenu(DSSPlugin):
         n1.roller90()
         n2.roller90()
         n3.glider()
-        n3 = np.array([0, -4000, 0])
+        n3 = np.array([0, -4000, 0]).reshape((3,1))
         self.dss.autoscale()
 
     def standing_rod(self):
@@ -131,7 +131,7 @@ class StandardProblemMenu(DSSPlugin):
         p.create_rod(n1, n2, A=10)
         n1.glider()
         n2.fix()
-        n1.loads = np.array([0, 1e6, 0])
+        n1.loads = np.array([0, 1e6, 0]).reshape((3,1))
 
         self.dss.autoscale()
 
@@ -149,7 +149,7 @@ class StandardProblemMenu(DSSPlugin):
 
         p.nodes[0].pin()
         p.nodes[-1].fix()
-        p.nodes[n//2].loads = np.array([0, -200000, 0])
+        p.nodes[n//2].loads = np.array([0, -200000, 0]).reshape((3,1))
         self.dss.autoscale()
 
     def pendulum(self):

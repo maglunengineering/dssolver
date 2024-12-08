@@ -97,6 +97,7 @@ class DSSGUI:
             return lambda : this.call_and_add_to_results(*args)
 
         self.add_topmenu_item('Solve', 'p.solve', callback_factory(self, lambda : self.problem.solve()))
+        self.add_topmenu_item('Solve', 'Nonlinear', callback_factory(self, lambda : solvers.NonLinearSolver(self.problem).solve()))
 
         for plugin in plugins:
             instance = plugin(self)
