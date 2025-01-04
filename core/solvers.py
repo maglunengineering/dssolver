@@ -54,7 +54,7 @@ class NonLinearSolver(Solver):
             max_A = np.linalg.norm(target_load - accumulated_load)
             q = (target_load - accumulated_load) / max_A
 
-            displ_storage = [displacements]
+            displ_storage = [np.array(displacements)]
             force_storage = [A]
 
             i = 0
