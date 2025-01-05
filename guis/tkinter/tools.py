@@ -2,6 +2,7 @@ import tkinter as tk
 import numpy as np
 
 from core import elements, solvers
+import drawing
 
 class Tool:
     def __init__(self, canvas):
@@ -144,7 +145,7 @@ class ToolDispl(Tool):
         self._dragging = False
         self._snap_obj = None
         self._last_click_xy = np.empty(2)
-        self._solver = solvers.LinearSolver(gui)
+        self._solver = solvers.LinearSolver(gui.problem)
 
         self.displace = True
 
@@ -169,7 +170,7 @@ class ToolDispl(Tool):
 
         pt = self._canvas.canvas_to_problem((event.x, event.y))
         if self.displace:
-            self._snap_obj.displacements = np.array([*(pt - self._last_click_xy), 0])
+            self._snap_obj.displacements[:, drawing._lcase] = np.array([*(pt - self._last_click_xy), 0])
         else:
             self._snap_obj._r = pt
         self._gui.draw_canvas()

@@ -61,6 +61,8 @@ class NodeDrawer:
     @staticmethod
     def draw_boundary_condition(self, canvas: 'DSSCanvas'):
         scale = 0.05 * canvas.get_size()
+        if not scale:
+            scale = 0.05
         linewidth = 2
         pos = self.r + self.displacements[0:2, _lcase]
 
