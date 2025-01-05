@@ -141,7 +141,7 @@ class FiniteElement(DSSModelObject):
             self._ix = np.ix_(self._dofs, self._dofs)
         return self._ix
 
-    def stiffness_matrix_global(self):
+    def stiffness_matrix_global(self) -> np.ndarray:
         raise NotImplementedError(self.__class__.__name__)
 
     def get_displacements(self):
@@ -222,7 +222,7 @@ class FiniteElement2Node(FiniteElement):
         self._stiffness = self._transform.T @ (self.stiffness_matrix_local + self._get_stiffness_geometric(i_lc)) @ self._transform
         return self._stiffness
 
-    def stiffness_matrix_global(self):
+    def stiffness_matrix_global(self) -> np.ndarray:
         return self._stiffness
 
     def _get_stiffness_geometric(self, i_lc):
@@ -231,7 +231,7 @@ class FiniteElement2Node(FiniteElement):
         G = np.array([0, -1/self._deformed_length, 0, 0, 1/self._deformed_length, 0])
         return np.outer(forces_permuted, G)
 
-    def mass_matrix_global(self):
+    def mass_matrix_global(self) -> np.ndarray:
         T = self._transform
         density = 7.86e-9 # Density of steel in tonnes / mm^3
         half_mass = self.A * self._undeformed_length * density / 2
@@ -343,7 +343,7 @@ class BoundarySpring(FiniteElement):
         super().__init__([node])
         self.stiffness_matrix_local = np.diag(np.asarray(stiffness))
 
-    def stiffness_matrix_global(self):
+    def stiffness_matrix_global(self) -> np.ndarray:
         return self.stiffness_matrix_local
 
     def get_forces(self):
@@ -358,7 +358,7 @@ class PenaltyBeam(FiniteElement):
         self._is_calibrated = False
 
 
-    def stiffness_matrix_global(self):
+    def stiffness_matrix_global(self) -> np.ndarray:
         return self.stiffness_matrix_local
 
     def do_iterate(self, global_K:np.ndarray, global_u:np.ndarray, global_f:np.ndarray) -> bool:
@@ -392,7 +392,7 @@ class Quad4(FiniteElement):
         self.t = t
         self._r = np.array([node.r for node in self.nodes])
 
-    def stiffness_matrix_global(self):
+    def stiffness_matrix_global(self) -> np.ndarray:
         a = 1 / np.sqrt(3)
         integration_points = [[-a, a], [a, a], [-a, -a], [a, -a]]
 

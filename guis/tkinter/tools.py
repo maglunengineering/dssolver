@@ -149,6 +149,21 @@ class ToolDispl(Tool):
 
         self.displace = True
 
+        """ WIP: Nonlin but it doesn't solve properly with prescribed displacements ++ 
+        self._nonlin = False
+
+    @property
+    def nonlin(self):
+        return self._nonlin
+
+    @nonlin.setter
+    def nonlin(self, value):
+        self._nonlin = value
+        if value:
+            self._solver = solvers.NonLinearSolver(self._gui.problem)
+        else:
+            self._solver = solvers.LinearSolver(self._gui.problem)
+            """
 
     def activate(self):
         self._canvas.bind('<Button-1>', self.on_click)
@@ -170,7 +185,7 @@ class ToolDispl(Tool):
 
         pt = self._canvas.canvas_to_problem((event.x, event.y))
         if self.displace:
-            self._snap_obj.displacements[:, drawing._lcase] = np.array([*(pt - self._last_click_xy), 0])
+            self._snap_obj.displacements[0:2, drawing._lcase] = pt - self._last_click_xy
         else:
             self._snap_obj._r = pt
         self._gui.draw_canvas()

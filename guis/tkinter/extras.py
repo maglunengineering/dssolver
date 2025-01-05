@@ -1,6 +1,7 @@
 import collections
 import tkinter as tk
 import typing
+import inspect
 
 import numpy as np
 from typing import Iterable, Tuple, Callable
@@ -245,7 +246,7 @@ class DSSSettingsFrame(tk.Frame):
         if isinstance(val, bool):
             var = tk.BooleanVar()
             var.set(val)
-            self._refs.append(var) # Bug in Tkinter? This reference is somehow needed
+            self._refs.append(var)
             btn = tk.Checkbutton(self, variable=var, bg='gray82')
             btn.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
             var.trace_add('write', lambda *_: self.setter(key, var.get()))
@@ -270,10 +271,20 @@ class DSSSettingsFrame(tk.Frame):
             entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
             if isinstance(val, np.ndarray):
                 entry.bind('<FocusOut>', lambda *_: self.setter(key, self._recreate_sequence_ndarray(val.dtype, val.shape, entry.get())))
-        elif val is not None:
+        elif callable(val) and not (sig := inspect.signature(val)).parameters and sig.return_annotation == sig.empty:
+            # Add a button for calling functions that don't take arguments
+            btn = tk.Button(self)
+            btn.configure(text='Call')
+            btn.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
+            btn.configure(command=val)
+
+        elif not callable(val) and val is not None:
             entry = tk.Label(self, text=str(val)[0:25])
             entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
-
+        else:
+            label.destroy()
+            self._cnt -= 1
+            return
 
         self._cnt += 1
 
@@ -296,7 +307,7 @@ class DSSSettingsFrame(tk.Frame):
 
     @classmethod
     def from_object(cls, master, obj):
-        kvps = ((k,v) for k,v in obj.__dict__.items() if not k.startswith('_'))
+        kvps = ((k,getattr(obj, k)) for k in dir(obj) if not k.startswith('_'))
         setter = lambda k,v: setattr(obj, k, v)
         return cls(master, kvps, setter)
 
