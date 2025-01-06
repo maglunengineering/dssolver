@@ -74,9 +74,9 @@ class Problem:
         for node in self.nodes:
             self.constrained_dofs.extend(node.dofs[node.constrained_dofs])
 
-    def nonlin_update(self, i_lc):
+    def nonlin_update(self, i_lc, displacements):
         for e in self.elements:
-            e.nonlin_update(ElementBehavior.NONLIN_GEOM, i_lc)
+            e.nonlin_update(ElementBehavior.NONLIN_GEOM, i_lc, displacements)
 
     def model_size(self):
         xy = self.nodal_coordinates
@@ -134,7 +134,11 @@ class Problem:
 
             # Assemble displacements
             forces = self.assemble_vector(self.nodes, lambda n: n.loads)
-            displacements = self.assemble_vector(self.nodes, lambda n:n.displacements, forces.shape[1])
+            displacements = np.zeros_like(forces)
+            for node in self.nodes:
+                if node.prescribed_displacements is not None:
+                    displacements[node.dofs[:len(node.prescribed_displacements)]] = node.prescribed_displacements
+                    # dofs, LC
             preload = self.assemble_vector(self.elements, lambda e:e.preload, forces.shape[1])
 
             displacements[free_dofs, :] = np.linalg.solve(K11, (forces+preload)[free_dofs, :] - K12 @ displacements[constrained_dofs, :])
@@ -142,7 +146,6 @@ class Problem:
 
             for node in self.nodes:
                 node.loads = (forces - preload)[node.dofs, :]
-                node.displacements = displacements[node.dofs, :]
             self.displacements = displacements
 
             if not iterables:
@@ -153,7 +156,6 @@ class Problem:
                 break
 
             itercnt += 1
-
 
         return [results.ResultsStaticLinear(self, displacements)]
 

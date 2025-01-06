@@ -47,13 +47,13 @@ class ElementTest(unittest.TestCase):
         self.beam = Beam(self.n1, self.n2)
         self.n2.displacements = np.array([-10, 0, 0])
 
-        self.assertTrue(np.allclose(self.rod.get_forces(), self.beam.get_forces()))
+        self.assertTrue(np.allclose(self.rod.get_forces(None), self.beam.get_forces(None)))
 
     def test_beam_with_preload_should_give_preload_with_no_load(self):
         self.beam = Beam(self.n1, self.n2)
         self.beam.preload = np.array([1000, 0, 0, -1000, 0, 0])
 
-        self.assertTrue(np.allclose(-self.beam.preload, self.beam.get_forces_local_lin()))
+        self.assertTrue(np.allclose(-self.beam.preload, self.beam.get_forces_local_lin(None)))
 
     def test_strain_energy_should_be_force_times_distance(self):
         self.rod = Rod(self.n1, self.n2)
@@ -66,11 +66,11 @@ class ElementTest(unittest.TestCase):
         self.n2.loads = np.array([0, -f, 0])
         self.p.reassign_dofs()
         self.p.remove_dofs()
-        solver = solvers.LinearSolver(self)
-        solver.solve()
-        work = -self.n2.displacements[1, 0] * f * 0.5
+        solver = solvers.LinearSolver(self.p)
+        res = next(iter(solver.solve()))
+        work = -self.n2.get_displacements(res.displacements)[1,0] * f * 0.5
 
-        self.assertAlmostEqual(work, self.p.elements[0].get_strain_energy(), places=2)
+        self.assertAlmostEqual(work, self.p.elements[0].get_strain_energy(res.displacements)[0], places=2)
 
     def test_strain_energy_should_be_uTku(self):
         self.rod = Rod(self.n1, self.n2)
@@ -83,13 +83,13 @@ class ElementTest(unittest.TestCase):
         self.n2.loads = np.array([0, -f, 0])
         self.p.reassign_dofs()
         self.p.remove_dofs()
-        solver = solvers.LinearSolver(self)
-        solver.solve()
+        solver = solvers.LinearSolver(self.p)
+        res = next(iter(solver.solve()))
 
         e = self.p.elements[0]
-        u = e.get_displacements().flatten()
+        u = e.get_displacements(res.displacements).flatten()
         k = e.stiffness_matrix_global()
-        work = e.get_strain_energy()
+        work = e.get_strain_energy(res.displacements)[0]
 
         self.assertAlmostEqual(work, 0.5*u.T@k@u, places=2)
 
@@ -139,11 +139,13 @@ class ProblemTest(unittest.TestCase):
         self.n3.pin()
         self.p.create_beam(self.n1, self.n2)
         self.p.create_beam(self.n2, self.n3)
-        self.n3.displacements = np.array([0, 100])
+        self.n3.prescribed_displacements = np.array([0, 100]).reshape((-1,1))
         self.p.solve()
+        disp = self.p.displacements
 
         # ??? Should this not be 25 (1/4) if this is a parabola? Whatevs
-        self.assertTrue(np.allclose(self.n2.displacements[0:2, 0], np.array([0, 31.25])), f'{self.n2.displacements[0:2]} != {np.array([0, 25])}')
+        self.assertTrue(np.allclose(self.n2.get_displacements(disp)[0:2, 0], np.array([0, 31.25])),
+                        f'{self.n2.get_displacements(disp)[0:2, 0]} != {np.array([0, 25])}')
 
     def test_load_cases(self):
         loads = np.zeros((3, 2))
@@ -232,7 +234,7 @@ class PerformanceTest(unittest.TestCase):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
 
     @timeit
-    def _test_270_arc(self):
+    def test_270_arc(self):
         # 5/11-23: 20.2 s
         # 17/11-23: 17s
         # 18/11-23: 11s
@@ -250,7 +252,7 @@ class PerformanceTest(unittest.TestCase):
 
         p.nodes[0].pin()
         p.nodes[-1].fix()
-        p.nodes[n//2].loads = np.array([0, -200000, 0])
+        p.nodes[n//2].loads = np.array([0, -200000, 0]).reshape((3,1))
         self.problem = p
         solver = solvers.NonLinearSolver(p)
         res = solver.solveall()
@@ -321,9 +323,10 @@ class SampleProblems(unittest.TestCase):
         beam.preload = np.array([P, 0, 0, -P, 0, 0]).reshape((6,1))
 
         self.p.solve()
+        disp = self.p.displacements
 
-        self.assertAlmostEqual(-P*L/(E*A), n2.displacements[0, 0], places=5)
-        self.assertTrue(np.allclose(np.zeros(6), beam.get_forces_local_lin().flatten()), f'Nonzero: {beam.get_forces_local_lin().flatten()} ')
+        self.assertAlmostEqual(-P*L/(E*A), n2.get_displacements(disp)[0, 0], places=5)
+        self.assertTrue(np.allclose(np.zeros(6), beam.get_forces_local_lin(disp).flatten()), f'Nonzero: {beam.get_forces_local_lin(disp).flatten()} ')
 
     def test_von_mises_truss(self):
         p = self.problem = self.p
@@ -368,7 +371,6 @@ class SampleProblems(unittest.TestCase):
         # Case 1: Load on middle node (n2) first, then on n3. Should snap through
         for n in p.nodes:
             n.loads = np.zeros((3,2))
-            n.displacements = np.zeros((3,2))
 
     def assertSmaller(self, a, b):
         self.assertTrue(a < b, f'Assertion failed: {a} not smaller than {b}')
@@ -385,10 +387,11 @@ class SampleProblems(unittest.TestCase):
         n3.loads[:3, 1] = np.array([0, -1000000, 0])
 
         solver = solvers.NonLinearSolver(self.p)
-        list(solver.solve())
+        res = list(solver.solve())[-1]
+        disp = res.displacements[-2:-1, :].T
 
-        self.assertGreater(n2.displacements[0, 0], 450)
-        self.assertGreater(n2.displacements[0, 1], n2.displacements[0, 0])
+        self.assertGreater(n2.get_displacements(disp)[0, 0], 450)
+        self.assertGreater(n2.get_displacements(disp)[1, 0], n2.get_displacements(disp)[0, 0])
 
     def test_path_dependent_mises_truss_displ_left(self):
         self._set_up_path_dependent_mises_truss()
@@ -401,12 +404,12 @@ class SampleProblems(unittest.TestCase):
         n3.loads[:3, 1] = np.array([0, -1000000, 0])
 
         solver = solvers.NonLinearSolver(self.p)
-        list(solver.solve())
+        res = list(solver.solve())
+        disp = np.vstack((res[0].displacements[-1,:], res[1].displacements[-1,:])).T
 
-
-        self.assertSmaller(n2.displacements[0, 0], 0)
-        self.assertSmaller(n2.displacements[0, 1], 0)
-        self.assertGreater(n2.displacements[0, 1], n2.displacements[0, 0])
+        self.assertSmaller(n2.get_displacements(disp)[0, 0], 0)
+        self.assertSmaller(n2.get_displacements(disp)[0, 1], 0)
+        self.assertGreater(n2.get_displacements(disp)[0, 1], n2.get_displacements(disp)[0, 0])
 
 
 
