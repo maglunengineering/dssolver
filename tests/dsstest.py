@@ -237,6 +237,7 @@ class PerformanceTest(unittest.TestCase):
         # 17/11-23: 17s
         # 18/11-23: 11s
         # 19/11-23: 9s, 6s, back to 12?
+        # 22/1-25: 2.1s, new cpu
         p = problem.Problem()
         start = np.deg2rad(225)
         end = np.deg2rad(-45)
