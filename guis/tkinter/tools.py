@@ -62,7 +62,10 @@ class ToolSelect(Tool):
         obj = self._canvas.get_closest((event.x, event.y))
         print(f'Selected obj: {obj}')
         if obj:
-            self._gui.set_selection(obj)
+            if self._gui.is_keydown('Control_L'):
+                self._gui.add_to_selection(obj)
+            else:
+                self._gui.set_selection(obj)
         self.set_closest_node((event.x, event.y))
         print("Clicked at canvas", [event.x, event.y], 'problem',
               (self._canvas.transformation_matrix @ [event.x, event.y, 1])[0:2])
@@ -211,7 +214,11 @@ class ToolDispl(Tool):
     def on_lbuttonup(self, event):
         self._dragging = False
         self._last_click_xy = np.empty(2)
-        self._snap_obj = None
+        if self._snap_obj:
+            self._snap_obj.constrained_dofs.clear()
+            self._snap_obj.displacements = np.zeros_like(self._snap_obj.displacements)
+            self._snap_obj.loads = np.zeros_like(self._snap_obj.loads)
+            self._snap_obj = None
 
 class ToolCreateNode(Tool):
     def __init__(self, gui, canvas):

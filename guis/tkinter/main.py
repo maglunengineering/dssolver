@@ -3,6 +3,7 @@ import os
 import pickle
 import importlib
 import tkinter as tk
+import typing
 from tkinter import filedialog
 from typing import Callable, Iterable, Dict, Optional
 import numpy as np
@@ -12,6 +13,7 @@ sys.path.append(os.path.join(FILE_PATH, '..', '..'))
 import extras
 import plugin_base
 import tools
+import context_menu
 from core import problem, elements, settings, solvers, results
 
 from results_viewer import ResultsViewer
@@ -40,6 +42,8 @@ class DSSGUI:
         self.canvas:extras.DSSCanvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
         self.canvas.dss = self
         self.canvas.grid(row=0, column=0, sticky='nsew')
+
+        self._kbw = extras.KeyboardWatcher(root)
 
         settings.add_setting('dssgui.running_animation', True)
         settings.add_setting('dssgui.ilc', 0)
@@ -167,14 +171,19 @@ class DSSGUI:
 
         #self.set_settings_default()
 
+    def is_keydown(self, key):
+        return self._kbw.is_keydown(key)
+
     def set_settings_(self, key, category_or_object):
         if key in self._settings_frames:
             self._settings_frames.pop(key).destroy()
 
         if isinstance(category_or_object, str):
             frame = extras.DSSSettingsFrame.from_settings(self.rsm_settings, category_or_object)
-        else:
+        elif not isinstance(category_or_object, typing.Iterable):
             frame = extras.DSSSettingsFrame.from_object(self.rsm_settings, category_or_object)
+        else: # Multiselect
+            frame = extras.DSSSettingsFrame.from_object(self.rsm_settings, context_menu.ContextMenu(category_or_object, self))
 
         if len(frame) == 0:
             return
@@ -200,6 +209,11 @@ class DSSGUI:
     def set_selection(self, obj):
         self.set_settings(obj)
         self.canvas.set_selection(obj)
+        self.draw_canvas()
+
+    def add_to_selection(self, obj):
+        self.canvas.selection.append(obj)
+        self.set_settings(self.canvas.selection)
         self.draw_canvas()
 
     def set_tool(self, tool):

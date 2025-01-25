@@ -32,7 +32,7 @@ class DSSCanvas(tk.Canvas):
         self.objects = []
         self.snap_objs = {}
         self.bind("<Configure>", self.on_resize)
-        self.selected_object = None
+        self.selection = []
 
 
     def unbind_on_resize(self):
@@ -45,7 +45,8 @@ class DSSCanvas(tk.Canvas):
         self.config(width=self.width, height=self.height)
 
     def set_selection(self, obj):
-        self.selected_object = obj
+        self.selection.clear()
+        self.selection.append(obj)
 
     def draw_node(self, pt, radius, *args, **kwargs):
         pt_canvas = self.problem_to_canvas(pt)
@@ -99,10 +100,11 @@ class DSSCanvas(tk.Canvas):
         for obj in self.objects:
             snap_pt = drawing.get_drawer(obj).draw_on_canvas(obj, self, **kwargs)
             self.snap_objs[obj] = snap_pt
-        if self.selected_object and self.selected_object in self.snap_objs:
-            pt = self.snap_objs[self.selected_object]
-            scale = 4*np.abs(self.transformation_matrix[0,0] * self.transformation_matrix[1,1])
-            self.draw_oval(pt - scale*np.ones(2), pt + scale*np.ones(2), outline='red')
+        for obj in self.selection:
+            if obj in self.snap_objs:
+                pt = self.snap_objs[obj]
+                scale = 4*np.abs(self.transformation_matrix[0,0] * self.transformation_matrix[1,1])
+                self.draw_oval(pt - scale*np.ones(2), pt + scale*np.ones(2), outline='red')
 
     def move(self, event, **kwargs):
         if self.prev_x is None or self.prev_y is None:
@@ -192,6 +194,7 @@ class DSSCanvas(tk.Canvas):
     def clear(self):
         self.objects.clear()
         self.snap_objs.clear()
+        self.selection.clear()
 
     def scaleup(self, event):
         if self.prev_x is not None:
@@ -316,11 +319,30 @@ class DSSSettingsFrame(tk.Frame):
         setter = lambda k,v: setattr(obj, k, v)
         return cls(master, kvps, setter)
 
+
     def __len__(self):
         return self._cnt
     
     def __bool__(self):
         return True
+
+class KeyboardWatcher:
+    def __init__(self, root):
+        self._root = root
+        self._keys = collections.defaultdict(bool)
+
+        root.bind('<Key>', self._on_key_down)
+        root.bind('<KeyRelease>', self._on_key_up)
+
+    def _on_key_down(self, event):
+        self._keys[event.keysym] = True
+
+    def _on_key_up(self, event):
+        self._keys[event.keysym] = False
+
+    def is_keydown(self, key):
+        return self._keys[key]
+
 
 record = collections.defaultdict(list)
 
