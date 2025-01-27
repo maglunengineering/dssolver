@@ -67,10 +67,10 @@ class ElementTest(unittest.TestCase):
         self.p.reassign_dofs()
         self.p.remove_dofs()
         solver = solvers.LinearSolver(self)
-        solver.solve()
+        res = next(iter(solver.solve()))
         work = -self.n2.displacements[1] * f * 0.5
 
-        self.assertAlmostEqual(work, self.p.elements[0].get_strain_energy(), places=2)
+        self.assertAlmostEqual(work, self.p.elements[0].get_strain_energy(self.p.displacements), places=2)
 
     def test_strain_energy_should_be_uTku(self):
         self.rod = Rod(self.n1, self.n2)
@@ -83,13 +83,13 @@ class ElementTest(unittest.TestCase):
         self.n2.loads = np.array([0, -f, 0])
         self.p.reassign_dofs()
         self.p.remove_dofs()
-        solver = solvers.LinearSolver(self)
-        solver.solve()
+        solver = solvers.LinearSolver(self.p)
+        res = next(iter(solver.solve()))
 
         e = self.p.elements[0]
-        u = e.get_displacements().flatten()
+        u = e.get_displacements(res.displacements).flatten()
         k = e.stiffness_matrix_global()
-        work = e.get_strain_energy()
+        work = e.get_strain_energy(res.displacements)
 
         self.assertAlmostEqual(work, 0.5*u.T@k@u, places=2)
 
@@ -141,16 +141,18 @@ class ProblemTest(unittest.TestCase):
         self.p.create_beam(self.n2, self.n3)
         self.n3.displacements = np.array([0, 100, 0])
         self.p.solve()
+        disp = self.p.displacements
 
         # ??? Should this not be 25 (1/4) if this is a parabola? Whatevs
+
         self.assertTrue(np.allclose(self.n2.displacements[0:2], np.array([0, 31.25])), f'{self.n2.displacements[0:2]} != {np.array([0, 25])}')
 
     def test_load_cases(self):
         loads = np.zeros((2, 3))
-        # Conceptually: (n, ndofs)
-        loads[0, :] = np.array([0, -1000, 0])
-        loads[1, :] = np.array([0, -1500, 0])
-        self.n1.loads = np.zeros((2,3)) # All nodes must have same shape
+        # Conceptually: (nlc, ndofs)
+        loads[:, 0] = np.array([0, -1000, 0])
+        loads[:, 1] = np.array([0, -1500, 0])
+        self.n1.loads = np.zeros((2,3))
         self.n2.loads = loads
 
         self.n1.fix()
@@ -374,6 +376,7 @@ class SampleProblems(unittest.TestCase):
     def assertSmaller(self, a, b):
         self.assertTrue(a < b, f'Assertion failed: {a} not smaller than {b}')
         
+
     def test_path_dependent_mises_truss_displ_right(self):
         self._set_up_path_dependent_mises_truss()
         n1,n2,n3 = self.p.nodes
