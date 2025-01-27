@@ -95,11 +95,12 @@ class Problem:
     def K(self):
         return self.assemble_matrix(lambda e: e.stiffness_matrix_global())
 
-    def assemble_vector(self, collection:Iterable[T], func:Callable[[T], np.ndarray], min_max_dim=0):
-        max_dim = max(min_max_dim, max(func(x).shape[1] if func(x).ndim > 1 else 1 for x in collection))
-        assembly = np.zeros((sum(n.ndofs() for n in self.nodes), max_dim))
+    def assemble_vector(self, collection:Iterable[T], func:Callable[[T], np.ndarray], ndofs:int):
+        shape = np.asarray(func(next(iter(collection))).shape)
+        shape[-1] = ndofs
+        assembly = np.zeros(shape)
         for item in collection:
-            assembly[item.dofs, :] += func(item)
+            assembly[..., item.dofs] += func(item)
         return assembly
 
     def assemble_matrix(self, elem_func):
@@ -120,6 +121,7 @@ class Problem:
         self.remove_dofs()
         free_dofs = self.free_dofs()
         constrained_dofs = self.constrained_dofs
+        ndofs = sum(node.ndofs() for node in self.nodes)
 
         iterables = [e for e in self.elements if ElementBehavior.ITERABLE in e.behavior]
         max_iter = 8
@@ -133,16 +135,18 @@ class Problem:
             K22 = K[np.ix_(constrained_dofs, constrained_dofs)]
 
             # Assemble displacements
-            forces = self.assemble_vector(self.nodes, lambda n: n.loads)
-            displacements = self.assemble_vector(self.nodes, lambda n:n.displacements, forces.shape[1])
-            preload = self.assemble_vector(self.elements, lambda e:e.preload, forces.shape[1])
+            forces = self.assemble_vector(self.nodes, lambda n: n.loads, ndofs)
+            displacements = self.assemble_vector(self.nodes, lambda n:n.displacements, ndofs)
+            preload = self.assemble_vector(self.elements, lambda e:e.preload, ndofs)
+            if forces.shape != displacements.shape or forces.shape != preload.shape:
+                forces,displacements,preload = [np.array(a) for a in np.broadcast_arrays(forces, displacements, preload)]
 
-            displacements[free_dofs, :] = np.linalg.solve(K11, (forces+preload)[free_dofs, :] - K12 @ displacements[constrained_dofs, :])
-            forces[constrained_dofs, :] = K21 @ displacements[free_dofs, :] + K22 @ displacements[constrained_dofs, :]
+            displacements[..., free_dofs] = np.linalg.solve(K11, ((forces+preload)[..., free_dofs].T - K12 @ displacements[..., constrained_dofs].T)).T
+            forces[..., constrained_dofs] = (K21 @ displacements[..., free_dofs].T + K22 @ displacements[..., constrained_dofs].T).T
 
             for node in self.nodes:
-                node.loads = (forces - preload)[node.dofs, :]
-                node.displacements = displacements[node.dofs, :]
+                node.loads = (forces - preload)[..., node.dofs]
+                node.displacements = displacements[..., node.dofs]
             self.displacements = displacements
 
             if not iterables:

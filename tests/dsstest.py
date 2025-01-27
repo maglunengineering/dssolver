@@ -68,7 +68,7 @@ class ElementTest(unittest.TestCase):
         self.p.remove_dofs()
         solver = solvers.LinearSolver(self)
         solver.solve()
-        work = -self.n2.displacements[1, 0] * f * 0.5
+        work = -self.n2.displacements[1] * f * 0.5
 
         self.assertAlmostEqual(work, self.p.elements[0].get_strain_energy(), places=2)
 
@@ -139,25 +139,26 @@ class ProblemTest(unittest.TestCase):
         self.n3.pin()
         self.p.create_beam(self.n1, self.n2)
         self.p.create_beam(self.n2, self.n3)
-        self.n3.displacements = np.array([0, 100])
+        self.n3.displacements = np.array([0, 100, 0])
         self.p.solve()
 
         # ??? Should this not be 25 (1/4) if this is a parabola? Whatevs
-        self.assertTrue(np.allclose(self.n2.displacements[0:2, 0], np.array([0, 31.25])), f'{self.n2.displacements[0:2]} != {np.array([0, 25])}')
+        self.assertTrue(np.allclose(self.n2.displacements[0:2], np.array([0, 31.25])), f'{self.n2.displacements[0:2]} != {np.array([0, 25])}')
 
     def test_load_cases(self):
-        loads = np.zeros((3, 2))
-        # Conceptually: (n, rows, cols) Two vectors with 3 rows and 1 column. Will go on node 2
-        loads[:, 0] = np.array([0, -1000, 0])
-        loads[:, 1] = np.array([0, -1500, 0])
+        loads = np.zeros((2, 3))
+        # Conceptually: (n, ndofs)
+        loads[0, :] = np.array([0, -1000, 0])
+        loads[1, :] = np.array([0, -1500, 0])
+        self.n1.loads = np.zeros((2,3)) # All nodes must have same shape
         self.n2.loads = loads
 
         self.n1.fix()
         self.p.create_beam(self.n1, self.n2)
         self.p.solve()
 
-        disp_lc1 = self.p.displacements[:, 0]
-        disp_lc2 = self.p.displacements[:, 1]
+        disp_lc1 = self.p.displacements[0, :]
+        disp_lc2 = self.p.displacements[1, :]
 
         disp_lc1_z = disp_lc1[-2]
         disp_lc2_z = disp_lc2[-2]
@@ -180,11 +181,11 @@ class ProblemTest(unittest.TestCase):
         n4.loads = np.array([-1000, 0, 0])
 
         self.p.solve()
-        self.assertAlmostEqual(-1000/(2e5*1000/3000), n4.displacements[0, 0], places=5)
+        self.assertAlmostEqual(-1000/(2e5*1000/3000), n4.displacements[0], places=5)
 
         self.p.elements.append(PenaltyBeam(self.n2, n3))
         self.p.solve()
-        self.assertAlmostEqual(-1000 / (2e5 * 1000 / 2000), n4.displacements[0, 0], places=5)
+        self.assertAlmostEqual(-1000 / (2e5 * 1000 / 2000), n4.displacements[0], places=5)
 
     def _test_constraint_penaltypreload(self):
         n3 = Node((2000,0))
@@ -199,11 +200,11 @@ class ProblemTest(unittest.TestCase):
         n4.loads = np.array([-1000, 0, 0])
 
         self.p.solve()
-        self.assertAlmostEqual(-1000/(2e5*1000/3000), n4.displacements[0, 0], places=5)
+        self.assertAlmostEqual(-1000/(2e5*1000/3000), n4.displacements[0], places=5)
 
         #self.p.elements.append(PreloadPenaltyBeam(self.n2, n3)) # Not implemented
         self.p.solve()
-        self.assertAlmostEqual(-1000/(2e5*1000/2000), n4.displacements[0, 0], places=5)
+        self.assertAlmostEqual(-1000/(2e5*1000/2000), n4.displacements[0], places=5)
 
 
 def timeit(func, *args):
@@ -303,7 +304,7 @@ class SampleProblems(unittest.TestCase):
 
         self.p.solve()
 
-        self.assertAlmostEqual(-P*L**3 / (3*E*I), self.p.node_at((1000,0)).displacements[1,0], places=5)
+        self.assertAlmostEqual(-P*L**3 / (3*E*I), self.p.node_at((1000,0)).displacements[1], places=5)
 
     def test_cantilever_bar_with_preload(self):
         n1 = Node((0, 0))
@@ -318,11 +319,11 @@ class SampleProblems(unittest.TestCase):
         A = 100
         beam = self.p.create_beam(n1, n2, E=E, I=I, A=A)
         n1.fix()
-        beam.preload = np.array([P, 0, 0, -P, 0, 0]).reshape((6,1))
+        beam.preload = np.array([P, 0, 0, -P, 0, 0])
 
         self.p.solve()
 
-        self.assertAlmostEqual(-P*L/(E*A), n2.displacements[0, 0], places=5)
+        self.assertAlmostEqual(-P*L/(E*A), n2.displacements[0], places=5)
         self.assertTrue(np.allclose(np.zeros(6), beam.get_forces_local_lin().flatten()), f'Nonzero: {beam.get_forces_local_lin().flatten()} ')
 
     def test_von_mises_truss(self):
@@ -367,13 +368,12 @@ class SampleProblems(unittest.TestCase):
 
         # Case 1: Load on middle node (n2) first, then on n3. Should snap through
         for n in p.nodes:
-            n.loads = np.zeros((3,2))
-            n.displacements = np.zeros((3,2))
+            n.loads = np.zeros((2,3))
+            n.displacements = np.zeros((2,3))
 
     def assertSmaller(self, a, b):
         self.assertTrue(a < b, f'Assertion failed: {a} not smaller than {b}')
         
-
     def test_path_dependent_mises_truss_displ_right(self):
         self._set_up_path_dependent_mises_truss()
         n1,n2,n3 = self.p.nodes
@@ -394,11 +394,11 @@ class SampleProblems(unittest.TestCase):
         self._set_up_path_dependent_mises_truss()
         n1,n2,n3 = self.p.nodes
 
-        n2.loads[:3, 0] = np.array([0, 0, 0])
-        n2.loads[:3, 1] = np.array([0, 11000, 0])
+        n2.loads[0, :3] = np.array([0, 0, 0])
+        n2.loads[1, :3] = np.array([0, 11000, 0])
 
-        n3.loads[:3, 0] = np.array([0, -1000000, 0])
-        n3.loads[:3, 1] = np.array([0, -1000000, 0])
+        n3.loads[0, :3] = np.array([0, -1000000, 0])
+        n3.loads[1, :3] = np.array([0, -1000000, 0])
 
         solver = solvers.NonLinearSolver(self.p)
         list(solver.solve())

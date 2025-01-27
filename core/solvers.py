@@ -30,6 +30,7 @@ class NonLinearSolver(Solver):
     def solve(self) -> results.ResultsStaticNonlinear:
         p = self.problem
         num_lc = max(n.loads.shape[1] if n.loads.ndim > 1 else 1 for n in p.nodes)
+        ndofs = sum(node.ndofs() for node in self.problem.nodes)
 
         arclength = 1000
         for i_lc in range(num_lc):
@@ -42,8 +43,8 @@ class NonLinearSolver(Solver):
             p.remove_dofs()
             free_dofs = p.free_dofs()
 
-            target_load = p.assemble_vector(p.nodes, lambda n:n.loads)[free_dofs, i_lc]
-            displacements = p.assemble_vector(p.nodes, lambda n:n.displacements, min_max_dim=num_lc)[:, i_lc]
+            target_load = p.assemble_vector(p.nodes, lambda n:n.loads, ndofs)[i_lc, free_dofs]
+            displacements = p.assemble_vector(p.nodes, lambda n:n.displacements, ndofs)[i_lc, :]
 
             if i_lc == 0:
                 accumulated_load = np.zeros(1)
@@ -76,11 +77,11 @@ class NonLinearSolver(Solver):
 
                 displacements[free_dofs] = displacements[free_dofs] + v0
                 for node in p.nodes:
-                    node.displacements[:node.ndofs(),i_lc:] = displacements[node.dofs].reshape((-1,1))
+                    node.displacements[i_lc:, :node.ndofs()] = displacements[node.dofs].reshape((1,-1))
 
                 # Corrector
                 p.nonlin_update(i_lc)
-                residual = self.get_internal_forces(p, i_lc)[free_dofs] - q * A - accumulated_load
+                residual = self.get_internal_forces(p, i_lc, ndofs)[free_dofs] - q * A - accumulated_load
                 for k in range(max_it):
                     K = p.K()[np.ix_(free_dofs, free_dofs)]
                     wq = np.linalg.solve(K, q)
@@ -93,7 +94,7 @@ class NonLinearSolver(Solver):
                         node.displacements[:node.ndofs(),i_lc:] = displacements[node.dofs].reshape((-1,1))
 
                     p.nonlin_update(i_lc)
-                    residual = self.get_internal_forces(p, i_lc)[free_dofs] - q * A - accumulated_load
+                    residual = self.get_internal_forces(p, i_lc, ndofs)[free_dofs] - q * A - accumulated_load
                     if np.linalg.norm(residual) < 1e-3:
                         break
                 else:
@@ -130,8 +131,8 @@ class NonLinearSolver(Solver):
             yield results.ResultsStaticNonlinear(p, np.asarray(displ_storage),
                                                   np.asarray(force_storage))
 
-    def get_internal_forces(self, problem, i_lc):
-        return problem.assemble_vector(problem.elements, lambda e: e.get_forces())[:, i_lc]
+    def get_internal_forces(self, problem, i_lc, ndofs):
+        return problem.assemble_vector(problem.elements, lambda e: e.get_forces(), ndofs)[i_lc, :]
 
 class ModalSolver(Solver):
     def __init__(self, owner):
