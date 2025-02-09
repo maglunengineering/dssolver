@@ -223,7 +223,7 @@ class FiniteElement2Node(FiniteElement):
         pass
 
     def get_external_forces(self, displacements):
-        return self.stiffness_matrix_global(displacements, False) @ self.get_displacements(displacements)
+        return np.swapaxes(self._get_transform(displacements), -1, -2) @ self._get_forces_local(displacements)
 
     def _get_transform(self, displacements):
         if displacements is not None:
@@ -289,23 +289,20 @@ class FiniteElement2Node(FiniteElement):
         return disp_local @ self.stiffness_matrix_local - self.preload
 
     def _get_forces_local(self, displacements):
-        return self.get_forces_local_lin(displacements)
-        #idx02 = (Ellipsis, i_lc, slice(0,2)) if self.get_displacements().ndim >= 2 else slice(0,2)
-        #idx2 = (Ellipsis, i_lc, 2) if self.get_displacements().ndim >= 2 else 2
-        #r1 = self.r1
-        #r2 = self.r2
-        #deformed_length = self._get_deformed_length(displacements)
-        #dl = deformed_length - self._undeformed_length#
-        #tan_e = (r2 - r1)/self._undeformed_length
-        #tan_ed = (r2 + self.node2.get_displacements(displacements)[..., 0:2] -
-        #          r1 - self.node1.get_displacements(displacements)[..., 0:2])/deformed_length
-        #tan_1 = R(self.node1.get_displacements(displacements)[..., 2]) @ tan_e
-        #tan_2 = R(self.node2.get_displacements(displacements)[..., 2]) @ tan_e#
-        #th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
-        #th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])#
-        #displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2])
-        #self._forces_local = self.stiffness_matrix_local @ displacements_local
-        #return self._forces_local
+        r1 = self.r1
+        r2 = self.r2
+        deformed_length = self._get_deformed_length(displacements)
+        dl = deformed_length - self._undeformed_length#
+        tan_e = (r2 - r1)/self._undeformed_length
+        tan_ed = (r2 + self.node2.get_displacements(displacements)[..., 0:2] -
+                  r1 - self.node1.get_displacements(displacements)[..., 0:2])/deformed_length
+        tan_1 = R(self.node1.get_displacements(displacements)[..., 2]) @ tan_e
+        tan_2 = R(self.node2.get_displacements(displacements)[..., 2]) @ tan_e#
+        th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
+        th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])#
+        displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2])
+        self._forces_local = self.stiffness_matrix_local @ displacements_local
+        return self._forces_local
 
 class Beam(FiniteElement2Node):
     def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):

@@ -96,7 +96,7 @@ class NonLinearSolver(Solver):
                     displacements[free_dofs] = (displacements[free_dofs] + (wr + dA_ * wq))
 
                     residual = self.get_internal_forces(p, displacements, ndofs)[free_dofs] - q * A - accumulated_load
-                    if np.linalg.norm((wr + dA_ * wq)) < 1e-2:
+                    if np.linalg.norm(residual) < 1e-2:
                         break
                 else:
                     if len(displ_storage) > 1:
