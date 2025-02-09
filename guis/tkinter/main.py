@@ -23,7 +23,7 @@ inv = np.linalg.inv
 class DSSGUI:
     def __init__(self, root:tk.Tk, problem=None, *args, **kwargs):
         self.root = root
-        self.root.minsize(width=1024, height=640)
+        self.root.minsize(width=1200, height=800)
         self.icon = icon if icon else None
         self.root.iconbitmap(self.icon)
         self.problem = problem
@@ -39,10 +39,12 @@ class DSSGUI:
         self.listbox_results = None
         self.rsm = None
         self.canvas:extras.DSSCanvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
-        self.canvas.dss = self # TODO: Remove
+        self.canvas.dss = self
         self.canvas.grid(row=0, column=0, sticky='nsew')
+        self.ui_displacements = None
 
         settings.add_setting('dssgui.running_animation', True)
+        settings.add_setting('dss.verbose', True)
 
         self.menus = {}
 
@@ -58,7 +60,7 @@ class DSSGUI:
         self.set_tool(tools.ToolSelect(self, self.canvas, root))
 
         if not self.problem.nodes:
-            self.canvas.add_object(self.problem.get_or_create_node((0,0)))
+            self.canvas.add_object(self.problem.get_or_create_node((0.0,0.0)))
         self.draw_canvas()
 
         self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
@@ -117,17 +119,17 @@ class DSSGUI:
             menu.add_command(label=cmd_title, command=cmd)
 
 
-    def call_and_add_to_results(self, func:Callable[[], Iterable[Optional[results.Results]]]):
-        for x in func():
-            if x:
-                results = x
-                self.listbox_results.add(results)
-                if settings.get_setting('dssgui.running_animation', True):
-                    self.draw_canvas()
-                break
-            self.draw_canvas()
+    def call_and_add_to_results(self, func:Callable[[], Optional[results.Results]]):
+        x = func()
+        if x:
+            results = x
+            self.ui_displacements = results.displacements[0]
+            self.listbox_results.add(results)
             if settings.get_setting('dssgui.running_animation', True):
-                self.canvas.update()
+                self.draw_canvas(displacements=self.ui_displacements)
+        self.draw_canvas(displacements=self.ui_displacements)
+        if settings.get_setting('dssgui.running_animation', True):
+            self.canvas.update()
 
 
     def build_rsmenu(self):
@@ -200,14 +202,17 @@ class DSSGUI:
     def draw_canvas(self, *args, **kwargs):
         self.canvas.delete('all')  # Clear the canvas
 
-        self.canvas.redraw()
+        kwargs['displacements'] = self.ui_displacements
+        self.canvas.redraw(**kwargs)
         self.draw_csys()
 
-    def update_canvas(self):
+    def update_canvas(self, **kwargs):
+        kwargs['displacements'] = self.ui_displacements
+
         for obj in self.problem.nodes:
-            self.canvas.add_object(obj)
+            self.canvas.add_object(obj, **kwargs)
         for obj in self.problem.elements:
-            self.canvas.add_object(obj)
+            self.canvas.add_object(obj, **kwargs)
 
     def draw_csys(self):
         self.canvas.create_line(10, self.canvas.height-10,

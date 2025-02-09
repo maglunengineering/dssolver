@@ -78,10 +78,10 @@ class Problem:
         for e in self.elements:
             e.nonlin_update(ElementBehavior.NONLIN_GEOM, i_lc, displacements)
 
-    def model_size(self):
+    def model_size(self) -> float:
         xy = self.nodal_coordinates
         if not np.any(xy):
-            return 1
+            return 1.0
         else:
             model_size = np.sqrt( (np.max(xy[:,0]) - np.min(xy[:,0]))**2 + (np.max(xy[:,1]) - np.min(xy[:,1]))**2)
             return model_size
@@ -92,8 +92,8 @@ class Problem:
     def M(self):
         return self.assemble_matrix(lambda e: e.mass_matrix_global())
 
-    def K(self):
-        return self.assemble_matrix(lambda e: e.stiffness_matrix_global())
+    def K(self, displacements):
+        return self.assemble_matrix(lambda e: e.stiffness_matrix_global(displacements))
 
     def assemble_vector(self, collection:Iterable[T], func:Callable[[T], np.ndarray], ndofs:int):
         shape = np.asarray(func(next(iter(collection))).shape)
@@ -116,7 +116,7 @@ class Problem:
 
         return matrix
 
-    def solve(self) -> Iterable[Optional[results.ResultsStaticLinear]]:
+    def solve(self) -> Optional[results.ResultsStaticLinear]:
         self.reassign_dofs()
         self.remove_dofs()
         free_dofs = self.free_dofs()
@@ -128,7 +128,7 @@ class Problem:
         itercnt = 0
 
         while True:
-            K = self.K()
+            K = self.K(np.zeros(ndofs))
             K11 = K[np.ix_(free_dofs, free_dofs)]
             K12 = K[np.ix_(free_dofs, constrained_dofs)]
             K21 = K[np.ix_(constrained_dofs, free_dofs)]
@@ -158,7 +158,7 @@ class Problem:
 
             itercnt += 1
 
-        return [results.ResultsStaticLinear(self, displacements)]
+        return results.ResultsStaticLinear(self, displacements)
 
     def plot(self):
         nodal_coordinates = np.array([0,0])

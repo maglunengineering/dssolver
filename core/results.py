@@ -67,12 +67,13 @@ class ResultsStaticLinear(Results):
 
 
 class ResultsStaticNonlinear(Results):
-    def __init__(self, problem, displacements:Sized, forces:Sized):
+    def __init__(self, problem, disp_storage:np.ndarray, disp_final:np.ndarray, forces:np.ndarray):
         super().__init__(problem)
 
         self.forces = forces
-        self.displacements = displacements # [nsteps, ndofs]
-        self.num_displ_sets = displacements.shape[0]
+        self.displacements = disp_storage # [nsteps, ndofs]
+        self.disp_final = disp_final # [nlc, ndofs]
+        self.num_displ_sets = disp_storage.shape[0]
 
     def quickplot(self):
         for node in self.nodes:
