@@ -42,7 +42,7 @@ class NonLinearSolver(Solver):
 
         target_load_all = p.assemble_vector(p.nodes, lambda n:n.loads, ndofs).reshape((num_lc, ndofs))
 
-        arclength = 1000
+        arclength = 180
         for i_lc in range(num_lc):
             A = 0
             max_it = 15
