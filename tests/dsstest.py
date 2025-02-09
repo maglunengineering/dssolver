@@ -123,6 +123,20 @@ class ElementTest(unittest.TestCase):
 
         self.p.solve()
 
+    def test_beam_should_give_two_stiffness_matrices_with_two_displacements(self):
+        self.n1.dofs = np.arange(3)
+        self.n2.dofs = np.arange(3) + 3
+        self.beam = Beam(self.n1, self.n2)
+
+        k = self.beam.stiffness_matrix_global(np.array([
+            [0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 1, 0]
+        ]))
+
+        self.assertEqual((2,6,6), k.shape)
+        self.assertTrue(np.all(k[0] == k[1]))
+
+
 class ProblemTest(unittest.TestCase):
     def setUp(self) -> None:
         self.p = problem.Problem()

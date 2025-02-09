@@ -93,7 +93,7 @@ class Problem:
         return self.assemble_matrix(lambda e: e.mass_matrix_global())
 
     def K(self, displacements):
-        return self.assemble_matrix(lambda e: e.stiffness_matrix_global(displacements))
+        return self.assemble_matrix(lambda e: e.stiffness_matrix_global(displacements), displacements.shape[-1])
 
     def assemble_vector(self, collection:Iterable[T], func:Callable[[T], np.ndarray], ndofs:int):
         shape = np.asarray(func(next(iter(collection))).shape)
@@ -103,13 +103,15 @@ class Problem:
             assembly[..., item.dofs] += func(item)
         return assembly
 
-    def assemble_matrix(self, elem_func):
+    def assemble_matrix(self, elem_func, ndofs):
         if not self.constrained_dofs:
             self.remove_dofs()
 
-        num_dofs = sum(n.ndofs() for n in self.nodes)
+        shape = np.asarray(elem_func(self.elements[0]).shape)
+        shape[-1] = ndofs
+        shape[-2] = ndofs
+        matrix = np.zeros(shape)
 
-        matrix = np.zeros((num_dofs, num_dofs))
         for e in self.elements:
             contrib = elem_func(e)
             matrix[e.ix()] += contrib

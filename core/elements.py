@@ -260,10 +260,15 @@ class FiniteElement2Node(FiniteElement):
 
     def _get_stiffness_geometric(self, displacements):
         deformed_length = self._get_deformed_length(displacements)
-        fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local(displacements).flatten()
-        forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
-        G = np.array([0, -1/deformed_length, 0, 0, 1/deformed_length, 0])
-        return np.outer(forces_permuted, G)
+        #fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local(displacements)
+        forces_permuted = self._get_forces_local(displacements)[..., [1, 0, 2, 4, 3, 5]]
+        o = np.zeros_like(deformed_length) # Zero
+
+        # Outer product of n 6-vectors:
+        # (n,6), (n,6) -> (n, 1, 6) * (n, 6, 1) -> (n, 6, 6)
+
+        G = np.array([o, -1/deformed_length, o, o, 1/deformed_length, o]).T
+        return forces_permuted[..., np.newaxis, :] * G[..., :, np.newaxis]
 
     def mass_matrix_global(self) -> np.ndarray:
         T = self._transform
@@ -296,13 +301,12 @@ class FiniteElement2Node(FiniteElement):
         tan_e = (r2 - r1)/self._undeformed_length
         tan_ed = (r2 + self.node2.get_displacements(displacements)[..., 0:2] -
                   r1 - self.node1.get_displacements(displacements)[..., 0:2])/deformed_length
-        tan_1 = R(self.node1.get_displacements(displacements)[..., 2]) @ tan_e
-        tan_2 = R(self.node2.get_displacements(displacements)[..., 2]) @ tan_e#
+        tan_1 = tan_e @ R(self.node1.get_displacements(displacements)[..., 2]).T
+        tan_2 = tan_e @ R(self.node2.get_displacements(displacements)[..., 2]).T
         th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
         th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])#
-        displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2])
-        self._forces_local = self.stiffness_matrix_local @ displacements_local
-        return self._forces_local
+        displacements_local = np.array([-dl/2, np.zeros_like(dl), th1, dl/2, np.zeros_like(dl), th2])
+        return displacements_local.T @ self.stiffness_matrix_local
 
 class Beam(FiniteElement2Node):
     def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
