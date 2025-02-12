@@ -114,7 +114,8 @@ class Problem:
 
         for e in self.elements:
             contrib = elem_func(e)
-            matrix[e.ix()] += contrib
+            ix = e.ix()
+            matrix[..., ix[0], ix[1]] += contrib
 
         return matrix
 

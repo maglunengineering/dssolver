@@ -162,7 +162,7 @@ class FiniteElement(DSSModelObject):
         raise NotImplementedError(self.__class__.__name__)
 
     def get_displacements(self, displacements):
-        return displacements[self.dofs]
+        return displacements[..., self.dofs]
 
     def nonlin_update(self, behavior, i_lc, displacements):
         pass
@@ -216,14 +216,13 @@ class FiniteElement2Node(FiniteElement):
     def r2(self):
         return self.node2.r
 
-    def get_displacements(self, displacements):
-        return displacements[..., self.dofs]
-
     def nonlin_update(self, behavior, i_lc, displacements):
         pass
 
     def get_external_forces(self, displacements):
-        return np.swapaxes(self._get_transform(displacements), -1, -2) @ self._get_forces_local(displacements)
+        T_T = np.swapaxes(self._get_transform(displacements), -1, -2) # Transpose that works for both (m,n,n) and (n,n)
+        f = self._get_forces_local(displacements)[..., np.newaxis]
+        return (T_T @ f)[..., 0] # ((m), n, n) @ ((m), n, n) -> ((m), n)
 
     def _get_transform(self, displacements):
         if displacements is not None:
@@ -303,8 +302,8 @@ class FiniteElement2Node(FiniteElement):
                   r1 - self.node1.get_displacements(displacements)[..., 0:2])/deformed_length
         tan_1 = tan_e @ R(self.node1.get_displacements(displacements)[..., 2]).T
         tan_2 = tan_e @ R(self.node2.get_displacements(displacements)[..., 2]).T
-        th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
-        th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])#
+        th1 = np.arcsin(tan_ed[..., 0]*tan_1[..., 1] - tan_ed[..., 1]*tan_1[..., 0])
+        th2 = np.arcsin(tan_ed[..., 0]*tan_2[..., 1] - tan_ed[..., 1]*tan_2[..., 0])#
         displacements_local = np.array([-dl/2, np.zeros_like(dl), th1, dl/2, np.zeros_like(dl), th2])
         return displacements_local.T @ self.stiffness_matrix_local
 

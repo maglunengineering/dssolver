@@ -369,7 +369,7 @@ class SampleProblems(unittest.TestCase):
         p = self.problem = self.p
         n1 = p.get_or_create_node((0,0))
         n2 = p.get_or_create_node((1000,200))
-        p.create_rod(n1, n2, A=10)
+        p.create_rod(n1.r, n2.r, A=10)
         n1.fix()
         n2.constrained_dofs = [0, 2]
         n2.loads = np.array([0, -10000, 0])
