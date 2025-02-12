@@ -254,7 +254,7 @@ class PerformanceTest(unittest.TestCase):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
 
     @timeit
-    def _test_270_arc(self):
+    def test_270_arc(self):
         # 5/11-23: 20.2 s
         # 17/11-23: 17s
         # 18/11-23: 11s
@@ -274,7 +274,10 @@ class PerformanceTest(unittest.TestCase):
         p.nodes[-1].fix()
         p.nodes[n//2].loads = np.array([0, -200000, 0])
         self.problem = p
+        from core import settings
+        settings.set_setting('dss.verbose', True)
         solver = solvers.NonLinearSolver(p)
+        solver.arclength = 180
         res = solver.solveall()
 
         self.assertAlmostEqual(-1254.63, res.displacements[-1].min(), delta=10)
@@ -431,19 +434,20 @@ class SampleProblems(unittest.TestCase):
         self.assertTrue(a < b, f'Assertion failed: {a} not smaller than {b}')
         
 
-    def _test_path_dependent_mises_truss_displ_right(self):
+    def test_path_dependent_mises_truss_displ_right(self):
         self._set_up_path_dependent_mises_truss()
         n1,n2,n3 = self.p.nodes
 
         # First, load the middle/left. The load required is not that great. It should snap through
-        n2.loads[0, :3] = np.array([5000, 0, 0])
+        n2.loads[0, :3] = np.array([7000, 0, 0])
         n3.loads[0, :3] = np.array([0, 0, 0])
 
         # Then, load the top. Node2 should go further right
-        n2.loads[1, :3] = np.array([5000, 0, 0])
+        n2.loads[1, :3] = np.array([7000, 0, 0])
         n3.loads[1, :3] = np.array([0, -3000, 0])
 
         solver = solvers.NonLinearSolver(self.p)
+        solver.arclength = 45
         res = solver.solve()
 
         disp_lc1 = res.disp_final[0]

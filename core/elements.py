@@ -31,7 +31,8 @@ class Node(DSSModelObject):
         return displacements[..., self._dofs]
 
     def add_element(self, beam):
-        self._elements.append(beam)
+        if beam not in self._elements:
+            self._elements.append(beam)
 
     @property
     def r(self):
@@ -179,7 +180,9 @@ class FiniteElement(DSSModelObject):
         init_args = inspect.getfullargspec(self.__init__).args
         kwargs = {}
         for arg in init_args:
-            if hasattr(self, arg):
+            if arg == 'self':
+                continue
+            elif hasattr(self, arg):
                 kwargs[arg] = getattr(self, arg)
             elif hasattr(self, '_' + arg):
                 kwargs[arg] = getattr(self, '_' + arg)

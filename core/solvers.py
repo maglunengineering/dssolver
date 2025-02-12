@@ -26,8 +26,10 @@ class LinearSolver(Solver):
         return self.problem.solve()
 
 class NonLinearSolver(Solver):
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args)
+
+        self.arclength = kwargs.get('arclength', 45)
 
     def solve(self)-> results.ResultsStaticNonlinear:
         return self._solve_impl()
@@ -39,11 +41,10 @@ class NonLinearSolver(Solver):
         num_lc = max(n.loads.shape[0] if n.loads.ndim > 1 else 1 for n in p.nodes)
         ndofs = sum((n.ndofs() for n in p.nodes))
         disp_final = np.zeros((num_lc, ndofs))
-        model_size = p.model_size()
 
         target_load_all = p.assemble_vector(p.nodes, lambda n:n.loads, ndofs).reshape((num_lc, ndofs))
 
-        arclength = 180
+        arclength = self.arclength
         for i_lc in range(num_lc):
             A = np.array([0.0])
             max_it = 15
@@ -96,11 +97,14 @@ class NonLinearSolver(Solver):
                     dA_ = -((wq * wr) / (1 + (wq * wq))).sum(-1)[..., np.newaxis]
                     A = A + dA_
 
-                    displacements[..., free_dofs] = (displacements[..., free_dofs] + (wr + dA_ * wq))
+                    du = wr + dA_ * wq
+                    displacements[..., free_dofs] = (displacements[..., free_dofs] + du)
+                    dw = (du * residual).sum(-1)
 
-                    residual = self.get_internal_forces(p, displacements, ndofs)[..., free_dofs] - q * A - accumulated_load
-                    if np.allclose(np.linalg.norm(residual, axis=-1), 0.0, atol=1e-2):
+                    if np.abs(dw) < 1e-4/ndofs:
                         break
+                    residual = self.get_internal_forces(p, displacements, ndofs)[..., free_dofs] - q * A - accumulated_load
+
                 else:
                     if len(displ_storage) > 1:
                         displacements = displ_storage.pop()
