@@ -1,11 +1,18 @@
 import unittest
+import collections
 import time
 
 import numpy as np
+import matplotlib
+import  matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from matplotlib.lines import Line2D
 
+import core.problem
 from core import problem, solvers
 
 from core.elements import *
+matplotlib.use('TkAgg')
 
 def profile(func):
     """
@@ -15,6 +22,139 @@ def profile(func):
         import cProfile
         cProfile.runctx('func(self)', locals={'self':args[0], 'func':func}, globals=globals())
     return inner
+
+def create_fe_animation(problem:core.problem.Problem, solver, save_path=None, interval=50):
+    """
+    Creates an animation of the FE solution process.
+
+    Parameters:
+    -----------
+    solver : object
+        Solver object with solve_iter() method that yields solution steps
+    save_path : str, optional
+        If provided, saves the animation to this path
+    interval : int, optional
+        Interval between frames in milliseconds
+
+    Returns:
+    --------
+    animation : matplotlib.animation.FuncAnimation
+        The animation object
+    """
+
+    # Setup the figure and axis
+    fig, axs = plt.subplots(1, 2, figsize=(10, 8))
+    ax,ax2 = axs
+    ax.set_aspect('equal')
+
+    xy_points = problem.nodal_coordinates
+    # Initialize plot limits with some padding
+    x_min, x_max = xy_points[:, 0].min(), xy_points[:, 0].max()
+    y_min, y_max = xy_points[:, 1].min(), xy_points[:, 1].max()
+    padding = 0.2 * max(x_max - x_min, y_max - y_min) + 100
+
+    ax.set_xlim(x_min - padding, x_max + padding)
+    ax.set_ylim(y_min - padding, y_max + padding)
+
+    # Create initial line object
+    line = Line2D(xy_points[:, 0], xy_points[:, 1],
+                 color='b', marker='o', markersize=2)
+    ax.add_line(line)
+
+    # Create initial quiver plot for residual forces
+    #n_nodes = len(xy_points)
+    #zeros = np.zeros(n_nodes)
+    #quiver = ax.quiver(xy_points[:, 0], xy_points[:, 1],
+    #                  zeros, zeros,
+    #                  color='r', scale=1.0, scale_units='x',
+    #                  width=0.005)
+
+    # Text for displaying iteration info
+    info_text = ax.text(0.02, 0.98, '', transform=ax.transAxes,
+                       verticalalignment='top')
+
+    # Create plots
+    lists = collections.defaultdict(list)
+    #line_niter = Line2D([0.0, 1.0], [0.0, 0.0])
+    #ax2.add_line(line_niter)
+
+    line_niter = Line2D([0.0], [0.0])
+    ax2.add_line(line_niter)
+    sel_dof = None
+
+    # Initialize solution iterator
+    solution_iter = solver.solve_iter()
+
+    def init():
+        """Initialize animation"""
+        line.set_data(xy_points[:, 0], xy_points[:, 1])
+        line_niter.set_data([0.0], [0.0])
+        #quiver.set_UVC(zeros, zeros)
+        info_text.set_text('Step: 0\nControl Parameter: 0.0')
+        return line, line_niter, info_text
+
+    def update(frame):
+        nonlocal sel_dof
+        """Update animation for each frame"""
+        try:
+            # Get next solution step
+            solution = next(solution_iter)
+
+            # Extract data
+            displacements = solution['displacements']
+            control_param = solution['control_param']
+            residual = np.zeros_like(displacements)
+            residual[problem.free_dofs()] = solution['residual']
+
+            num_iter = lists['num_iter']
+            num_iter.append(solution['last_num_iter'])
+
+            if sel_dof is None:
+                sel_dof = np.argmax(displacements)
+            disp_history = lists['disp_history']
+            disp_history.append(displacements[sel_dof])
+
+            # Update node positions
+            new_positions = xy_points + displacements.reshape(-1, 3)[:,0:2]
+            line.set_data(new_positions[:, 0], new_positions[:, 1])
+
+
+            # Update residual arrows
+            #residual_vectors = residual.reshape(-1, 3)[:,0:2]
+            # Auto-scale residual arrows if they're too large/small
+            #max_res = np.max(np.abs(residual_vectors))
+            #if max_res > 0:
+            #    current_scale = 10*(x_max - x_min) / max_res
+            #else:
+            #    current_scale = 1.0
+
+            #quiver.set_offsets(new_positions)  # Update arrow positions
+            #quiver.set_UVC(residual_vectors[:, 0], residual_vectors[:, 1])
+            #quiver.scale = current_scale
+
+            line_niter.set_data(np.arange(len(disp_history)), disp_history)
+            ax2.set_xlim((-1, len(disp_history) + 1))
+            ax2.set_ylim((-1, max(disp_history) + 1))
+
+            # Update info text
+            info_text.set_text(f'Step: {frame+1} \n Control Parameter: {control_param}')
+
+            return line, line_niter, info_text
+
+        except StopIteration:
+            # If solver is done, keep last frame
+            return line, line_niter, info_text
+
+    # Create animation
+    anim = FuncAnimation(fig, update, init_func=init,
+                        interval=interval, blit=True,
+                        repeat=False)
+
+    if save_path:
+        anim.save(save_path, writer='pillow')
+
+    #plt.close()
+    return anim
 
 
 class ElementTest(unittest.TestCase):
@@ -275,12 +415,13 @@ class PerformanceTest(unittest.TestCase):
         p.nodes[n//2].loads = np.array([0, -200000, 0])
         self.problem = p
         from core import settings
-        settings.set_setting('dss.verbose', True)
+        settings.set_setting('dss.verbose', False)
         solver = solvers.NonLinearSolver(p)
         solver.arclength = 180
         res = solver.solveall()
 
         self.assertAlmostEqual(-1254.63, res.displacements[-1].min(), delta=10)
+
 
 class SampleProblems(unittest.TestCase):
     def setUp(self):
@@ -472,6 +613,42 @@ class SampleProblems(unittest.TestCase):
         self.assertSmaller(n2.get_displacements(res.disp_final)[0, 0], 0)
         self.assertSmaller(n2.get_displacements(res.disp_final)[0, 1], 0)
         self.assertGreater(n2.get_displacements(res.disp_final)[0, 1], n2.get_displacements(res.disp_final)[0, 0])
+
+    def _test_animated_270_arch(self):
+        p = problem.Problem()
+        start = np.deg2rad(225)
+        end = np.deg2rad(-45)
+        n = 31
+        node_angles = np.linspace(start, end, n)
+        node_points = 500 * np.array([np.cos(node_angles), np.sin(node_angles)]).T + np.array([0, 500])
+
+        for r1, r2 in zip(node_points, node_points[1:]):
+            p.create_beam(r1, r2)
+
+        p.nodes[0].pin()
+        p.nodes[-1].fix()
+        p.nodes[n//2].loads = np.array([0, -200000, 0])
+        solver = solvers.NonLinearSolver(p)
+        solver.arclength = 180
+        solver.iteration_mode = 1
+
+        anim = create_fe_animation(p, solver)
+        plt.show()
+
+        #self.assertAlmostEqual(-1254.63, res.displacements[-1].min(), delta=10)
+
+    def _test_animated_curl_beam(self):
+        p = problem.Problem()
+        p.create_beams(np.array([0, 0]), np.array([1000, 0]), n=10)
+        p.nodes[0].fix()
+        p.nodes[-1].loads = np.array([0, 0, 1000000000])
+
+        solver = solvers.NonLinearSolver(p)
+        solver.arclength = 500
+        solver.iteration_mode = 1
+
+        anim = create_fe_animation(p, solver)
+        plt.show()
 
 
 

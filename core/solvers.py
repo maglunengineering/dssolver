@@ -30,10 +30,16 @@ class NonLinearSolver(Solver):
         super().__init__(*args)
 
         self.arclength = kwargs.get('arclength', 45)
+        self.iteration_mode = kwargs.get('iteration_mode', 0)
 
     def solve(self)-> results.ResultsStaticNonlinear:
-        return self._solve_impl()
+        item = None
+        for _item in self._solve_impl():
+            item = _item
+        return _item
 
+    def solve_iter(self) -> Iterable:
+        return self._solve_impl()
 
     def _solve_impl(self):
         p = self.problem
@@ -41,6 +47,7 @@ class NonLinearSolver(Solver):
         num_lc = max(n.loads.shape[0] if n.loads.ndim > 1 else 1 for n in p.nodes)
         ndofs = sum((n.ndofs() for n in p.nodes))
         disp_final = np.zeros((num_lc, ndofs))
+        k = 0
 
         target_load_all = p.assemble_vector(p.nodes, lambda n:n.loads, ndofs).reshape((num_lc, ndofs))
 
@@ -90,6 +97,11 @@ class NonLinearSolver(Solver):
 
                 # Corrector
                 residual = self.get_internal_forces(p, displacements, ndofs)[..., free_dofs] - q * A - accumulated_load
+
+                if self.iteration_mode >= 1:
+                    yield {'displacements':displacements, 'residual':residual, 'control_param':A, 'last_num_iter':k}
+
+                print(f'{displacements[44]=} {A=}')
                 for k in range(max_it):
                     K = p.K(displacements)[..., ix[0], ix[1]]
                     wq = np.linalg.solve(K, q)
@@ -101,8 +113,13 @@ class NonLinearSolver(Solver):
                     displacements[..., free_dofs] = (displacements[..., free_dofs] + du)
                     dw = (du * residual).sum(-1)
 
+                    if self.iteration_mode >= 2:
+                        residual = self.get_internal_forces(p, displacements, ndofs)[..., free_dofs] - q * A - accumulated_load
+                        yield {'displacements':displacements, 'residual':residual, 'control_param':A}
+
                     if np.abs(dw) < 1e-4/ndofs:
                         break
+
                     residual = self.get_internal_forces(p, displacements, ndofs)[..., free_dofs] - q * A - accumulated_load
 
                 else:
@@ -113,14 +130,14 @@ class NonLinearSolver(Solver):
                         displacements = displ_storage[0]
                         A = force_storage[0]
 
-                    arclength /= 2
+                    #arclength /= 2
                     if settings.get_setting('dss.verbose', False):
                         print(f'Resetting displacements and split arclength. {arclength=} {A=}')
                     continue
 
                 if settings.get_setting('dss.verbose', False):
                     print(f'Increasing arclength')
-                arclength *= 1.2
+                #arclength *= 1.2
 
                 displ_storage.append(displacements.flatten().copy())
                 current_load = q * A + accumulated_load
@@ -130,7 +147,7 @@ class NonLinearSolver(Solver):
             disp_final[i_lc] = displacements
 
         force_storage[0] = np.zeros_like(force_storage[1])
-        return results.ResultsStaticNonlinear(p, np.asarray(displ_storage), disp_final, np.asarray(force_storage).flatten())
+        yield results.ResultsStaticNonlinear(p, np.asarray(displ_storage), disp_final, np.asarray(force_storage).flatten())
 
     def get_internal_forces(self, problem, displacements, ndofs):
         return problem.assemble_vector(problem.elements, lambda e: e.get_external_forces(displacements), ndofs)
