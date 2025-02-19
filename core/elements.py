@@ -234,9 +234,9 @@ class FiniteElement2Node(FiniteElement):
                   (self.node1.r + self.node1.get_displacements(displacements)[..., :2])) / deformed_length
         else:
             e1 = (self.node2.r - self.node1.r) / self._undeformed_length
-        e2 = np.array([-e1[...,1], e1[...,0]]).T
+        e2 = e1[..., ::-1] * np.array([-1, 1])
         if e1.ndim > 1:
-            T = np.zeros((e1.shape[0], 6, 6))
+            T = np.zeros((*e1.shape[:-1], 6, 6))
         else:
             T = np.zeros((6,6))
 
@@ -266,11 +266,12 @@ class FiniteElement2Node(FiniteElement):
         forces_permuted = self._get_forces_local(displacements)[..., [1, 0, 2, 4, 3, 5]]
         o = np.zeros_like(deformed_length) # Zero
 
+        # 1d:
         # Outer product of n 6-vectors:
         # (n,6), (n,6) -> (n, 1, 6) * (n, 6, 1) -> (n, 6, 6)
 
         G = np.array([o, -1/deformed_length, o, o, 1/deformed_length, o]).T
-        return forces_permuted[..., np.newaxis, :] * G[..., :, np.newaxis]
+        return forces_permuted[..., np.newaxis, :] * G[0, ..., :, np.newaxis]
 
     def mass_matrix_global(self) -> np.ndarray:
         T = self._transform
@@ -289,7 +290,7 @@ class FiniteElement2Node(FiniteElement):
     def _get_deformed_length(self, displacements):
         r1 = self.node1.r + self.node1.get_displacements(displacements)[..., :2]
         r2 = self.node2.r + self.node2.get_displacements(displacements)[..., :2]
-        return np.linalg.norm(r2 - r1, axis=-1)
+        return np.linalg.norm(r2 - r1, axis=-1, keepdims=True)
 
     def get_forces_local_lin(self, displacements):
         disp_local = self.get_displacements(displacements) @ np.swapaxes(self._get_transform(displacements), -1, -2)
@@ -303,12 +304,17 @@ class FiniteElement2Node(FiniteElement):
         tan_e = (r2 - r1)/self._undeformed_length
         tan_ed = (r2 + self.node2.get_displacements(displacements)[..., 0:2] -
                   r1 - self.node1.get_displacements(displacements)[..., 0:2])/deformed_length
-        tan_1 = tan_e @ R(self.node1.get_displacements(displacements)[..., 2]).T
-        tan_2 = tan_e @ R(self.node2.get_displacements(displacements)[..., 2]).T
-        th1 = np.arcsin(tan_ed[..., 0]*tan_1[..., 1] - tan_ed[..., 1]*tan_1[..., 0])
-        th2 = np.arcsin(tan_ed[..., 0]*tan_2[..., 1] - tan_ed[..., 1]*tan_2[..., 0])#
-        displacements_local = np.array([-dl/2, np.zeros_like(dl), th1, dl/2, np.zeros_like(dl), th2])
-        return displacements_local.T @ self.stiffness_matrix_local
+        tan_1 = R(self.node1.get_displacements(displacements)[..., 2:3]) @ tan_e
+        tan_2 = R(self.node2.get_displacements(displacements)[..., 2:3]) @ tan_e
+        th1 = np.arcsin(tan_ed[..., 0:1]*tan_1[..., 1:2] - tan_ed[..., 1:2]*tan_1[..., 0:1]) # Indexers like 0:1 are to get a
+        th2 = np.arcsin(tan_ed[..., 0:1]*tan_2[..., 1:2] - tan_ed[..., 1:2]*tan_2[..., 0:1]) # single value but keep the dimension
+        #displacements_local = np.array([-dl/2, np.zeros_like(dl), th1, dl/2, np.zeros_like(dl), th2])
+        displacements_local = np.zeros((*displacements.shape[:-1], 6))
+        displacements_local[..., [0]] = -dl/2
+        displacements_local[..., [2]] = th1
+        displacements_local[..., [3]] = dl/2
+        displacements_local[..., [5]] = th2
+        return displacements_local @ self.stiffness_matrix_local
 
 class Beam(FiniteElement2Node):
     def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
@@ -473,6 +479,10 @@ def beta(angle):
                      [0, 0, 0, 0, 0, 1]])
 
 def R(angle):
+    T = np.zeros((*np.shape(angle)[:-1], 2, 2))
     s, c = np.sin(angle), np.cos(angle)
-    return np.array([[c, -s],
-                     [s, c]])
+    T[..., [0], [0]] = c
+    T[..., [0], [1]] = -s
+    T[..., [1], [0]] = s
+    T[..., [1], [1]] = c
+    return T
