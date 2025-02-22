@@ -263,7 +263,7 @@ class FiniteElement2Node(FiniteElement):
     def _get_stiffness_geometric(self, displacements):
         deformed_length = self._get_deformed_length(displacements)
         #fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local(displacements)
-        forces_permuted = self._get_forces_local(displacements)[..., [1, 0, 2, 4, 3, 5]]
+        forces_permuted = self._get_forces_local(displacements)[..., [1, 0, 2, 4, 3, 5]] * np.array([-1, 1, 0, -1, 1, 0])
         o = np.zeros_like(deformed_length) # Zero
 
         # 1d:
