@@ -31,6 +31,8 @@ class NonLinearSolver(Solver):
 
         self.arclength = kwargs.get('arclength', 45)
         self.iteration_mode = kwargs.get('iteration_mode', 0)
+        self.multi_run = kwargs.get('multi_run', 0)
+        self.max_iter = kwargs.get('max_iter', 25)
 
     def solve(self)-> results.ResultsStaticNonlinear:
         item = None
@@ -54,7 +56,6 @@ class NonLinearSolver(Solver):
         arclength = self.arclength
         for i_lc in range(num_lc):
             A = np.array([0.0])
-            max_it = 15
 
             p.reassign_dofs()
             p.remove_dofs()
@@ -74,13 +75,15 @@ class NonLinearSolver(Solver):
             displ_storage = [np.zeros(ndofs)]
             force_storage = [A]
             displacements = np.zeros(ndofs)
+            if self.multi_run > 1:
+                displacements = np.zeros((self.multi_run, ndofs))
 
             i = 0
             while A.max() < 0.999*max_A:
                 if settings.get_setting('dss.verbose', False):
                     print(f"Predictor step {i}")
 
-                p.nonlin_update(i_lc, displacements)
+                #p.nonlin_update(i_lc, displacements)
 
                 K = p.K(displacements)[..., ix[0], ix[1]]
                 wq0 = np.linalg.solve(K, q)
@@ -88,6 +91,8 @@ class NonLinearSolver(Solver):
 
                 sign = np.sign((wq0 * v0).sum(-1)) if i > 1 else np.ones_like(f)
                 dA = (arclength / f * sign)[..., np.newaxis]
+                if self.multi_run > 1:
+                    dA = dA * np.logspace(-1, 1, self.multi_run, dtype=float).reshape((-1,1))
                 dA = reduce(np.minimum, (0.1*max_A, dA, max_A - A))
 
                 v0 = dA * wq0
@@ -101,8 +106,8 @@ class NonLinearSolver(Solver):
                 if self.iteration_mode >= 1:
                     yield {'displacements':displacements, 'residual':residual, 'control_param':A, 'last_num_iter':k}
 
-                print(f'{displacements[44]=} {A=}')
-                for k in range(max_it):
+
+                for k in range(self.max_iter):
                     K = p.K(displacements)[..., ix[0], ix[1]]
                     wq = np.linalg.solve(K, q)
                     wr = np.linalg.solve(K, -residual[..., np.newaxis])[...,0]
@@ -111,40 +116,61 @@ class NonLinearSolver(Solver):
 
                     du = wr + dA_ * wq
                     displacements[..., free_dofs] = (displacements[..., free_dofs] + du)
-                    dw = (du * residual).sum(-1)
+                    dw = np.abs((du * residual).sum(-1))
 
                     if self.iteration_mode >= 2:
                         residual = self.get_internal_forces(p, displacements, ndofs)[..., free_dofs] - q * A - accumulated_load
                         yield {'displacements':displacements, 'residual':residual, 'control_param':A}
 
-                    if np.abs(dw) < 1e-4/ndofs:
-                        break
+                    criterion = 1e-4/ndofs
+                    if self.multi_run > 1:
+                        cur_mr_idx = np.count_nonzero(np.where(dw<criterion, dw, 0.0)) - 1
+                        if np.all(dw < criterion):
+                            break
+                    elif dw < criterion:
+                        break # If we are in multirun, run max_iter iterations regardless and pick the one
 
                     residual = self.get_internal_forces(p, displacements, ndofs)[..., free_dofs] - q * A - accumulated_load
 
                 else:
-                    if len(displ_storage) > 1:
-                        displacements = displ_storage.pop()
-                        A = force_storage.pop()
-                    else:
-                        displacements = displ_storage[0]
-                        A = force_storage[0]
+                    if self.multi_run <= 1:
+                        if len(displ_storage) > 1:
+                            displacements = displ_storage.pop()
+                            A = force_storage.pop()
+                        else:
+                            displacements = displ_storage[0]
+                            A = force_storage[0]
 
-                    #arclength /= 2
-                    if settings.get_setting('dss.verbose', False):
-                        print(f'Resetting displacements and split arclength. {arclength=} {A=}')
-                    continue
+                        arclength /= 2
+                        if settings.get_setting('dss.verbose', False):
+                            print(f'Resetting displacements and split arclength. {arclength=} {A=}')
+                        continue
+                    elif cur_mr_idx < 0:
+                        raise ValueError('Multi-run failed')
 
                 if settings.get_setting('dss.verbose', False):
                     print(f'Increasing arclength')
-                #arclength *= 1.2
+                arclength *= 1.2
 
-                displ_storage.append(displacements.flatten().copy())
+                if self.multi_run > 1:
+                    displ_storage.append(displacements[cur_mr_idx])
+                    force_storage.append(A[cur_mr_idx])
+                    displacements[:, ...] = displacements[cur_mr_idx, ...]
+                    A[:, ...] = A[cur_mr_idx, ...]
+
+                else:
+                    displ_storage.append(displacements.flatten().copy())
+                    force_storage.append(A.flatten()[0])
+
                 current_load = q * A + accumulated_load
-                force_storage.append(A.flatten()[0])
+
                 i += 1
 
-            disp_final[i_lc] = displacements
+            if self.multi_run > 1:
+                disp_final[i_lc] = displacements[cur_mr_idx]
+            else:
+                disp_final[i_lc] = displacements
+
 
         force_storage[0] = np.zeros_like(force_storage[1])
         yield results.ResultsStaticNonlinear(p, np.asarray(displ_storage), disp_final, np.asarray(force_storage).flatten())

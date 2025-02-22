@@ -23,7 +23,7 @@ def profile(func):
         cProfile.runctx('func(self)', locals={'self':args[0], 'func':func}, globals=globals())
     return inner
 
-def create_fe_animation(problem:core.problem.Problem, solver, save_path=None, interval=50):
+def create_fe_animation(problem:core.problem.Problem, solver, **kwargs):
     """
     Creates an animation of the FE solution process.
 
@@ -41,6 +41,9 @@ def create_fe_animation(problem:core.problem.Problem, solver, save_path=None, in
     animation : matplotlib.animation.FuncAnimation
         The animation object
     """
+
+    save_path = kwargs.get('save_path', None)
+    interval = kwargs.get('interval', 50) # ms
 
     # Setup the figure and axis
     fig, axs = plt.subplots(1, 2, figsize=(10, 8))
@@ -80,7 +83,7 @@ def create_fe_animation(problem:core.problem.Problem, solver, save_path=None, in
 
     line_niter = Line2D([0.0], [0.0])
     ax2.add_line(line_niter)
-    sel_dof = None
+    sel_dof = kwargs.get('sel_dof', None)
 
     # Initialize solution iterator
     solution_iter = solver.solve_iter()
@@ -107,17 +110,22 @@ def create_fe_animation(problem:core.problem.Problem, solver, save_path=None, in
             residual[problem.free_dofs()] = solution['residual']
 
             num_iter = lists['num_iter']
-            num_iter.append(solution['last_num_iter'])
+            if 'last_num_iter' in solution:
+                num_iter.append(solution['last_num_iter'])
 
             if sel_dof is None:
                 sel_dof = np.argmax(displacements)
+            A_history = lists['A_history']
+            A_history.append(solution['control_param'])
             disp_history = lists['disp_history']
             disp_history.append(displacements[sel_dof])
+            residual_history = lists['residual_history']
+            residual_history.append(np.linalg.norm(residual))
+
 
             # Update node positions
             new_positions = xy_points + displacements.reshape(-1, 3)[:,0:2]
             line.set_data(new_positions[:, 0], new_positions[:, 1])
-
 
             # Update residual arrows
             #residual_vectors = residual.reshape(-1, 3)[:,0:2]
@@ -132,9 +140,11 @@ def create_fe_animation(problem:core.problem.Problem, solver, save_path=None, in
             #quiver.set_UVC(residual_vectors[:, 0], residual_vectors[:, 1])
             #quiver.scale = current_scale
 
-            line_niter.set_data(np.arange(len(disp_history)), disp_history)
-            ax2.set_xlim((-1, len(disp_history) + 1))
-            ax2.set_ylim((-1, max(disp_history) + 1))
+            xdata = np.arange(len(residual_history))
+            ydata = residual_history
+            line_niter.set_data(xdata, ydata)
+            ax2.set_xlim((-1, max(xdata[-10:]) + 1))
+            ax2.set_ylim((min(ydata) - 1, max(ydata) + 1))
 
             # Update info text
             info_text.set_text(f'Step: {frame+1} \n Control Parameter: {control_param}')
@@ -428,9 +438,10 @@ class PerformanceTest(unittest.TestCase):
         p.nodes[n//2].loads = np.array([0, -200000, 0])
         self.problem = p
         from core import settings
-        settings.set_setting('dss.verbose', False)
+        settings.set_setting('dss.verbose', True)
         solver = solvers.NonLinearSolver(p)
         solver.arclength = 180
+        solver.multi_run = 3
         res = solver.solveall()
 
         self.assertAlmostEqual(-1254.63, res.displacements[-1].min(), delta=10)
@@ -627,7 +638,7 @@ class SampleProblems(unittest.TestCase):
         self.assertSmaller(n2.get_displacements(res.disp_final)[0, 1], 0)
         self.assertGreater(n2.get_displacements(res.disp_final)[0, 1], n2.get_displacements(res.disp_final)[0, 0])
 
-    def _test_animated_270_arch(self):
+    def test_animated_270_arch(self):
         p = problem.Problem()
         start = np.deg2rad(225)
         end = np.deg2rad(-45)
@@ -643,9 +654,9 @@ class SampleProblems(unittest.TestCase):
         p.nodes[n//2].loads = np.array([0, -200000, 0])
         solver = solvers.NonLinearSolver(p)
         solver.arclength = 180
-        solver.iteration_mode = 1
+        solver.iteration_mode = 2
 
-        anim = create_fe_animation(p, solver)
+        anim = create_fe_animation(p, solver, sel_dof=44)
         plt.show()
 
         #self.assertAlmostEqual(-1254.63, res.displacements[-1].min(), delta=10)
