@@ -434,7 +434,7 @@ class Quad4(FiniteElement):
         self.t = t
         self._r = np.array([node.r for node in self.nodes])
 
-    def stiffness_matrix_global(self) -> np.ndarray:
+    def stiffness_matrix_global(self, displacements) -> np.ndarray:
         a = 1 / np.sqrt(3)
         integration_points = [[-a, a], [a, a], [-a, -a], [a, -a]]
 

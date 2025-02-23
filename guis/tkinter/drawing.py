@@ -44,7 +44,7 @@ class NodeDrawer:
                              anchor='sw', tag='mech')
 
         # If moment, draw a circular arrow
-        if self.loads[2] != 0:
+        if self.loads.shape[-1] > 2 and  self.loads[2] != 0:
             sign = np.sign(self.loads[2])
             arc_start = pos + np.array([0, -scale / 2]) * sign
             arc_mid = pos + np.array([scale / 2, 0]) * sign

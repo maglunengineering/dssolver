@@ -185,11 +185,16 @@ class ToolDispl(Tool):
 
         pt = self._canvas.canvas_to_problem((event.x, event.y))
         if self.displace:
-            self._snap_obj.displacements[0:2, drawing._lcase] = pt - self._last_click_xy
+            self._snap_obj.displacements[..., 0:2] = pt - self._last_click_xy
         else:
             self._snap_obj._r = pt
-        self._gui.draw_canvas()
-        self._solver.solveall()
+
+        disp = None
+        res = self._solver.solveall()
+        if res:
+            self._gui.ui_displacements = res.displacements.flatten()
+        self._gui.draw_canvas(displacements=disp)
+
 
     def on_click(self, event):
         self._dragging = True

@@ -239,6 +239,7 @@ class DSSGUI:
 
     def new_problem(self):
         self.problem = problem.Problem()
+        self.ui_displacements = None
         self.canvas.clear()
         self.draw_canvas()
 
