@@ -299,21 +299,24 @@ class FiniteElement2Node(FiniteElement):
     def _get_forces_local(self, displacements):
         r1 = self.r1
         r2 = self.r2
-        deformed_length = self._get_deformed_length(displacements)
-        dl = deformed_length - self._undeformed_length#
-        tan_e = (r2 - r1)/self._undeformed_length
-        tan_ed = (r2 + self.node2.get_displacements(displacements)[..., 0:2] -
-                  r1 - self.node1.get_displacements(displacements)[..., 0:2])/deformed_length
-        tan_1 = R(self.node1.get_displacements(displacements)[..., 2:3]) @ tan_e
-        tan_2 = R(self.node2.get_displacements(displacements)[..., 2:3]) @ tan_e
-        th1 = np.arcsin(tan_ed[..., 0:1]*tan_1[..., 1:2] - tan_ed[..., 1:2]*tan_1[..., 0:1]) # Indexers like 0:1 are to get a
-        th2 = np.arcsin(tan_ed[..., 0:1]*tan_2[..., 1:2] - tan_ed[..., 1:2]*tan_2[..., 0:1]) # single value but keep the dimension
-        #displacements_local = np.array([-dl/2, np.zeros_like(dl), th1, dl/2, np.zeros_like(dl), th2])
+        u1 = self.node1.get_displacements(displacements)
+        u2 = self.node2.get_displacements(displacements)
+        uu = np.stack((u1,u2), axis=0)
+        # ^ np.stack creates a new axis on the very left. Saves some calls (esp to R) below which is slow
+        # In those cases, [0] is at node1 and [1] is at node 2.
+
+        tan_ed = (r2 - r1 + (u2 - u1)[..., 0:2])
+        deformed_length = np.linalg.norm(tan_ed, axis=-1, keepdims=True)
+        dl = deformed_length - self._undeformed_length
+        tan_e0 = (r2 - r1)/self._undeformed_length
+        tan_ed = tan_ed/deformed_length
+        tan_rd = R(uu[..., 2:3]) @ tan_e0 # R is slow as hell. Try to reformulate?
+        th = np.arcsin(tan_ed[..., 0:1]*tan_rd[..., 1:2] - tan_ed[..., 1:2]*tan_rd[..., 0:1]) # Indexers like 0:1 are to get a single value but keep the dimension
         displacements_local = np.zeros((*displacements.shape[:-1], 6))
         displacements_local[..., [0]] = -dl/2
-        displacements_local[..., [2]] = th1
+        displacements_local[..., [2]] = th[0]
         displacements_local[..., [3]] = dl/2
-        displacements_local[..., [5]] = th2
+        displacements_local[..., [5]] = th[1]
         return displacements_local @ self.stiffness_matrix_local
 
 class Beam(FiniteElement2Node):

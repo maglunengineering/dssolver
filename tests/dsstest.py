@@ -390,6 +390,19 @@ class ProblemTest(unittest.TestCase):
         self.p.solve()
         self.assertAlmostEqual(-1000/(2e5*1000/2000), n4.displacements[0], places=5)
 
+    def test_curl_beam(self):
+        p = problem.Problem()
+        p.create_beams(np.array([0, 0]), np.array([1000, 0]), n=10)
+        p.nodes[0].fix()
+        p.nodes[-1].loads = np.array([0, 0, 200000000])
+
+        solver = solvers.NonLinearSolver(p)
+        solver.arclength = 500
+        res = solver.solve()
+        disp = res.disp_final.flatten()
+
+        self.assertAlmostEqual(disp[-2], 191.79949554113804, places=2)
+
 
 def timeit(func, *args):
     def inner(*args):
@@ -416,13 +429,15 @@ class PerformanceTest(unittest.TestCase):
     def test_timeit_both(self):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
 
-    @timeit
+    @profile
     def test_270_arc(self):
         # 5/11-23: 20.2 s
         # 17/11-23: 17s
         # 18/11-23: 11s
         # 19/11-23: 9s, 6s, back to 12?
         # 22/1-25: 2.1s, new cpu
+        # 22/2-25: 9.9s, broadcasting + indexing + pass displacements
+
         p = problem.Problem()
         start = np.deg2rad(225)
         end = np.deg2rad(-45)
@@ -437,11 +452,10 @@ class PerformanceTest(unittest.TestCase):
         p.nodes[-1].fix()
         p.nodes[n//2].loads = np.array([0, -200000, 0])
         self.problem = p
-        from core import settings
-        settings.set_setting('dss.verbose', True)
+        #from core import settings
+        #settings.set_setting('dss.verbose', True)
         solver = solvers.NonLinearSolver(p)
-        solver.arclength = 180
-        solver.multi_run = 3
+        solver.arclength = 1000
         res = solver.solveall()
 
         self.assertAlmostEqual(-1254.63, res.displacements[-1].min(), delta=10)
@@ -638,7 +652,7 @@ class SampleProblems(unittest.TestCase):
         self.assertSmaller(n2.get_displacements(res.disp_final)[0, 1], 0)
         self.assertGreater(n2.get_displacements(res.disp_final)[0, 1], n2.get_displacements(res.disp_final)[0, 0])
 
-    def test_animated_270_arch(self):
+    def _test_animated_270_arch(self):
         p = problem.Problem()
         start = np.deg2rad(225)
         end = np.deg2rad(-45)
@@ -661,17 +675,17 @@ class SampleProblems(unittest.TestCase):
 
         #self.assertAlmostEqual(-1254.63, res.displacements[-1].min(), delta=10)
 
-    def _test_animated_curl_beam(self):
+    def test_animated_curl_beam(self):
         p = problem.Problem()
         p.create_beams(np.array([0, 0]), np.array([1000, 0]), n=10)
         p.nodes[0].fix()
-        p.nodes[-1].loads = np.array([0, 0, 1000000000])
+        p.nodes[-1].loads = np.array([0, 0, 200000000])
 
         solver = solvers.NonLinearSolver(p)
         solver.arclength = 500
         solver.iteration_mode = 1
 
-        anim = create_fe_animation(p, solver)
+        anim = create_fe_animation(p, solver, sel_dof=29)
         plt.show()
 
 
