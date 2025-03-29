@@ -688,6 +688,34 @@ class SampleProblems(unittest.TestCase):
         anim = create_fe_animation(p, solver, sel_dof=29)
         plt.show()
 
+    def test_animated_deep_arch(self):
+        p = problem.Problem()
+        N = 17
+        dofs = 2*(3*N - 2,)
+        start = np.pi - np.arctan(600/800)
+        end = np.pi + np.arctan(600/800)
+
+        node_angles = np.linspace(start, end, N)
+        node_points = 1000*np.array([np.sin(node_angles), -np.cos(node_angles)]).T
+        for r in node_points:
+            p.get_or_create_node(r)
+        for n1, n2 in zip(p.nodes, p.nodes[1:]):
+            p.create_beam(n1, n2, E=2.1e5, A=10, I=10**3/12)
+
+        p.reassign_dofs()
+        #p.constrained_dofs = [0, 1, 3*N-2, 3*N-1]
+        p.nodes[len(p.nodes)//2].loads = np.array([0, -1000, 0])
+
+        p.nodes[0].pin()
+        p.nodes[-1].pin()
+
+        solver = solvers.NonLinearSolver(p)
+        solver.arclength = 1.5
+        solver.iteration_mode = 1
+
+        anim = create_fe_animation(p, solver, sel_dof=29)
+        plt.show()
+
 
 
 
