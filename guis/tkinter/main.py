@@ -24,8 +24,9 @@ class DSSGUI:
     def __init__(self, root:tk.Tk, problem=None, *args, **kwargs):
         self.root = root
         self.root.minsize(width=1024, height=640)
-        self.icon = icon if icon else None
-        self.root.iconbitmap(self.icon)
+        self.icon = kwargs.pop('icon', None)
+        self.root.iconbitmap(icon)            
+
         self.problem = problem
 
         self.mainframe = tk.Frame(self.root, bg='white')
@@ -521,10 +522,11 @@ class SectionManager(DSSInputMenu):
         self.top.destroy()
 
 if __name__ == '__main__':
-    #self.icon = 'dss_icon.ico' if _platform == 'win32' or _platform == 'win64' else '@dss_icon.xbm'
-    ext = 'ico' if sys.platform.startswith('win') else '.xbm'
-    icon = os.path.join(FILE_PATH, '..', 'gfx', f'dss_icon.{ext}')
-
+    if sys.platform.startswith('win32'):
+        icon = os.path.join(FILE_PATH, '..', 'gfx', 'dss_icon.ico')
+    else:
+        icon = '@' + os.path.join(FILE_PATH, '..', 'gfx', 'dss_icon.xbm')
+        
     # Load plugin_types
     plugin_list = []
     modules = [elements, solvers]
