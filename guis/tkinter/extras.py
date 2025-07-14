@@ -302,6 +302,9 @@ class DSSSettingsFrame(tk.Frame):
 
     def __len__(self):
         return self._cnt
+    
+    def __bool__(self):
+        return True
 
 record = collections.defaultdict(list)
 
