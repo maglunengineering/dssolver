@@ -161,7 +161,7 @@ class Problem:
 
             itercnt += 1
 
-        return results.ResultsStaticLinear(self, displacements)
+        return results.ResultsStaticLinear(self, forces, displacements)
 
     def plot(self):
         nodal_coordinates = np.array([0,0])

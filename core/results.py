@@ -6,14 +6,26 @@ from core.elements import FiniteElement, Node, DSSModelObject
 
 T = TypeVar('T')
 
+class _IndexListOfArrays:
+    def __init__(self, list_of_2d_arrays:list[np.ndarray]):
+        self._list_of_2d_arrays:list[np.ndarray] = list_of_2d_arrays
+    def __getitem__(self, ijk) -> np.ndarray:
+        return self._list_of_2d_arrays[ijk[0]][ijk[1:]]
+
 class Results:
     def __init__(self, problem):
         self.nodes = list(problem.nodes)
         self.elements = list(problem.elements)
-        self.displacements = np.zeros(sum(len(n.dofs) for n in self.nodes))
 
-        self.current_displ_set = 0
-        self.num_displ_sets = 1
+        self._displacement_results:list[np.ndarray] = [] # [iLc][iHist, iDof]
+        self._force_results:list[np.ndarray] = []
+
+    def get_displacement(self, iLc, iHist, iDof) -> float:
+        return self._displacement_results[iLc][iHist, iDof]
+
+    @property
+    def get_displacement_slice(self) -> np.ndarray:
+        return _IndexListOfArrays(self._displacement_results)
 
     def get_objects(self) -> Iterable[DSSModelObject]:
         yield from self.nodes
@@ -21,7 +33,7 @@ class Results:
 
     def get_actions(self):
         return {}
-
+    
     def increment(self):
         if self.current_displ_set < self.num_displ_sets - 1:
             self.current_displ_set += 1
@@ -38,9 +50,6 @@ class Results:
 
         return self.current_displ_set
     
-    def get_current_displacements(self, ilc):
-        return self.displacements[self.current_displ_set]
-
     def animate(self):
         pass
 
@@ -52,25 +61,31 @@ class Results:
 
 
 class ResultsStaticLinear(Results):
-    def __init__(self, problem, displacements:np.ndarray):
+    def __init__(self, problem, forces:np.ndarray, displacements:np.ndarray):
         super().__init__(problem)
 
-        if displacements.ndim == 1:
-            displacements = displacements.reshape((1,-1))
-        self.num_displ_sets = displacements.shape[-2]
-        self.displacements = displacements
-        for node in self.nodes:
-            node.displacements = displacements[self.current_displ_set, node.dofs]
+        if displacements.ndim == 1: # (ndofs,)
+            self._displacement_results = [displacements.reshape((1,-1))]
+        elif displacements.ndim == 2: # (nlc, ndofs)
+            self._displacement_results = list(displacements)
+        else:
+            raise ValueError(f"Illegal ndim for displacements, expected 1 or 2, got {displacements.ndim}")
 
+        if forces.ndim == 1:
+            self._force_results = [forces.reshape((1,-1))]
+        elif forces.ndim == 2:
+            self._force_results = list(forces)
+        else:
+            raise ValueError(f"Illegal ndim for forces, expected 1 or 2, got {forces.ndim}")
+
+        self.num_displ_sets = len(self._displacement_results)
 
 class ResultsStaticNonlinear(Results):
-    def __init__(self, problem, disp_storage:np.ndarray, disp_final:np.ndarray, forces:np.ndarray):
+    def __init__(self, problem, disp_histories:list[np.ndarray], load_histories:list[np.ndarray]):
         super().__init__(problem)
 
-        self.forces = forces
-        self.displacements = disp_storage # [nsteps, ndofs]
-        self.disp_final = disp_final # [nlc, ndofs]
-        self.num_displ_sets = disp_storage.shape[0]
+        self._displacement_results = disp_histories
+        self._load_histories = load_histories
 
     def quickplot(self):
         for node in self.nodes:

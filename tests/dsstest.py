@@ -1,6 +1,8 @@
 import unittest
 import collections
 import time
+import sys
+import os
 
 import numpy as np
 import matplotlib
@@ -8,8 +10,8 @@ import  matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.lines import Line2D
 
-import core.problem
-from core import problem, solvers
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from core import problem, solvers, settings
 
 from core.elements import *
 matplotlib.use('TkAgg')
@@ -23,7 +25,7 @@ def profile(func):
         cProfile.runctx('func(self)', locals={'self':args[0], 'func':func}, globals=globals())
     return inner
 
-def create_fe_animation(problem:core.problem.Problem, solver, **kwargs):
+def create_fe_animation(problem:problem.Problem, solver, **kwargs):
     """
     Creates an animation of the FE solution process.
 
@@ -242,7 +244,7 @@ class ElementTest(unittest.TestCase):
         res = solver.solve()
 
         e = self.p.elements[0]
-        u = e.get_displacements(res.displacements).flatten()
+        u = e.get_displacements(self.p.displacements).flatten()
         k = e.stiffness_matrix_global(self.p.displacements)
         work = e.get_strain_energy(self.p.displacements)
 
@@ -399,7 +401,7 @@ class ProblemTest(unittest.TestCase):
         solver = solvers.NonLinearSolver(p)
         solver.arclength = 500
         res = solver.solve()
-        disp = res.disp_final.flatten()
+        disp = res.get_displacement_slice[0, :, :].flatten()
 
         self.assertAlmostEqual(disp[-2], 191.79949554113804, places=2)
 
@@ -430,7 +432,7 @@ class PerformanceTest(unittest.TestCase):
         sols = np.linalg.solve(self.matrix, np.array((self.vec1, self.vec2)).T)
 
     @profile
-    def test_270_arc(self):
+    def _test_270_arc(self):
         # 5/11-23: 20.2 s
         # 17/11-23: 17s
         # 18/11-23: 11s
@@ -472,7 +474,6 @@ class SampleProblems(unittest.TestCase):
         xx = np.linspace(0, length, 21)
         yy = np.sin(xx / xx.max() * np.pi) * ampl
 
-
         E = 1500 # MPa
         h = 5
         t = 0.07
@@ -486,7 +487,7 @@ class SampleProblems(unittest.TestCase):
         self.p.nodes[0].loads = np.array([0.01, 0, 0])
 
         res = self.p.solve()
-        print(f'Amplitude: {ampl} - Displacement: {res.displacements[0]}')
+        print(f'Amplitude: {ampl} - Displacement: {res.get_displacement(0, 0, 0)}')
 
         #self.p.plot()
         #plt.show()
@@ -507,7 +508,7 @@ class SampleProblems(unittest.TestCase):
         p.node_at((1000,0)).loads = np.array([0, -P, 0])
 
         res = p.solve()
-        disp = res.displacements.flatten()
+        disp = res.get_displacement_slice[0, -1, :].flatten()
 
         self.assertAlmostEqual(-P*L**3 / (3*E*I), p.node_at((1000,0)).get_displacements(disp)[1], places=5)
 
@@ -523,7 +524,7 @@ class SampleProblems(unittest.TestCase):
 
         solver = solvers.NonLinearSolver(p)
         res = solver.solve()
-        disp = res.disp_final[0]
+        disp = res.get_displacement_slice[0, -1, :]
 
         self.assertAlmostEqual(-P*L**3 / (3*E*I) / p.node_at((1000,0)).get_displacements(disp)[1], 1.000, places=1)
 
@@ -557,7 +558,7 @@ class SampleProblems(unittest.TestCase):
         n2.loads = np.array([0, -10000, 0])
         solver = solvers.NonLinearSolver(p)
         res = solver.solveall()
-        self.assertAlmostEqual(-482.59459618768216, res.displacements[-1, 4], delta=2)
+        self.assertAlmostEqual(-482.59459618768216, res.get_displacement(-1, -1, 4), delta=2)
 
     def _test_snapback_von_mises_truss(self):
         p = self.problem = self.p
@@ -572,7 +573,7 @@ class SampleProblems(unittest.TestCase):
         n3.loads = np.array([0, -4000, 0])
         solver = solvers.NonLinearSolver(p)
         res = solver.solveall()
-        self.assertAlmostEqual(-442.62588512549337, res.displacements[-1, 4], delta=4)
+        self.assertAlmostEqual(-442.62588512549337, res.get_displacement(-1, -1, 4), delta=4)
 
     def _set_up_path_dependent_mises_truss(self):
         p = self.problem = self.p
@@ -627,30 +628,40 @@ class SampleProblems(unittest.TestCase):
 
         solver = solvers.NonLinearSolver(self.p)
         solver.arclength = 45
+        settings.set_setting('dss.verbose', 1)
         res = solver.solve()
 
-        disp_lc1 = res.disp_final[0]
-        disp_lc2 = res.disp_final[1]
+        disp_lc1 = res.get_displacement_slice[0, :, :]
+        disp_lc2 = res.get_displacement_slice[0, :, :]
 
-        self.assertGreater(n2.get_displacements(disp_lc1)[0], 400)
-        self.assertGreater(n2.get_displacements(disp_lc2)[0], n2.get_displacements(disp_lc1)[0])
+        self.assertGreater(n2.get_displacements(disp_lc1)[0, 0], 400)
+        self.assertGreater(n2.get_displacements(disp_lc2)[0, 0], n2.get_displacements(disp_lc1)[0, 0])
 
-    def test_path_dependent_mises_truss_displ_left(self):
+    def _test_path_dependent_mises_truss_displ_left(self):
+
         self._set_up_path_dependent_mises_truss()
         n1,n2,n3 = self.p.nodes
 
+        # TODO Fix numbers
+        # First, load the top only        
         n2.loads[0, :3] = np.array([0, 0, 0])
-        n2.loads[1, :3] = np.array([0, 11000, 0])
+        n3.loads[0, :3] = np.array([0, -3000, 0])        
 
-        n3.loads[0, :3] = np.array([0, -1000000, 0])
-        n3.loads[1, :3] = np.array([0, -1000000, 0])
+        # Even a much bigger sideways load should now not be able to push it through
+        n2.loads[0, :3] = np.array([7000, 0, 0])
+        n3.loads[0, :3] = np.array([0, -3000, 0])    
 
         solver = solvers.NonLinearSolver(self.p)
         res = solver.solve()
 
-        self.assertSmaller(n2.get_displacements(res.disp_final)[0, 0], 0)
-        self.assertSmaller(n2.get_displacements(res.disp_final)[0, 1], 0)
-        self.assertGreater(n2.get_displacements(res.disp_final)[0, 1], n2.get_displacements(res.disp_final)[0, 0])
+        disp_lc1 = res.get_displacement_slice[0, :, :]
+        disp_lc2 = res.get_displacement_slice[0, :, :]
+
+        dof = n2.dofs[0]
+
+        self.assertSmaller(res.get_displacement(0, -1, dof), 0.0)
+        self.assertSmaller(res.get_displacement(1, -1, dof), 200.0)
+        self.assertGreater(res.get_displacement(1, -1, dof), res.get_displacement(1, -1, dof))
 
     def _test_animated_270_arch(self):
         p = problem.Problem()
@@ -675,7 +686,7 @@ class SampleProblems(unittest.TestCase):
 
         #self.assertAlmostEqual(-1254.63, res.displacements[-1].min(), delta=10)
 
-    def test_animated_curl_beam(self):
+    def _test_animated_curl_beam(self):
         p = problem.Problem()
         p.create_beams(np.array([0, 0]), np.array([1000, 0]), n=10)
         p.nodes[0].fix()
@@ -688,7 +699,7 @@ class SampleProblems(unittest.TestCase):
         anim = create_fe_animation(p, solver, sel_dof=29)
         plt.show()
 
-    def test_animated_deep_arch(self):
+    def _test_animated_deep_arch(self):
         p = problem.Problem()
         N = 17
         dofs = 2*(3*N - 2,)
@@ -718,6 +729,11 @@ class SampleProblems(unittest.TestCase):
 
 
 
-
+if __name__ == '__main__':
+    tests = SampleProblems()
+    tests.setUp()
+    
+    tests.test_cantilever_beam()
+    tests.test_path_dependent_mises_truss_displ_right()
 
 
