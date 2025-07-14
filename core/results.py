@@ -20,6 +20,9 @@ class Results:
         self._displacement_results:list[np.ndarray] = [] # [iLc][iHist, iDof]
         self._force_results:list[np.ndarray] = []
 
+    def get_size(self) -> tuple[int, list[int], int]:
+        return len(self._displacement_results), [x.shape[0] for x in self._displacement_results], self._displacement_results[0].shape[-1]
+
     def get_displacement(self, iLc, iHist, iDof) -> float:
         return self._displacement_results[iLc][iHist, iDof]
 
@@ -86,6 +89,8 @@ class ResultsStaticNonlinear(Results):
 
         self._displacement_results = disp_histories
         self._load_histories = load_histories
+
+        self.num_displ_sets = len(disp_histories)
 
     def quickplot(self):
         for node in self.nodes:

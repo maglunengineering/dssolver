@@ -35,6 +35,8 @@ class ResultsViewer:
         self.stringvar = tk.StringVar()
 
         self.results = results
+        self._cur_lc = 0
+        self._cur_hist = 0
         for item in self.results.get_objects():
             self.canvas.add_object(item)
 
@@ -51,7 +53,7 @@ class ResultsViewer:
         results.on_after_resultview_built(self)
 
     def animate_func(self):
-        animator = ResultAnimator(self.results, self.canvas)
+        animator = ResultAnimator(self.results, self.canvas, self._cur_lc)
         animator.add_hook(lambda i: self.stringvar.set(f'Current displacement set: {i}'))
         animator.start()
 
@@ -72,10 +74,16 @@ class ResultsViewer:
 
 
 class ResultAnimator:
-    def __init__(self, results, canvas):
+    def __init__(self, results:Results, canvas, i_lc):
         self.results = results
         self.canvas = canvas
-        self._delay = int(2000 / self.results.num_displ_sets)
+
+        nlc, nhist, ndofs = results.get_size()
+        self._i_lc = i_lc
+        self._i_hist = 0
+        self._n_hist = nhist[i_lc]
+
+        self._delay = int(2000 / self._n_hist)
         self._running = False
         self._hooks = []
 
@@ -90,11 +98,14 @@ class ResultAnimator:
         self._hooks.append(hook)
 
     def _run_animation(self):
-        if self.results.increment() == 0:
+        if self._i_hist == self._n_hist:
+            self.stop()
             return
-        self.canvas.redraw(displacements=self.results.get_current_displacements(0))
+        
+        self.canvas.redraw(displacements=self.results.get_displacement_slice[self._i_lc, self._i_hist, :])
+        self._i_hist += 1
         self.canvas.update()
         if self._running:
             for hook in self._hooks:
-                hook(self.results.current_displ_set)
+                hook(self._i_hist)
             self.canvas.after(self._delay, self._run_animation)

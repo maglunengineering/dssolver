@@ -47,6 +47,9 @@ def create_fe_animation(problem:problem.Problem, solver, **kwargs):
     save_path = kwargs.get('save_path', None)
     interval = kwargs.get('interval', 50) # ms
 
+    if solver.iteration_mode == 0:
+        solver.iteration_mode = 1
+
     # Setup the figure and axis
     fig, axs = plt.subplots(1, 2, figsize=(10, 8))
     ax,ax2 = axs
@@ -619,49 +622,44 @@ class SampleProblems(unittest.TestCase):
         n1,n2,n3 = self.p.nodes
 
         # First, load the middle/left. The load required is not that great. It should snap through
-        n2.loads[0, :3] = np.array([7000, 0, 0])
+        n2.loads[0, :3] = np.array([5500, 0, 0])
         n3.loads[0, :3] = np.array([0, 0, 0])
 
         # Then, load the top. Node2 should go further right
-        n2.loads[1, :3] = np.array([7000, 0, 0])
-        n3.loads[1, :3] = np.array([0, -3000, 0])
+        n2.loads[1, :3] = np.array([5500, 0, 0])
+        n3.loads[1, :3] = np.array([0, -6000, 0])
 
         solver = solvers.NonLinearSolver(self.p)
         solver.arclength = 45
         settings.set_setting('dss.verbose', 1)
         res = solver.solve()
 
-        disp_lc1 = res.get_displacement_slice[0, :, :]
-        disp_lc2 = res.get_displacement_slice[0, :, :]
+        disp_lc1 = res.get_displacement_slice[0, -1, :]
+        disp_lc2 = res.get_displacement_slice[1, -1, :]
 
-        self.assertGreater(n2.get_displacements(disp_lc1)[0, 0], 400)
-        self.assertGreater(n2.get_displacements(disp_lc2)[0, 0], n2.get_displacements(disp_lc1)[0, 0])
+        self.assertGreater(n2.get_displacements(disp_lc1)[0], 400)
+        self.assertGreater(n2.get_displacements(disp_lc2)[0], n2.get_displacements(disp_lc1)[0])
 
-    def _test_path_dependent_mises_truss_displ_left(self):
-
+    def test_path_dependent_mises_truss_displ_left(self):
         self._set_up_path_dependent_mises_truss()
         n1,n2,n3 = self.p.nodes
 
-        # TODO Fix numbers
-        # First, load the top only        
+        # First, load the top only
         n2.loads[0, :3] = np.array([0, 0, 0])
-        n3.loads[0, :3] = np.array([0, -3000, 0])        
+        n3.loads[0, :3] = np.array([0, -6000, 0])        
 
-        # Even a much bigger sideways load should now not be able to push it through
-        n2.loads[0, :3] = np.array([7000, 0, 0])
-        n3.loads[0, :3] = np.array([0, -3000, 0])    
+        # The same load that snapped it through in the test above should now not be able to
+        n2.loads[1, :3] = np.array([5500, 0, 0])
+        n3.loads[1, :3] = np.array([0, -6000, 0])    
 
         solver = solvers.NonLinearSolver(self.p)
         res = solver.solve()
-
-        disp_lc1 = res.get_displacement_slice[0, :, :]
-        disp_lc2 = res.get_displacement_slice[0, :, :]
 
         dof = n2.dofs[0]
 
         self.assertSmaller(res.get_displacement(0, -1, dof), 0.0)
         self.assertSmaller(res.get_displacement(1, -1, dof), 200.0)
-        self.assertGreater(res.get_displacement(1, -1, dof), res.get_displacement(1, -1, dof))
+        self.assertGreater(res.get_displacement(1, -1, dof), res.get_displacement(0, -1, dof))
 
     def _test_animated_270_arch(self):
         p = problem.Problem()
