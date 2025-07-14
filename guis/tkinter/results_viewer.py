@@ -1,5 +1,7 @@
 import tkinter as tk
 from typing import Callable
+import numpy as np
+import matplotlib.pyplot as plt
 from guis.tkinter.extras import DSSCanvas, DSSSettingsFrame, DSSListbox
 from core.results import Results
 from core import settings
@@ -41,10 +43,10 @@ class ResultsViewer:
             self.canvas.add_object(item)
 
         i = 3
-        for name, func in results.get_actions().items():
-            button = tk.Button(right_frame, text=name, command=self.on_click_factory(func))
+        for func in (self.quickplot,):
+            button = tk.Button(right_frame, text=func.__name__.capitalize(), command=self.on_click_factory(func))
             button.grid(row=i)
-            i += 1
+            i += 1            
 
         label = tk.Label(right_frame, textvariable=self.stringvar)
         label.grid(row=i)
@@ -57,20 +59,33 @@ class ResultsViewer:
         animator.add_hook(lambda i: self.stringvar.set(f'Current displacement set: {i}'))
         animator.start()
 
-    def _iterate_results(self):
-        interval = int(1000 * 2 / self.results.num_displ_sets)
-        self.current_displ_set = 0
-        for step in range(self.results.num_displ_sets):
-            self.results.current_displ_set += 1
-            yield interval
-        yield False
-
     def on_click_factory(self, func):
         def return_func():
             func()
             self.canvas.redraw()
-            self.stringvar.set(f'Current displacement set: {self.results.current_displ_set}')
+            self.stringvar.set(f'Current displacement set: {self._cur_hist}')
         return return_func
+    
+    
+    def quickplot(self, fig=None, ax=None):
+        if fig is None or ax is None:
+            fig,ax = plt.subplots()
+
+        for node in self.results.nodes:
+            if node.loads.any():
+                break
+        
+        dof = node.dofs[np.abs(node.loads).argmax()]
+        displ_history = self.results.get_displacement_slice[self._cur_lc, :, dof]
+        sign = np.sign(np.average(displ_history))
+        load_history = self.results.get_force_slice[self._cur_lc, :]
+
+        plt.ylabel('Control parameter')
+        plt.xlabel('Displacement')
+        plt.title(f'Displacement vs control parameter at dof {dof}')
+        plt.plot(sign * displ_history, load_history)
+        plt.show()
+
 
 
 class ResultAnimator:
@@ -78,7 +93,7 @@ class ResultAnimator:
         self.results = results
         self.canvas = canvas
 
-        nlc, nhist, ndofs = results.get_size()
+        _, nhist, _ = results.get_size()
         self._i_lc = i_lc
         self._i_hist = 0
         self._n_hist = nhist[i_lc]

@@ -1,7 +1,6 @@
 from typing import Dict,Iterable,TypeVar,Sized
 
 import numpy as np
-import matplotlib.pyplot as plt
 from core.elements import FiniteElement, Node, DSSModelObject
 
 T = TypeVar('T')
@@ -20,6 +19,9 @@ class Results:
         self._displacement_results:list[np.ndarray] = [] # [iLc][iHist, iDof]
         self._force_results:list[np.ndarray] = []
 
+        self._disp_slice = _IndexListOfArrays(self._displacement_results)
+        self._force_slice = _IndexListOfArrays(self._force_results)
+
     def get_size(self) -> tuple[int, list[int], int]:
         return len(self._displacement_results), [x.shape[0] for x in self._displacement_results], self._displacement_results[0].shape[-1]
 
@@ -28,7 +30,11 @@ class Results:
 
     @property
     def get_displacement_slice(self) -> np.ndarray:
-        return _IndexListOfArrays(self._displacement_results)
+        return self._disp_slice
+    
+    @property
+    def get_force_slice(self) -> np.ndarray:
+        return self._force_slice
 
     def get_objects(self) -> Iterable[DSSModelObject]:
         yield from self.nodes
@@ -70,7 +76,7 @@ class ResultsStaticLinear(Results):
         if displacements.ndim == 1: # (ndofs,)
             self._displacement_results = [displacements.reshape((1,-1))]
         elif displacements.ndim == 2: # (nlc, ndofs)
-            self._displacement_results = list(displacements)
+            self._displacement_results = list(displacements.reshape((displacements.shape[0], 1, -1)))
         else:
             raise ValueError(f"Illegal ndim for displacements, expected 1 or 2, got {displacements.ndim}")
 
@@ -81,6 +87,8 @@ class ResultsStaticLinear(Results):
         else:
             raise ValueError(f"Illegal ndim for forces, expected 1 or 2, got {forces.ndim}")
 
+        self._disp_slice = _IndexListOfArrays(self._displacement_results)
+        self._force_slice = _IndexListOfArrays(self._force_results)
         self.num_displ_sets = len(self._displacement_results)
 
 class ResultsStaticNonlinear(Results):
@@ -88,29 +96,14 @@ class ResultsStaticNonlinear(Results):
         super().__init__(problem)
 
         self._displacement_results = disp_histories
-        self._load_histories = load_histories
+        self._force_results = load_histories
 
         self.num_displ_sets = len(disp_histories)
 
-    def quickplot(self):
-        for node in self.nodes:
-            if node.loads.any():
-                break
-        dof = node.dofs[np.abs(node.loads).argmax()]
-        displ_history = self.displacements[:,dof]
-        sign = np.sign(np.average(displ_history))
-        load_history = self.forces
-
-        plt.ylabel('Control parameter')
-        plt.xlabel('Displacement')
-        plt.title(f'Displacement vs control parameter at dof {dof}')
-        plt.plot(sign * displ_history, load_history)
-        plt.show()
 
     def get_actions(self):
         return {'Increment' : self.increment,
-                'Decrement' : self.decrement,
-                'Quick plot' : self.quickplot}
+                'Decrement' : self.decrement}
 
 
 class ResultsModal(Results):

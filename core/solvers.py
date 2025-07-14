@@ -31,7 +31,7 @@ class NonLinearSolver(Solver):
 
         self.arclength = kwargs.get('arclength', 45)
         self.iteration_mode = kwargs.get('iteration_mode', 0)
-        self.multi_run = kwargs.get('multi_run', 0) # Multirun: Same load case scaled differently
+        self.multi_run = kwargs.get('multi_run', 0) # Multirun: Same load case scaled differently, run as broadcast, pick the highest successful one
         self.max_iter = kwargs.get('max_iter', 25)
 
     def solve(self)-> results.ResultsStaticNonlinear:

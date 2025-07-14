@@ -1,7 +1,7 @@
 import tkinter as tk
 import numpy as np
 
-from core import elements, solvers
+from core import elements, solvers, settings
 import drawing
 
 class Tool:
@@ -192,7 +192,7 @@ class ToolDispl(Tool):
         disp = None
         res = self._solver.solveall()
         if res:
-            self._gui.ui_displacements = res.displacements.flatten()
+            self._gui.ui_displacements = res.get_displacement_slice[settings.get_setting('dssgui.ilc', 0), -1, :]
         self._gui.draw_canvas(displacements=disp)
 
 
