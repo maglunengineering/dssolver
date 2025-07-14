@@ -195,7 +195,6 @@ class ToolDispl(Tool):
             disp = res.get_displacement_slice[settings.get_setting('dssgui.ilc', 0), -1, :]
         self._gui.draw_canvas(displacements=disp)
 
-
     def on_click(self, event):
         self._dragging = True
         self._last_click_xy = self._canvas.canvas_to_problem((event.x, event.y))

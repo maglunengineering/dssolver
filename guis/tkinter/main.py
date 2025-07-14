@@ -14,7 +14,6 @@ import plugin_base
 import tools
 from core import problem, elements, settings, solvers, results
 
-
 from results_viewer import ResultsViewer
 
 np.set_printoptions(precision=2, suppress=True)
@@ -41,10 +40,9 @@ class DSSGUI:
         self.canvas:extras.DSSCanvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
         self.canvas.dss = self
         self.canvas.grid(row=0, column=0, sticky='nsew')
-        self.ui_displacements = None
 
         settings.add_setting('dssgui.running_animation', True)
-        settings.add_setting('dssgui.uilc', 0)
+        settings.add_setting('dssgui.ilc', 0)
         settings.add_setting('dss.verbose', True)
 
         self.menus = {}
@@ -95,7 +93,6 @@ class DSSGUI:
         self.menus['Solve'] = menu_solve
         topmenu.add_cascade(label='Solve', menu=menu_solve)
 
-
         def callback_factory(this, *args):
             return lambda : this.call_and_add_to_results(*args)
 
@@ -122,9 +119,10 @@ class DSSGUI:
 
     def call_and_add_to_results(self, func:Callable[[], Optional[results.Results]]):
         x = func()
+        disp = None
         if isinstance(x, results.Results):
             _results = x
-            self.ui_displacements = _results.displacements[0]            
+            disp = _results.get_displacement_slice[settings.get_setting('dssgui.ilc', 0), -1, :]            
 
         elif hasattr(x, '__next__'): # Generator or something like that
             for item in x: # Loop it but update ui displacements
@@ -133,8 +131,8 @@ class DSSGUI:
                     break # The last value should be a Results
 
                 displacements = item['displacements'] # Better be a dict with displacements
-                self.ui_displacements = displacements
-                self.draw_canvas(displacements=displacements)
+                disp = displacements
+                self.draw_canvas(displacements=disp)
                 if settings.get_setting('dssgui.running_animation', True):
                     self.canvas.update()
             else:
@@ -142,7 +140,7 @@ class DSSGUI:
 
         self.listbox_results.add(_results)
 
-        self.draw_canvas(displacements=self.ui_displacements)
+        self.draw_canvas(displacements=disp)
         if settings.get_setting('dssgui.running_animation', True):
             self.canvas.update()
 
@@ -217,13 +215,10 @@ class DSSGUI:
     def draw_canvas(self, *args, **kwargs):
         self.canvas.delete('all')  # Clear the canvas
 
-        kwargs['displacements'] = kwargs.get('displacements', self.ui_displacements)
         self.canvas.redraw(**kwargs)
         self.draw_csys()
 
     def update_canvas(self, **kwargs):
-        kwargs['displacements'] = self.ui_displacements
-
         for obj in self.problem.nodes:
             self.canvas.add_object(obj, **kwargs)
         for obj in self.problem.elements:
@@ -254,7 +249,6 @@ class DSSGUI:
 
     def new_problem(self):
         self.problem = problem.Problem()
-        self.ui_displacements = None
         self.canvas.clear()
         self.draw_canvas()
 
