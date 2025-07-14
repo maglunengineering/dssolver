@@ -2,6 +2,7 @@ import tkinter as tk
 from typing import Callable
 from guis.tkinter.extras import DSSCanvas, DSSSettingsFrame, DSSListbox
 from core.results import Results
+from core import settings
 
 class ResultsViewer:
     def __init__(self, root, results:Results, **kwargs):
@@ -34,10 +35,8 @@ class ResultsViewer:
         self.stringvar = tk.StringVar()
 
         self.results = results
-        classes = set()
         for item in self.results.get_objects():
             self.canvas.add_object(item)
-            classes.add(item.__class__)
 
         i = 3
         for name, func in results.get_actions().items():
@@ -55,11 +54,11 @@ class ResultsViewer:
         animator = ResultAnimator(self.results, self.canvas)
         animator.add_hook(lambda i: self.stringvar.set(f'Current displacement set: {i}'))
         animator.start()
+
     def _iterate_results(self):
         interval = int(1000 * 2 / self.results.num_displ_sets)
         self.current_displ_set = 0
         for step in range(self.results.num_displ_sets):
-            self.results.set_displacements()
             self.results.current_displ_set += 1
             yield interval
         yield False
@@ -93,7 +92,8 @@ class ResultAnimator:
     def _run_animation(self):
         if self.results.increment() == 0:
             return
-        self.canvas.redraw()
+        self.canvas.redraw(displacements=self.results.get_current_displacements(0))
+        self.canvas.update()
         if self._running:
             for hook in self._hooks:
                 hook(self.results.current_displ_set)

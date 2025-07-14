@@ -28,7 +28,6 @@ class Results:
         else:
             self.current_displ_set = 0
 
-        self.set_displacements()
         return self.current_displ_set
 
     def decrement(self):
@@ -37,15 +36,13 @@ class Results:
         else:
             self.current_displ_set = self.num_displ_sets - 1
 
-        self.set_displacements()
         return self.current_displ_set
+    
+    def get_current_displacements(self, ilc):
+        return self.displacements[self.current_displ_set]
 
     def animate(self):
         pass
-
-    def set_displacements(self):
-        for node in self.nodes:
-            node.displacements = self.displacements[self.current_displ_set, node.dofs].reshape((-1, 1))
 
     def reset_animation(self):
         pass
@@ -114,7 +111,6 @@ class ResultsModal(Results):
         # 50 steps
         for sine in np.sin(np.linspace(-np.pi, np.pi, 51)):
             self.scale = sine * oldscale
-            self.set_displacements()
             yield 20
         self.set_displacements()
         yield False
