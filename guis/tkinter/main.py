@@ -124,19 +124,23 @@ class DSSGUI:
         x = func()
         if isinstance(x, results.Results):
             _results = x
-            self.ui_displacements = _results.displacements[0]
-            self.listbox_results.add(_results)
-            if settings.get_setting('dssgui.running_animation', True):
-                self.draw_canvas(displacements=self.ui_displacements)
+            self.ui_displacements = _results.displacements[0]            
+
         elif hasattr(x, '__next__'): # Generator or something like that
             for item in x: # Loop it but update ui displacements
-                try:
-                    displacements = item['displacements']
-                    self.ui_displacements = displacements
-                    self.draw_canvas(displacements=displacements)
-                except:
-                    # Stopiteration?
-                    break
+                if isinstance(item, results.Results):
+                    _results = item
+                    break # The last value should be a Results
+
+                displacements = item['displacements'] # Better be a dict with displacements
+                self.ui_displacements = displacements
+                self.draw_canvas(displacements=displacements)
+                if settings.get_setting('dssgui.running_animation', True):
+                    self.canvas.update()
+            else:
+                raise TypeError(f'Last yielded value of {func} was {type(x)}, expected {results.Results}')
+
+        self.listbox_results.add(_results)
 
         self.draw_canvas(displacements=self.ui_displacements)
         if settings.get_setting('dssgui.running_animation', True):
