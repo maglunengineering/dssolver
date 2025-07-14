@@ -23,16 +23,9 @@ inv = np.linalg.inv
 class DSSGUI:
     def __init__(self, root:tk.Tk, problem=None, *args, **kwargs):
         self.root = root
-<<<<<<< HEAD
-        self.root.minsize(width=1200, height=800)
-        self.icon = icon if icon else None
-        self.root.iconbitmap(self.icon)
-=======
         self.root.minsize(width=1024, height=640)
         self.icon = kwargs.pop('icon', None)
         self.root.iconbitmap(icon)            
-
->>>>>>> develop
         self.problem = problem
 
         self.mainframe = tk.Frame(self.root, bg='white')
@@ -51,6 +44,7 @@ class DSSGUI:
         self.ui_displacements = None
 
         settings.add_setting('dssgui.running_animation', True)
+        settings.add_setting('dssgui.uilc', 0)
         settings.add_setting('dss.verbose', True)
 
         self.menus = {}
@@ -106,7 +100,7 @@ class DSSGUI:
             return lambda : this.call_and_add_to_results(*args)
 
         self.add_topmenu_item('Solve', 'p.solve', callback_factory(self, lambda : self.problem.solve()))
-        self.add_topmenu_item('Solve', 'Nonlinear', callback_factory(self, lambda : solvers.NonLinearSolver(self.problem).solve()))
+        self.add_topmenu_item('Solve', 'Nonlinear', callback_factory(self, lambda : solvers.NonLinearSolver(self.problem, iteration_mode=1).solve_iter()))
 
         for plugin in plugins:
             instance = plugin(self)
@@ -128,12 +122,22 @@ class DSSGUI:
 
     def call_and_add_to_results(self, func:Callable[[], Optional[results.Results]]):
         x = func()
-        if x:
-            results = x
-            self.ui_displacements = results.displacements[0]
-            self.listbox_results.add(results)
+        if isinstance(x, results.Results):
+            _results = x
+            self.ui_displacements = _results.displacements[0]
+            self.listbox_results.add(_results)
             if settings.get_setting('dssgui.running_animation', True):
                 self.draw_canvas(displacements=self.ui_displacements)
+        elif hasattr(x, '__next__'): # Generator or something like that
+            for item in x: # Loop it but update ui displacements
+                try:
+                    displacements = item['displacements']
+                    self.ui_displacements = displacements
+                    self.draw_canvas(displacements=displacements)
+                except:
+                    # Stopiteration?
+                    break
+
         self.draw_canvas(displacements=self.ui_displacements)
         if settings.get_setting('dssgui.running_animation', True):
             self.canvas.update()
@@ -209,7 +213,7 @@ class DSSGUI:
     def draw_canvas(self, *args, **kwargs):
         self.canvas.delete('all')  # Clear the canvas
 
-        kwargs['displacements'] = self.ui_displacements
+        kwargs['displacements'] = kwargs.get('displacements', self.ui_displacements)
         self.canvas.redraw(**kwargs)
         self.draw_csys()
 
