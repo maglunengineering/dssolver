@@ -25,7 +25,7 @@ class DSSGUI:
         self.root = root
         self.root.minsize(width=1024, height=640)
         self.icon = kwargs.pop('icon', None)
-        self.root.iconbitmap(icon)            
+        self.root.iconbitmap(self.icon)            
         self.problem = problem
 
         self.mainframe = tk.Frame(self.root, bg='white')
@@ -565,7 +565,7 @@ if __name__ == '__main__':
 
     p = problem.Problem()
     root = tk.Tk()
-    dss = DSSGUI(root, problem=p, plugins=plugin_list)
+    dss = DSSGUI(root, problem=p, plugins=plugin_list, icon=icon)
     dss.autoscale()
 
     root.mainloop()
