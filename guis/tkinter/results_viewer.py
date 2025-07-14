@@ -46,7 +46,7 @@ class ResultsViewer:
         for func in (self.quickplot,):
             button = tk.Button(right_frame, text=func.__name__.capitalize(), command=self.on_click_factory(func))
             button.grid(row=i)
-            i += 1            
+            i += 1
 
         label = tk.Label(right_frame, textvariable=self.stringvar)
         label.grid(row=i)
@@ -65,8 +65,7 @@ class ResultsViewer:
             self.canvas.redraw()
             self.stringvar.set(f'Current displacement set: {self._cur_hist}')
         return return_func
-    
-    
+        
     def quickplot(self, fig=None, ax=None):
         if fig is None or ax is None:
             fig,ax = plt.subplots()
@@ -85,8 +84,6 @@ class ResultsViewer:
         plt.title(f'Displacement vs control parameter at dof {dof}')
         plt.plot(sign * displ_history, load_history)
         plt.show()
-
-
 
 class ResultAnimator:
     def __init__(self, results:Results, canvas, i_lc):

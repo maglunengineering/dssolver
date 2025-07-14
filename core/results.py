@@ -19,9 +19,6 @@ class Results:
         self._displacement_results:list[np.ndarray] = [] # [iLc][iHist, iDof]
         self._force_results:list[np.ndarray] = []
 
-        self._disp_slice = _IndexListOfArrays(self._displacement_results)
-        self._force_slice = _IndexListOfArrays(self._force_results)
-
     def get_size(self) -> tuple[int, list[int], int]:
         return len(self._displacement_results), [x.shape[0] for x in self._displacement_results], self._displacement_results[0].shape[-1]
 
@@ -30,11 +27,11 @@ class Results:
 
     @property
     def get_displacement_slice(self) -> np.ndarray:
-        return self._disp_slice
+        return _IndexListOfArrays(self._displacement_results)
     
     @property
     def get_force_slice(self) -> np.ndarray:
-        return self._force_slice
+        return _IndexListOfArrays(self._force_results)
 
     def get_objects(self) -> Iterable[DSSModelObject]:
         yield from self.nodes
@@ -87,8 +84,6 @@ class ResultsStaticLinear(Results):
         else:
             raise ValueError(f"Illegal ndim for forces, expected 1 or 2, got {forces.ndim}")
 
-        self._disp_slice = _IndexListOfArrays(self._displacement_results)
-        self._force_slice = _IndexListOfArrays(self._force_results)
         self.num_displ_sets = len(self._displacement_results)
 
 class ResultsStaticNonlinear(Results):
@@ -99,7 +94,6 @@ class ResultsStaticNonlinear(Results):
         self._force_results = load_histories
 
         self.num_displ_sets = len(disp_histories)
-
 
     def get_actions(self):
         return {'Increment' : self.increment,
