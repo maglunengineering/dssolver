@@ -1,19 +1,37 @@
 from typing import Dict,Iterable,TypeVar,Sized
 
 import numpy as np
-import matplotlib.pyplot as plt
 from core.elements import FiniteElement, Node, DSSModelObject
 
 T = TypeVar('T')
+
+class _IndexListOfArrays:
+    def __init__(self, list_of_2d_arrays:list[np.ndarray]):
+        self._list_of_2d_arrays:list[np.ndarray] = list_of_2d_arrays
+    def __getitem__(self, ijk) -> np.ndarray:
+        return self._list_of_2d_arrays[ijk[0]][ijk[1:]]
 
 class Results:
     def __init__(self, problem):
         self.nodes = list(problem.nodes)
         self.elements = list(problem.elements)
-        self.displacements = np.zeros(sum(len(n.dofs) for n in self.nodes))
 
-        self.current_displ_set = 0
-        self.num_displ_sets = 1
+        self._displacement_results:list[np.ndarray] = [] # [iLc][iHist, iDof]
+        self._force_results:list[np.ndarray] = []
+
+    def get_size(self) -> tuple[int, list[int], int]:
+        return len(self._displacement_results), [x.shape[0] for x in self._displacement_results], self._displacement_results[0].shape[-1]
+
+    def get_displacement(self, iLc, iHist, iDof) -> float:
+        return self._displacement_results[iLc][iHist, iDof]
+
+    @property
+    def get_displacement_slice(self) -> np.ndarray:
+        return _IndexListOfArrays(self._displacement_results)
+    
+    @property
+    def get_force_slice(self) -> np.ndarray:
+        return _IndexListOfArrays(self._force_results)
 
     def get_objects(self) -> Iterable[DSSModelObject]:
         yield from self.nodes
@@ -21,14 +39,13 @@ class Results:
 
     def get_actions(self):
         return {}
-
+    
     def increment(self):
         if self.current_displ_set < self.num_displ_sets - 1:
             self.current_displ_set += 1
         else:
             self.current_displ_set = 0
 
-        self.set_displacements()
         return self.current_displ_set
 
     def decrement(self):
@@ -37,15 +54,10 @@ class Results:
         else:
             self.current_displ_set = self.num_displ_sets - 1
 
-        self.set_displacements()
         return self.current_displ_set
-
+    
     def animate(self):
         pass
-
-    def set_displacements(self):
-        for node in self.nodes:
-            node.displacements = self.displacements[self.current_displ_set, node.dofs].reshape((-1, 1))
 
     def reset_animation(self):
         pass
@@ -55,42 +67,37 @@ class Results:
 
 
 class ResultsStaticLinear(Results):
-    def __init__(self, problem, displacements:np.ndarray):
+    def __init__(self, problem, forces:np.ndarray, displacements:np.ndarray):
         super().__init__(problem)
 
-        self.num_displ_sets = displacements.shape[1]
-        self.displacements = displacements
-        for node in self.nodes:
-            node.displacements = displacements[node.dofs, self.current_displ_set].reshape((-1, 1))
+        if displacements.ndim == 1: # (ndofs,)
+            self._displacement_results = [displacements.reshape((1,-1))]
+        elif displacements.ndim == 2: # (nlc, ndofs)
+            self._displacement_results = list(displacements.reshape((displacements.shape[0], 1, -1)))
+        else:
+            raise ValueError(f"Illegal ndim for displacements, expected 1 or 2, got {displacements.ndim}")
 
+        if forces.ndim == 1:
+            self._force_results = [forces.reshape((1,-1))]
+        elif forces.ndim == 2:
+            self._force_results = list(forces)
+        else:
+            raise ValueError(f"Illegal ndim for forces, expected 1 or 2, got {forces.ndim}")
+
+        self.num_displ_sets = len(self._displacement_results)
 
 class ResultsStaticNonlinear(Results):
-    def __init__(self, problem, displacements:Sized, forces:Sized):
+    def __init__(self, problem, disp_histories:list[np.ndarray], load_histories:list[np.ndarray]):
         super().__init__(problem)
 
-        self.forces = forces
-        self.displacements = displacements # [nsteps, ndofs]
-        self.num_displ_sets = displacements.shape[0]
+        self._displacement_results = disp_histories
+        self._force_results = load_histories
 
-    def quickplot(self):
-        for node in self.nodes:
-            if node.loads.any():
-                break
-        dof = node.dofs[np.abs(node.loads).argmax()]
-        displ_history = self.displacements[:,dof]
-        sign = np.sign(np.average(displ_history))
-        load_history = self.forces
-
-        plt.ylabel('Control parameter')
-        plt.xlabel('Displacement')
-        plt.title(f'Displacement vs control parameter at dof {dof}')
-        plt.plot(sign * displ_history, load_history)
-        plt.show()
+        self.num_displ_sets = len(disp_histories)
 
     def get_actions(self):
         return {'Increment' : self.increment,
-                'Decrement' : self.decrement,
-                'Quick plot' : self.quickplot}
+                'Decrement' : self.decrement}
 
 
 class ResultsModal(Results):
@@ -111,7 +118,6 @@ class ResultsModal(Results):
         # 50 steps
         for sine in np.sin(np.linspace(-np.pi, np.pi, 51)):
             self.scale = sine * oldscale
-            self.set_displacements()
             yield 20
         self.set_displacements()
         yield False

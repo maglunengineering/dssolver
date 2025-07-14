@@ -1,7 +1,8 @@
 import tkinter as tk
 import numpy as np
 
-from core import elements, solvers
+from core import elements, solvers, settings
+import drawing
 
 class Tool:
     def __init__(self, canvas):
@@ -144,10 +145,25 @@ class ToolDispl(Tool):
         self._dragging = False
         self._snap_obj = None
         self._last_click_xy = np.empty(2)
-        self._solver = solvers.LinearSolver(gui)
+        self._solver = solvers.LinearSolver(gui.problem)
 
         self.displace = True
 
+        """ WIP: Nonlin but it doesn't solve properly with prescribed displacements ++ 
+        self._nonlin = False
+
+    @property
+    def nonlin(self):
+        return self._nonlin
+
+    @nonlin.setter
+    def nonlin(self, value):
+        self._nonlin = value
+        if value:
+            self._solver = solvers.NonLinearSolver(self._gui.problem)
+        else:
+            self._solver = solvers.LinearSolver(self._gui.problem)
+            """
 
     def activate(self):
         self._canvas.bind('<Button-1>', self.on_click)
@@ -169,11 +185,15 @@ class ToolDispl(Tool):
 
         pt = self._canvas.canvas_to_problem((event.x, event.y))
         if self.displace:
-            self._snap_obj.displacements = np.array([*(pt - self._last_click_xy), 0])
+            self._snap_obj.displacements[..., 0:2] = pt - self._last_click_xy
         else:
             self._snap_obj._r = pt
-        self._gui.draw_canvas()
-        self._solver.solveall()
+
+        disp = None
+        res = self._solver.solveall()
+        if res:
+            disp = res.get_displacement_slice[settings.get_setting('dssgui.ilc', 0), -1, :]
+        self._gui.draw_canvas(displacements=disp)
 
     def on_click(self, event):
         self._dragging = True

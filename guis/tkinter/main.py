@@ -14,7 +14,6 @@ import plugin_base
 import tools
 from core import problem, elements, settings, solvers, results
 
-
 from results_viewer import ResultsViewer
 
 np.set_printoptions(precision=2, suppress=True)
@@ -24,8 +23,8 @@ class DSSGUI:
     def __init__(self, root:tk.Tk, problem=None, *args, **kwargs):
         self.root = root
         self.root.minsize(width=1024, height=640)
-        self.icon = icon if icon else None
-        self.root.iconbitmap(self.icon)
+        self.icon = kwargs.pop('icon', None)
+        self.root.iconbitmap(self.icon)            
         self.problem = problem
 
         self.mainframe = tk.Frame(self.root, bg='white')
@@ -39,10 +38,12 @@ class DSSGUI:
         self.listbox_results = None
         self.rsm = None
         self.canvas:extras.DSSCanvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
-        self.canvas.dss = self # TODO: Remove
+        self.canvas.dss = self
         self.canvas.grid(row=0, column=0, sticky='nsew')
 
         settings.add_setting('dssgui.running_animation', True)
+        settings.add_setting('dssgui.ilc', 0)
+        settings.add_setting('dss.verbose', True)
 
         self.menus = {}
 
@@ -58,7 +59,7 @@ class DSSGUI:
         self.set_tool(tools.ToolSelect(self, self.canvas, root))
 
         if not self.problem.nodes:
-            self.canvas.add_object(self.problem.get_or_create_node((0,0)))
+            self.canvas.add_object(self.problem.get_or_create_node((0.0,0.0)))
         self.draw_canvas()
 
         self.plugins: Dict[type, plugin_base.DSSPlugin] = {}
@@ -92,12 +93,11 @@ class DSSGUI:
         self.menus['Solve'] = menu_solve
         topmenu.add_cascade(label='Solve', menu=menu_solve)
 
-
         def callback_factory(this, *args):
             return lambda : this.call_and_add_to_results(*args)
 
         self.add_topmenu_item('Solve', 'p.solve', callback_factory(self, lambda : self.problem.solve()))
-        self.add_topmenu_item('Solve', 'Nonlinear', callback_factory(self, lambda : solvers.NonLinearSolver(self.problem).solve()))
+        self.add_topmenu_item('Solve', 'Nonlinear', callback_factory(self, lambda : solvers.NonLinearSolver(self.problem, iteration_mode=1).solve_iter()))
 
         for plugin in plugins:
             instance = plugin(self)
@@ -117,17 +117,32 @@ class DSSGUI:
             menu.add_command(label=cmd_title, command=cmd)
 
 
-    def call_and_add_to_results(self, func:Callable[[], Iterable[Optional[results.Results]]]):
-        for x in func():
-            if x:
-                results = x
-                self.listbox_results.add(results)
+    def call_and_add_to_results(self, func:Callable[[], Optional[results.Results]]):
+        x = func()
+        disp = None
+        if isinstance(x, results.Results):
+            _results = x
+            disp = _results.get_displacement_slice[settings.get_setting('dssgui.ilc', 0), -1, :]            
+
+        elif hasattr(x, '__next__'): # Generator or something like that
+            for item in x: # Loop it but update ui displacements
+                if isinstance(item, results.Results):
+                    _results = item
+                    break # The last value should be a Results
+
+                displacements = item['displacements'] # Better be a dict with displacements
+                disp = displacements
+                self.draw_canvas(displacements=disp)
                 if settings.get_setting('dssgui.running_animation', True):
-                    self.draw_canvas()
-                break
-            self.draw_canvas()
-            if settings.get_setting('dssgui.running_animation', True):
-                self.canvas.update()
+                    self.canvas.update()
+            else:
+                raise TypeError(f'Last yielded value of {func} was {type(x)}, expected {results.Results}')
+
+        self.listbox_results.add(_results)
+
+        self.draw_canvas(displacements=disp)
+        if settings.get_setting('dssgui.running_animation', True):
+            self.canvas.update()
 
 
     def build_rsmenu(self):
@@ -200,14 +215,14 @@ class DSSGUI:
     def draw_canvas(self, *args, **kwargs):
         self.canvas.delete('all')  # Clear the canvas
 
-        self.canvas.redraw()
+        self.canvas.redraw(**kwargs)
         self.draw_csys()
 
-    def update_canvas(self):
+    def update_canvas(self, **kwargs):
         for obj in self.problem.nodes:
-            self.canvas.add_object(obj)
+            self.canvas.add_object(obj, **kwargs)
         for obj in self.problem.elements:
-            self.canvas.add_object(obj)
+            self.canvas.add_object(obj, **kwargs)
 
     def draw_csys(self):
         self.canvas.create_line(10, self.canvas.height-10,
@@ -521,10 +536,11 @@ class SectionManager(DSSInputMenu):
         self.top.destroy()
 
 if __name__ == '__main__':
-    #self.icon = 'dss_icon.ico' if _platform == 'win32' or _platform == 'win64' else '@dss_icon.xbm'
-    ext = 'ico' if sys.platform.startswith('win') else '.xbm'
-    icon = os.path.join(FILE_PATH, '..', 'gfx', f'dss_icon.{ext}')
-
+    if sys.platform.startswith('win32'):
+        icon = os.path.join(FILE_PATH, '..', 'gfx', 'dss_icon.ico')
+    else:
+        icon = '@' + os.path.join(FILE_PATH, '..', 'gfx', 'dss_icon.xbm')
+        
     # Load plugin_types
     plugin_list = []
     modules = [elements, solvers]
@@ -543,7 +559,7 @@ if __name__ == '__main__':
 
     p = problem.Problem()
     root = tk.Tk()
-    dss = DSSGUI(root, problem=p, plugins=plugin_list)
+    dss = DSSGUI(root, problem=p, plugins=plugin_list, icon=icon)
     dss.autoscale()
 
     root.mainloop()

@@ -1,6 +1,7 @@
 import collections
 import tkinter as tk
 import typing
+import inspect
 
 import numpy as np
 from typing import Iterable, Tuple, Callable
@@ -48,26 +49,31 @@ class DSSCanvas(tk.Canvas):
 
     def draw_node(self, pt, radius, *args, **kwargs):
         pt_canvas = self.problem_to_canvas(pt)
+        kwargs.pop('displacements', '')
         super().create_oval(*np.hstack((pt_canvas - radius, pt_canvas + radius)), *args, **kwargs)
 
     def draw_point(self, pt, radius, *args, **kwargs):
         pt_canvas = self.problem_to_canvas(pt)
+        kwargs.pop('displacements', '')
         super().create_oval(*np.hstack((pt_canvas - radius, pt_canvas + radius)), *args, **kwargs)
 
     def draw_oval(self, pt1, pt2, *args, **kwargs):
         pt1_canvas = self.problem_to_canvas(pt1)
         pt2_canvas = self.problem_to_canvas(pt2)
+        kwargs.pop('displacements', '')
         super().create_oval(*np.hstack((pt1_canvas, pt2_canvas)), *args, **kwargs)
 
     def draw_line(self, pt1, pt2, *args, **kwargs):
         r1 = self.problem_to_canvas(pt1)
         r2 = self.problem_to_canvas(pt2)
+        kwargs.pop('displacements', '')
         super().create_line(*np.hstack((r1, r2)), *args, **kwargs)
 
     def draw_arc(self, arc_start, arc_mid, arc_end, **kwargs):
         arc_start = self.problem_to_canvas(arc_start)
         arc_mid = self.problem_to_canvas(arc_mid)
         arc_end = self.problem_to_canvas(arc_end)
+        kwargs.pop('displacements', '')
         super().create_line(*arc_start, *arc_mid, *arc_end, **kwargs)
 
     def draw_polygon(self, pts, *args, **kwargs):
@@ -82,23 +88,23 @@ class DSSCanvas(tk.Canvas):
         self.create_text(*canvas_pt, text=text, *args, **kwargs)
 
     def problem_to_canvas(self, pt):
-        return np.linalg.solve(self.transformation_matrix, np.array([*pt, 1]))[0:2]
+        return np.linalg.solve(self.transformation_matrix, np.array([*pt, 1.0]))[0:2]
 
     def canvas_to_problem(self, pt):
         return (self.transformation_matrix @ np.array([*pt, 1]))[0:2]
 
-    def redraw(self):
+    def redraw(self, **kwargs):
         self.delete('all')
         self.snap_objs.clear()
         for obj in self.objects:
-            snap_pt = drawing.get_drawer(obj).draw_on_canvas(obj, self)
+            snap_pt = drawing.get_drawer(obj).draw_on_canvas(obj, self, **kwargs)
             self.snap_objs[obj] = snap_pt
         if self.selected_object and self.selected_object in self.snap_objs:
             pt = self.snap_objs[self.selected_object]
             scale = 4*np.abs(self.transformation_matrix[0,0] * self.transformation_matrix[1,1])
             self.draw_oval(pt - scale*np.ones(2), pt + scale*np.ones(2), outline='red')
 
-    def move(self, event):
+    def move(self, event, **kwargs):
         if self.prev_x is None or self.prev_y is None:
             self.prev_x = event.x
             self.prev_y = event.y
@@ -110,7 +116,7 @@ class DSSCanvas(tk.Canvas):
         self.prev_x = event.x
         self.prev_y = event.y
 
-        self.redraw()
+        self.redraw(**kwargs)
 
         if self.dss:
             self.dss.draw_canvas()
@@ -172,9 +178,9 @@ class DSSCanvas(tk.Canvas):
         self.transformation_matrix = R@np.linalg.inv(R_)
         self.redraw()
 
-    def add_object(self, obj):
+    def add_object(self, obj, **kwargs):
         self.objects.append(obj)
-        snap_pt = drawing.get_drawer(obj).draw_on_canvas(obj, self)
+        snap_pt = drawing.get_drawer(obj).draw_on_canvas(obj, self, **kwargs)
         self.snap_objs[obj] = snap_pt
 
     def get_closest(self, pt_canvas):
@@ -245,7 +251,7 @@ class DSSSettingsFrame(tk.Frame):
         if isinstance(val, bool):
             var = tk.BooleanVar()
             var.set(val)
-            self._refs.append(var) # Bug in Tkinter? This reference is somehow needed
+            self._refs.append(var)
             btn = tk.Checkbutton(self, variable=var, bg='gray82')
             btn.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
             var.trace_add('write', lambda *_: self.setter(key, var.get()))
@@ -270,10 +276,20 @@ class DSSSettingsFrame(tk.Frame):
             entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
             if isinstance(val, np.ndarray):
                 entry.bind('<FocusOut>', lambda *_: self.setter(key, self._recreate_sequence_ndarray(val.dtype, val.shape, entry.get())))
-        elif val is not None:
+        elif callable(val) and not (sig := inspect.signature(val)).parameters and sig.return_annotation == sig.empty:
+            # Add a button for calling functions that don't take arguments
+            btn = tk.Button(self)
+            btn.configure(text='Call')
+            btn.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
+            btn.configure(command=val)
+
+        elif not callable(val) and val is not None:
             entry = tk.Label(self, text=str(val)[0:25])
             entry.grid(row=int(self._cnt / 2 + 1), column=self._cnt % 2, sticky='wns')
-
+        else:
+            label.destroy()
+            self._cnt -= 1
+            return
 
         self._cnt += 1
 
@@ -296,7 +312,7 @@ class DSSSettingsFrame(tk.Frame):
 
     @classmethod
     def from_object(cls, master, obj):
-        kvps = ((k,v) for k,v in obj.__dict__.items() if not k.startswith('_'))
+        kvps = ((k,getattr(obj, k)) for k in dir(obj) if not k.startswith('_'))
         setter = lambda k,v: setattr(obj, k, v)
         return cls(master, kvps, setter)
 

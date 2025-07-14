@@ -1,7 +1,10 @@
 import tkinter as tk
 from typing import Callable
+import numpy as np
+import matplotlib.pyplot as plt
 from guis.tkinter.extras import DSSCanvas, DSSSettingsFrame, DSSListbox
 from core.results import Results
+from core import settings
 
 class ResultsViewer:
     def __init__(self, root, results:Results, **kwargs):
@@ -34,14 +37,14 @@ class ResultsViewer:
         self.stringvar = tk.StringVar()
 
         self.results = results
-        classes = set()
+        self._cur_lc = 0
+        self._cur_hist = 0
         for item in self.results.get_objects():
             self.canvas.add_object(item)
-            classes.add(item.__class__)
 
         i = 3
-        for name, func in results.get_actions().items():
-            button = tk.Button(right_frame, text=name, command=self.on_click_factory(func))
+        for func in (self.quickplot,):
+            button = tk.Button(right_frame, text=func.__name__.capitalize(), command=self.on_click_factory(func))
             button.grid(row=i)
             i += 1
 
@@ -52,31 +55,47 @@ class ResultsViewer:
         results.on_after_resultview_built(self)
 
     def animate_func(self):
-        animator = ResultAnimator(self.results, self.canvas)
+        animator = ResultAnimator(self.results, self.canvas, self._cur_lc)
         animator.add_hook(lambda i: self.stringvar.set(f'Current displacement set: {i}'))
         animator.start()
-    def _iterate_results(self):
-        interval = int(1000 * 2 / self.results.num_displ_sets)
-        self.current_displ_set = 0
-        for step in range(self.results.num_displ_sets):
-            self.results.set_displacements()
-            self.results.current_displ_set += 1
-            yield interval
-        yield False
 
     def on_click_factory(self, func):
         def return_func():
             func()
             self.canvas.redraw()
-            self.stringvar.set(f'Current displacement set: {self.results.current_displ_set}')
+            self.stringvar.set(f'Current displacement set: {self._cur_hist}')
         return return_func
+        
+    def quickplot(self, fig=None, ax=None):
+        if fig is None or ax is None:
+            fig,ax = plt.subplots()
 
+        for node in self.results.nodes:
+            if node.loads.any():
+                break
+        
+        dof = node.dofs[np.abs(node.loads).argmax()]
+        displ_history = self.results.get_displacement_slice[self._cur_lc, :, dof]
+        sign = np.sign(np.average(displ_history))
+        load_history = self.results.get_force_slice[self._cur_lc, :]
+
+        plt.ylabel('Control parameter')
+        plt.xlabel('Displacement')
+        plt.title(f'Displacement vs control parameter at dof {dof}')
+        plt.plot(sign * displ_history, load_history)
+        plt.show()
 
 class ResultAnimator:
-    def __init__(self, results, canvas):
+    def __init__(self, results:Results, canvas, i_lc):
         self.results = results
         self.canvas = canvas
-        self._delay = int(2000 / self.results.num_displ_sets)
+
+        _, nhist, _ = results.get_size()
+        self._i_lc = i_lc
+        self._i_hist = 0
+        self._n_hist = nhist[i_lc]
+
+        self._delay = int(2000 / self._n_hist)
         self._running = False
         self._hooks = []
 
@@ -91,10 +110,14 @@ class ResultAnimator:
         self._hooks.append(hook)
 
     def _run_animation(self):
-        if self.results.increment() == 0:
+        if self._i_hist == self._n_hist:
+            self.stop()
             return
-        self.canvas.redraw()
+        
+        self.canvas.redraw(displacements=self.results.get_displacement_slice[self._i_lc, self._i_hist, :])
+        self._i_hist += 1
+        self.canvas.update()
         if self._running:
             for hook in self._hooks:
-                hook(self.results.current_displ_set)
+                hook(self._i_hist)
             self.canvas.after(self._delay, self._run_animation)

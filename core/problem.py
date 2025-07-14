@@ -74,14 +74,14 @@ class Problem:
         for node in self.nodes:
             self.constrained_dofs.extend(node.dofs[node.constrained_dofs])
 
-    def nonlin_update(self, i_lc):
+    def nonlin_update(self, i_lc, displacements):
         for e in self.elements:
-            e.nonlin_update(ElementBehavior.NONLIN_GEOM, i_lc)
+            e.nonlin_update(ElementBehavior.NONLIN_GEOM, i_lc, displacements)
 
-    def model_size(self):
+    def model_size(self) -> float:
         xy = self.nodal_coordinates
         if not np.any(xy):
-            return 1
+            return 1.0
         else:
             model_size = np.sqrt( (np.max(xy[:,0]) - np.min(xy[:,0]))**2 + (np.max(xy[:,1]) - np.min(xy[:,1]))**2)
             return model_size
@@ -92,57 +92,64 @@ class Problem:
     def M(self):
         return self.assemble_matrix(lambda e: e.mass_matrix_global())
 
-    def K(self):
-        return self.assemble_matrix(lambda e: e.stiffness_matrix_global())
+    def K(self, displacements):
+        return self.assemble_matrix(lambda e: e.stiffness_matrix_global(displacements), displacements.shape[-1])
 
-    def assemble_vector(self, collection:Iterable[T], func:Callable[[T], np.ndarray], min_max_dim=0):
-        max_dim = max(min_max_dim, max(func(x).shape[1] if func(x).ndim > 1 else 1 for x in collection))
-        assembly = np.zeros((sum(n.ndofs() for n in self.nodes), max_dim))
+    def assemble_vector(self, collection:Iterable[T], func:Callable[[T], np.ndarray], ndofs:int):
+        shape = np.asarray(func(next(iter(collection))).shape)
+        shape[-1] = ndofs
+        assembly = np.zeros(shape)
         for item in collection:
-            assembly[item.dofs, :] += func(item)
+            assembly[..., item.dofs] += func(item)
         return assembly
 
-    def assemble_matrix(self, elem_func):
+    def assemble_matrix(self, elem_func, ndofs):
         if not self.constrained_dofs:
             self.remove_dofs()
 
-        num_dofs = sum(n.ndofs() for n in self.nodes)
+        shape = np.asarray(elem_func(self.elements[0]).shape)
+        shape[-1] = ndofs
+        shape[-2] = ndofs
+        matrix = np.zeros(shape)
 
-        matrix = np.zeros((num_dofs, num_dofs))
         for e in self.elements:
             contrib = elem_func(e)
-            matrix[e.ix()] += contrib
+            ix = e.ix()
+            matrix[..., ix[0], ix[1]] += contrib
 
         return matrix
 
-    def solve(self) -> Iterable[Optional[results.ResultsStaticLinear]]:
+    def solve(self) -> Optional[results.ResultsStaticLinear]:
         self.reassign_dofs()
         self.remove_dofs()
         free_dofs = self.free_dofs()
         constrained_dofs = self.constrained_dofs
+        ndofs = sum(node.ndofs() for node in self.nodes)
 
         iterables = [e for e in self.elements if ElementBehavior.ITERABLE in e.behavior]
         max_iter = 8
         itercnt = 0
 
         while True:
-            K = self.K()
+            K = self.K(np.zeros(ndofs))
             K11 = K[np.ix_(free_dofs, free_dofs)]
             K12 = K[np.ix_(free_dofs, constrained_dofs)]
             K21 = K[np.ix_(constrained_dofs, free_dofs)]
             K22 = K[np.ix_(constrained_dofs, constrained_dofs)]
 
             # Assemble displacements
-            forces = self.assemble_vector(self.nodes, lambda n: n.loads)
-            displacements = self.assemble_vector(self.nodes, lambda n:n.displacements, forces.shape[1])
-            preload = self.assemble_vector(self.elements, lambda e:e.preload, forces.shape[1])
+            forces = self.assemble_vector(self.nodes, lambda n: n.loads, ndofs)
+            displacements = self.assemble_vector(self.nodes, lambda n:n.displacements, ndofs)
+            preload = self.assemble_vector(self.elements, lambda e:e.preload, ndofs)
+            if forces.shape != displacements.shape or forces.shape != preload.shape:
+                forces,displacements,preload = [np.array(a) for a in np.broadcast_arrays(forces, displacements, preload)]
 
-            displacements[free_dofs, :] = np.linalg.solve(K11, (forces+preload)[free_dofs, :] - K12 @ displacements[constrained_dofs, :])
-            forces[constrained_dofs, :] = K21 @ displacements[free_dofs, :] + K22 @ displacements[constrained_dofs, :]
+            displacements[..., free_dofs] = np.linalg.solve(K11, ((forces+preload)[..., free_dofs].T - K12 @ displacements[..., constrained_dofs].T)).T
+            forces[..., constrained_dofs] = (K21 @ displacements[..., free_dofs].T + K22 @ displacements[..., constrained_dofs].T).T
 
             for node in self.nodes:
-                node.loads = (forces - preload)[node.dofs, :]
-                node.displacements = displacements[node.dofs, :]
+                node.loads = (forces - preload)[..., node.dofs]
+                node.displacements = displacements[..., node.dofs]
             self.displacements = displacements
 
             if not iterables:
@@ -154,8 +161,7 @@ class Problem:
 
             itercnt += 1
 
-
-        return [results.ResultsStaticLinear(self, displacements)]
+        return results.ResultsStaticLinear(self, forces, displacements)
 
     def plot(self):
         nodal_coordinates = np.array([0,0])

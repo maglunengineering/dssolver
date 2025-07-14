@@ -11,14 +11,28 @@ class Node(DSSModelObject):
         self._r = np.array(xy)
 
         self._elements = list()
-        self.loads = np.zeros((3,1), dtype=float) # self.loads (global Fx, Fy, M) assigned on loading
-        self.displacements = np.zeros((3,1), dtype=float)
+        self._loads = np.zeros(3, dtype=float) # self.loads (global Fx, Fy, M) assigned on loading
+        self.displacements = np.zeros(3, dtype=float)
 
         self._dofs = None
         self.constrained_dofs = []
 
+    @property
+    def loads(self):
+        return self._loads
+
+    @loads.setter
+    def loads(self, value):
+        self._loads = value
+
+    def get_displacements(self, displacements):
+        if self._dofs is None or displacements is None:
+            return np.zeros(3)
+        return displacements[..., self._dofs]
+
     def add_element(self, beam):
-        self._elements.append(beam)
+        if beam not in self._elements:
+            self._elements.append(beam)
 
     @property
     def r(self):
@@ -32,27 +46,31 @@ class Node(DSSModelObject):
 
     @property
     def dofs(self):
+        if self._dofs is None:
+            return np.arange(self.ndofs())
         return self._dofs
 
     @dofs.setter
     def dofs(self, value):
-        if self.loads.ndim == 1:
-            self.loads = self.loads.reshape((-1, 1))
-        if self.displacements.ndim == 1:
-            self.displacements = self.displacements.reshape((-1, 1))
+        new_ndofs = len(value)
+        old_ndofs = len(self._dofs) if self._dofs is not None else new_ndofs
 
-        if self.loads.shape[1] != len(value):
-            new_loads = np.zeros((len(value), self.loads.shape[1]), dtype=float)
-            new_loads[0:min(self.loads.shape[0], len(value)), :] = self.loads[0:min(self.loads.shape[0], len(value)), :]
+
+        new_shape = np.array(self.loads.shape)
+        new_shape[-1] = new_ndofs
+
+        if new_ndofs > old_ndofs:
+            new_loads = np.zeros(new_shape)
+            new_disp = np.zeros(new_shape)
+            new_loads[..., :old_ndofs] = self.loads
+            new_disp[..., :old_ndofs] = self.displacements
             self.loads = new_loads
+            self.displacements = new_disp
+        else:
+            self.loads = self.loads[..., :old_ndofs]
+            self.displacements = self.displacements[..., :old_ndofs]
 
-        if self.displacements.shape[1] != len(value):
-            new_displacements = np.zeros_like(self.loads)
-            new_displacements[0:min(self.displacements.shape[0], len(value)), :] = self.displacements[0:min(self.displacements.shape[0], len(value)), :]
-            self.displacements = new_displacements
-
-
-        while len(value) < len(self.constrained_dofs):
+        while new_ndofs < len(self.constrained_dofs):
             self.constrained_dofs.pop()
 
         self._dofs = value
@@ -124,7 +142,7 @@ class FiniteElement(DSSModelObject):
             node.add_element(self)
 
         self.stiffness_matrix_local = np.zeros((6,6))
-        self.preload: np.ndarray = np.zeros((1,1))
+        self.preload: np.ndarray = np.zeros(1)
         self._dofs = None # Cached
         self._ix = None # Cached
 
@@ -141,13 +159,13 @@ class FiniteElement(DSSModelObject):
             self._ix = np.ix_(self._dofs, self._dofs)
         return self._ix
 
-    def stiffness_matrix_global(self):
+    def stiffness_matrix_global(self, displacements) -> np.ndarray:
         raise NotImplementedError(self.__class__.__name__)
 
-    def get_displacements(self):
-        return np.vstack([n.displacements for n in self.nodes]) # hstack because we are flattening dim 1
+    def get_displacements(self, displacements):
+        return displacements[..., self.dofs]
 
-    def nonlin_update(self, behavior, i_lc):
+    def nonlin_update(self, behavior, i_lc, displacements):
         pass
 
     def do_iterate(self, global_K:np.ndarray, global_u:np.ndarray, global_f:np.ndarray) -> bool:
@@ -162,7 +180,9 @@ class FiniteElement(DSSModelObject):
         init_args = inspect.getfullargspec(self.__init__).args
         kwargs = {}
         for arg in init_args:
-            if hasattr(self, arg):
+            if arg == 'self':
+                continue
+            elif hasattr(self, arg):
                 kwargs[arg] = getattr(self, arg)
             elif hasattr(self, '_' + arg):
                 kwargs[arg] = getattr(self, '_' + arg)
@@ -182,10 +202,14 @@ class FiniteElement2Node(FiniteElement):
         assert np.allclose(node2.displacements, 0)
 
         self._undeformed_length = np.linalg.norm(self.r2 - self.r1)
-        self._forces_local = np.zeros((6,1))
-        self._deformed_length = self._update_deformed_length(0)
-        self._transform = self._update_transform(0)
-        self._stiffness = self._update_stiffness(0)
+
+    @property
+    def stiffness_matrix_local(self):
+        return self._stif_local
+
+    @stiffness_matrix_local.setter
+    def stiffness_matrix_local(self, value):
+        self._stif_local = value
 
     @property
     def r1(self):
@@ -195,43 +219,61 @@ class FiniteElement2Node(FiniteElement):
     def r2(self):
         return self.node2.r
 
-    def nonlin_update(self, behavior, i_lc):
-        if ElementBehavior.NONLIN_GEOM in behavior:
-            self._update_deformed_length(i_lc)
-            self._update_transform(i_lc)
-            self._update_forces_local(i_lc)
-            self._update_stiffness(i_lc)
+    def nonlin_update(self, behavior, i_lc, displacements):
+        pass
 
-    def get_forces(self):
-        return self._transform.T @ self._get_forces_local()
+    def get_external_forces(self, displacements):
+        T_T = np.swapaxes(self._get_transform(displacements), -1, -2) # Transpose that works for both (m,n,n) and (n,n)
+        f = self._get_forces_local(displacements)[..., np.newaxis]
+        return (T_T @ f)[..., 0] # ((m), n, n) @ ((m), n, n) -> ((m), n)
 
-    def _update_transform(self, i_lc):
-        e1 = ((self.node2.r + self.node2.displacements[:2, i_lc]) -
-              (self.node1.r + self.node1.displacements[:2, i_lc])) / self._deformed_length
-        e2 = [-e1[1], e1[0]]
-        T = np.array([[e1[0], e1[1], 0, 0, 0, 0],
-                      [e2[0], e2[1], 0, 0, 0, 0],
-                      [0, 0, 1, 0, 0, 0],
-                      [0, 0, 0, e1[0], e1[1], 0],
-                      [0, 0, 0, e2[0], e2[1], 0],
-                      [0, 0, 0, 0, 0, 1]])
-        self._transform = T
-        return self._transform
+    def _get_transform(self, displacements):
+        if displacements is not None:
+            deformed_length = self._get_deformed_length(displacements)
+            e1 = ((self.node2.r + self.node2.get_displacements(displacements)[..., :2]) -
+                  (self.node1.r + self.node1.get_displacements(displacements)[..., :2])) / deformed_length
+        else:
+            e1 = (self.node2.r - self.node1.r) / self._undeformed_length
+        e2 = e1[..., ::-1] * np.array([-1, 1])
+        if e1.ndim > 1:
+            T = np.zeros((*e1.shape[:-1], 6, 6))
+        else:
+            T = np.zeros((6,6))
 
-    def _update_stiffness(self, i_lc):
-        self._stiffness = self._transform.T @ (self.stiffness_matrix_local + self._get_stiffness_geometric(i_lc)) @ self._transform
-        return self._stiffness
+        T[...,0,0] = e1[..., 0]
+        T[...,0,1] = e1[..., 1]
+        T[...,1,0] = e2[..., 0]
+        T[...,1,1] = e2[..., 1]
+        T[...,3,3] = e1[..., 0]
+        T[...,3,4] = e1[..., 1]
+        T[...,4,3] = e2[..., 0]
+        T[...,4,4] = e2[..., 1]
+        T[...,2,2] = 1.0
+        T[...,5,5] = 1.0
 
-    def stiffness_matrix_global(self):
-        return self._stiffness
+        return T
 
-    def _get_stiffness_geometric(self, i_lc):
-        fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local().flatten()
-        forces_permuted = np.array([-fy1, fx1, 0, -fy2, fx2, 0])
-        G = np.array([0, -1/self._deformed_length, 0, 0, 1/self._deformed_length, 0])
-        return np.outer(forces_permuted, G)
+    def stiffness_matrix_global(self, displacements, geostiff=True) -> np.ndarray:
+        T = self._get_transform(displacements)
+        K = self.stiffness_matrix_local
+        if geostiff and displacements is not None:
+            K = (K + self._get_stiffness_geometric(displacements))
+        return np.swapaxes(T, -1, -2) @ K @ T
 
-    def mass_matrix_global(self):
+    def _get_stiffness_geometric(self, displacements):
+        deformed_length = self._get_deformed_length(displacements)
+        #fx1,fy1,m1,fx2,fy2,m2 = self._get_forces_local(displacements)
+        forces_permuted = self._get_forces_local(displacements)[..., [1, 0, 2, 4, 3, 5]] * np.array([-1, 1, 0, -1, 1, 0])
+        o = np.zeros_like(deformed_length) # Zero
+
+        # 1d:
+        # Outer product of n 6-vectors:
+        # (n,6), (n,6) -> (n, 1, 6) * (n, 6, 1) -> (n, 6, 6)
+
+        G = np.array([o, -1/deformed_length, o, o, 1/deformed_length, o]).T
+        return forces_permuted[..., np.newaxis, :] * G[0, ..., :, np.newaxis]
+
+    def mass_matrix_global(self) -> np.ndarray:
         T = self._transform
         density = 7.86e-9 # Density of steel in tonnes / mm^3
         half_mass = self.A * self._undeformed_length * density / 2
@@ -245,35 +287,37 @@ class FiniteElement2Node(FiniteElement):
                                       [0, 0, 0, 0, 0, rot_mass]])
         return T.T @ local @ T
 
-    def _update_deformed_length(self, i_lc):
-        self._deformed_length = np.linalg.norm((self.node2.r + self.node2.displacements[:2, i_lc] -
-                                                self.node1.r - self.node1.displacements[:2, i_lc]))
-        return self._deformed_length
+    def _get_deformed_length(self, displacements):
+        r1 = self.node1.r + self.node1.get_displacements(displacements)[..., :2]
+        r2 = self.node2.r + self.node2.get_displacements(displacements)[..., :2]
+        return np.linalg.norm(r2 - r1, axis=-1, keepdims=True)
 
-    def _get_forces_local(self):
-        return self._forces_local
+    def get_forces_local_lin(self, displacements):
+        disp_local = self.get_displacements(displacements) @ np.swapaxes(self._get_transform(displacements), -1, -2)
+        return disp_local @ self.stiffness_matrix_local - self.preload
 
-    def get_forces_local_lin(self):
-        disp_local = self._transform @ np.vstack((self.node1.displacements, self.node2.displacements))
-        return self.stiffness_matrix_local @ disp_local - self.preload
-
-    def _update_forces_local(self, i_lc):
+    def _get_forces_local(self, displacements):
         r1 = self.r1
         r2 = self.r2
-        dl = self._deformed_length - self._undeformed_length
+        u1 = self.node1.get_displacements(displacements)
+        u2 = self.node2.get_displacements(displacements)
+        uu = np.stack((u1,u2), axis=0)
+        # ^ np.stack creates a new axis on the very left. Saves some calls (esp to R) below which is slow
+        # In those cases, [0] is at node1 and [1] is at node 2.
 
-        tan_e = (r2 - r1)/self._undeformed_length
-        tan_ed = (r2 + self.node2.displacements[0:2, i_lc] -
-                  r1 - self.node1.displacements[0:2, i_lc])/self._deformed_length
-        tan_1 = R(self.node1.displacements[2, i_lc]) @ tan_e
-        tan_2 = R(self.node2.displacements[2, i_lc]) @ tan_e
-
-        th1 = np.arcsin(tan_ed[0]*tan_1[1] - tan_ed[1]*tan_1[0])
-        th2 = np.arcsin(tan_ed[0]*tan_2[1] - tan_ed[1]*tan_2[0])
-
-        displacements_local = np.array([-dl/2, 0, th1, dl/2, 0, th2]).reshape((6,1))
-        self._forces_local = self.stiffness_matrix_local @ displacements_local
-        return self._forces_local
+        tan_ed = (r2 - r1 + (u2 - u1)[..., 0:2])
+        deformed_length = np.linalg.norm(tan_ed, axis=-1, keepdims=True)
+        dl = deformed_length - self._undeformed_length
+        tan_e0 = (r2 - r1)/self._undeformed_length
+        tan_ed = tan_ed/deformed_length
+        tan_rd = R(uu[..., 2:3]) @ tan_e0 # R is slow as hell. Try to reformulate?
+        th = np.arcsin(tan_ed[..., 0:1]*tan_rd[..., 1:2] - tan_ed[..., 1:2]*tan_rd[..., 0:1]) # Indexers like 0:1 are to get a single value but keep the dimension
+        displacements_local = np.zeros((*displacements.shape[:-1], 6))
+        displacements_local[..., [0]] = -dl/2
+        displacements_local[..., [2]] = th[0]
+        displacements_local[..., [3]] = dl/2
+        displacements_local[..., [5]] = th[1]
+        return displacements_local @ self.stiffness_matrix_local
 
 class Beam(FiniteElement2Node):
     def __init__(self, node1:Node, node2:Node, E=2e5, A=1e5, I=1e5, z=None):
@@ -294,18 +338,17 @@ class Beam(FiniteElement2Node):
               [0, -12, -6*length, 0, 12, -6*length],
               [0, 6*length, 2*length**2, 0, -6*length, 4*length**2]])
 
-        self._stiffness = self._update_stiffness(0)
-
-    def get_strain_energy(self):
+    def get_strain_energy(self, displacements):
         """ Bending energy: integral (x=0, L, M(x)/(2EI), dx)
             Am assuming M(x) = M1(1-x/L) + M2(x/L) """
 
+        deformed_length = self._get_deformed_length(displacements)
         c = 1/(6 * self.E * self.I)
-        forces = self._get_forces_local()
-        M1,M2 = forces[2], forces[5]
+        forces = self.get_forces_local_lin(displacements)
+        M1,M2 = forces[..., 2], forces[..., 5]
         bending_strain_energy = c*(M1**2 + M1*M2 + M2**2)*self._undeformed_length
 
-        axial_strain = 1 - self._deformed_length/self._undeformed_length
+        axial_strain = 1 - deformed_length/self._undeformed_length
         axial_stress = self.E * axial_strain
         axial_strain_energy = 0.5 * axial_stress * axial_strain * self.A * self._undeformed_length
 
@@ -328,7 +371,6 @@ class Rod(FiniteElement2Node):
                                                   [-self.kn, 0, 0, self.kn, 0, 0],
                                                   [0, 0, 0, 0, 0, 0],
                                                   [0, 0, 0, 0, 0, 0]])
-        self._stiffness = self._update_stiffness(0)
 
     def get_strain_energy(self):
         strain = 1 - self._deformed_length() / self._undeformed_length
@@ -343,11 +385,11 @@ class BoundarySpring(FiniteElement):
         super().__init__([node])
         self.stiffness_matrix_local = np.diag(np.asarray(stiffness))
 
-    def stiffness_matrix_global(self):
+    def stiffness_matrix_global(self, displacements) -> np.ndarray:
         return self.stiffness_matrix_local
 
-    def get_forces(self):
-        return self.stiffness_matrix_local @ self.get_displacements()
+    def get_external_forces(self, displacements):
+        return self.get_displacements(displacements) @ self.stiffness_matrix_local
 
 
 class PenaltyBeam(FiniteElement):
@@ -358,7 +400,7 @@ class PenaltyBeam(FiniteElement):
         self._is_calibrated = False
 
 
-    def stiffness_matrix_global(self):
+    def stiffness_matrix_global(self, displacements) -> np.ndarray:
         return self.stiffness_matrix_local
 
     def do_iterate(self, global_K:np.ndarray, global_u:np.ndarray, global_f:np.ndarray) -> bool:
@@ -392,7 +434,7 @@ class Quad4(FiniteElement):
         self.t = t
         self._r = np.array([node.r for node in self.nodes])
 
-    def stiffness_matrix_global(self):
+    def stiffness_matrix_global(self, displacements) -> np.ndarray:
         a = 1 / np.sqrt(3)
         integration_points = [[-a, a], [a, a], [-a, -a], [a, -a]]
 
@@ -440,6 +482,10 @@ def beta(angle):
                      [0, 0, 0, 0, 0, 1]])
 
 def R(angle):
+    T = np.zeros((*np.shape(angle)[:-1], 2, 2))
     s, c = np.sin(angle), np.cos(angle)
-    return np.array([[c, -s],
-                     [s, c]])
+    T[..., [0], [0]] = c
+    T[..., [0], [1]] = -s
+    T[..., [1], [0]] = s
+    T[..., [1], [1]] = c
+    return T
