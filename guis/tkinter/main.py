@@ -34,7 +34,7 @@ class DSSGUI:
         self.mainframe.winfo_toplevel().title('DSSolver')
         self.topmenu = None
         self.settings_frame = None
-        self._settings_frame_dict = {}
+        self._settings_frame_content = []
         self.sel_obj_settings:extras.DSSSettingsFrame = None
         self.selected_object = None
         self.listbox_results = None
@@ -156,22 +156,13 @@ class DSSGUI:
         self.right_frame.grid(row=0, column=1, sticky='nsew')
 
         self.listbox_results = extras.DSSListbox(self.right_frame)
-        #self.listbox_results.grid(row=1, column=0)
         self.listbox_results.pack()
         self.listbox_results.bind('<Double-Button-1>', self.view_results)
 
         self.settings_frame = tk.Frame(self.right_frame, bg=color2, width=400)
-        #self.rsm_settings.grid(row=3, column=0, sticky='nw')
         self.settings_frame.pack()
-        #rsm_shm_label = tk.Label(self.rsm_settings, text='Settings', bg=color2)
-        #rsm_shm_label.grid(row=0, column=1, columnspan=3, sticky='ew')
-#
-        #rsm_shm_label2 = tk.Label(self.rsm_settings, text='Selected object', bg=color2)
-        #rsm_shm_label2.grid(row=4, column=1, columnspan=3, sticky='ew')
 
         self.set_settings_('Settings', 'dss')
-
-        #self.set_settings_default()
 
     def is_keydown(self, key):
         return self._kbw.is_keydown(key)
@@ -179,32 +170,27 @@ class DSSGUI:
     def set_settings_(self, key, category_or_object):
         """ This is the only method to control self.settings_frame
         """
-        if key in self._settings_frame_dict:
-            self._settings_frame_dict.pop(key).destroy()
-        if (key_label := f'{key}.Label') in self._settings_frame_dict:
-            self._settings_frame_dict.pop(key_label).destroy()
-
+        # We must get the existing frame before creating the new one as the new one goes in winfo_children() immediately (doesn't wait for pack())
+        label_text = key if isinstance(category_or_object, str) else f'{key}.{category_or_object.__class__.__name__}'
+        existing_frame = [x for x in self.settings_frame.winfo_children() if isinstance(x, extras.DSSSettingsFrame) and x.title.split('.')[0] == key]
+        
         if isinstance(category_or_object, str):
-            frame = extras.DSSSettingsFrame.from_settings(self.settings_frame, category_or_object)
+            frame = extras.DSSSettingsFrame.from_settings(self.settings_frame, category_or_object, title=f'{key}.{category_or_object}')
         elif not isinstance(category_or_object, typing.Iterable):
-            frame = extras.DSSSettingsFrame.from_object(self.settings_frame, category_or_object)
+            frame = extras.DSSSettingsFrame.from_object(self.settings_frame, category_or_object, title=label_text)
         else: # Multiselect
-            frame = extras.DSSSettingsFrame.from_object(self.settings_frame, context_menu.ContextMenu(category_or_object, self))
+            frame = extras.DSSSettingsFrame.from_object(self.settings_frame, context_menu.ContextMenu(category_or_object, self), title=label_text)
 
         if len(frame) == 0:
-            return
+            return        
+        
+        if existing_frame: # Replace the frame
+            existing_frame = existing_frame[0]
+            frame.pack(before=existing_frame)
+            existing_frame.destroy()
+        else:
+            frame.pack()
 
-        self._settings_frame_dict[key] = frame
-        index = len(self._settings_frame_dict)
-
-        text = key if isinstance(category_or_object, str) else f'{key} ({category_or_object.__class__.__name__})'
-        label = tk.Label(self.settings_frame, text=text, bg='gray82')
-        self._settings_frame_dict[f'{key}.Label'] = label
-        #label.grid(row=2*index, column=1, columnspan=2, sticky='ew')
-        label.pack()
-
-        #frame.grid(row=2*index+1, column=1, columnspan=2, sticky='ew')
-        frame.pack()
 
     def set_settings_default(self):
         if self.sel_obj_settings:

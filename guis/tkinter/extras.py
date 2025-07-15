@@ -232,9 +232,14 @@ class DSSSettingsFrame(tk.Frame):
         if not 'cnf' in kwargs:
             kwargs['cnf'] = {}
         kwargs['bg'] = 'gray82'
+        self.title = kwargs.pop('title', '')
         super().__init__(master, width=120, **kwargs)
         self._refs = []
         self._cnt = 0
+
+        if self.title:
+            tk.Label(self, text=self.title).grid(row=0, column=0, columnspan=2)
+            self._cnt += 2
 
         self.settings = settings
         def log(f):
@@ -310,18 +315,18 @@ class DSSSettingsFrame(tk.Frame):
         pass
 
     @classmethod
-    def from_settings(cls, master, category):
-        return cls(master, settings.get_by_category(category), settings.set_setting)
+    def from_settings(cls, master, category, **kwargs):
+        return cls(master, settings.get_by_category(category), settings.set_setting, **kwargs)
 
     @classmethod
-    def from_object(cls, master, obj):
+    def from_object(cls, master, obj, **kwargs):
         kvps = ((k,getattr(obj, k)) for k in dir(obj) if not k.startswith('_'))
         setter = lambda k,v: setattr(obj, k, v)
-        return cls(master, kvps, setter)
+        return cls(master, kvps, setter, **kwargs)
     
     @classmethod
-    def from_dictionary(cls, master, dictionary):
-        return cls(master, dictionary.items(), dictionary.__setitem__)
+    def from_dictionary(cls, master, dictionary, **kwargs):
+        return cls(master, dictionary.items(), dictionary.__setitem__, **kwargs)
 
 
     def __len__(self):
