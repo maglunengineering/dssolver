@@ -318,6 +318,10 @@ class DSSSettingsFrame(tk.Frame):
         kvps = ((k,getattr(obj, k)) for k in dir(obj) if not k.startswith('_'))
         setter = lambda k,v: setattr(obj, k, v)
         return cls(master, kvps, setter)
+    
+    @classmethod
+    def from_dictionary(cls, master, dictionary):
+        return cls(master, dictionary.items(), dictionary.__setitem__)
 
 
     def __len__(self):

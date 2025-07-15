@@ -35,14 +35,32 @@ class ContextMenu:
         props = {'E':210000, 'I':83e4, 'A':1e3}
         top = tkinter.Toplevel(self._gui.root)
         top.winfo_toplevel().title('Properties')
-        #top.
+        
 
         beam = self._problem.create_beam(node1, node2)
         self._gui.update_canvas()
 
     def _cm_create_quad(self, node1:elements.Node, node2:elements.Node, node3:elements.Node, node4:elements.Node):
-        quad = elements.Quad4(node1, node2, node3, node4)
+        props = self._show_input_dialog({'E':210000, 'v':0.3, 't':1})
+
+        quad = elements.Quad4(node1, node2, node3, node4, **props)
         self._problem.elements.append(quad)
+        self._gui.update_canvas()
+
+    def _show_input_dialog(self, kvps):
+        # Shows an input dialog for the user to populate remaining arguments.
+        # **kvps are key-value pairs. Values better be editable in a DSSSettingsFrame
+        wnd = tkinter.Toplevel()
+        
+        frame = extras.DSSSettingsFrame.from_dictionary(wnd, kvps)
+        frame.pack()
+        btn_ok = tkinter.Button(wnd, text="Ok", command=lambda *a: wnd.destroy())
+        btn_ok.pack()
+
+        wnd.grab_set() # Makes the window modal
+        wnd.wait_window() # Blocks until the window closes
+
+        return kvps
 
 
 
