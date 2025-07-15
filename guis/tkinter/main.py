@@ -75,7 +75,7 @@ class DSSGUI:
 
     # Building functions
     def build_grid(self):
-        self.mainframe.columnconfigure(0, weight=1)  #
+        self.mainframe.columnconfigure(0, weight=1)
         self.mainframe.columnconfigure(1, weight=1)  # Quick menu
         self.mainframe.rowconfigure(0, weight=1)  # Canvas (resizable)
 
