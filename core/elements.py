@@ -76,7 +76,10 @@ class Node(DSSModelObject):
         self._dofs = value
 
     def ndofs(self):
-        return max(e.ndofs for e in self._elements)
+        if self._elements:
+            return max(e.ndofs for e in self._elements)
+        else:
+            return 3
 
     def connected_nodes(self):
         other_nodes = []
