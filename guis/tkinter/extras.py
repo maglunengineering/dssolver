@@ -153,7 +153,7 @@ class DSSCanvas(tk.Canvas):
         xmax, xmin, ymax, ymin = self._get_bounds()
 
         if np.isclose(xmin, xmax) and np.isclose(ymin, ymax):
-            self.transformation_matrix = np.eye(3)
+            self.transformation_matrix = np.diag([1.0, -1.0, 1.0])
             self.redraw()
             return
 
