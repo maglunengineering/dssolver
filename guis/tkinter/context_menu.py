@@ -14,7 +14,7 @@ class ContextMenu:
     def __init__(self, items, gui:'DSSGUI'):
         self._items = items
         self._gui = gui
-        self._problem = gui.problem
+        self._problem:problem.Problem = gui.problem
 
         typecnt = defaultdict(int)
         for item in items:
@@ -32,12 +32,8 @@ class ContextMenu:
                     setattr(self, k[4:], functools.partial(val, *items))
 
     def _cm_create_beam(self, node1:elements.Node, node2:elements.Node):
-        props = {'E':210000, 'I':83e4, 'A':1e3}
-        top = tkinter.Toplevel(self._gui.root)
-        top.winfo_toplevel().title('Properties')
-        
-
-        beam = self._problem.create_beam(node1, node2)
+        props = self._show_input_dialog({'A':100, 'E':210000, 'I':1e4/12})
+        beam = self._problem.create_beam(node1, node2, **props)
         self._gui.update_canvas()
 
     def _cm_create_quad(self, node1:elements.Node, node2:elements.Node, node3:elements.Node, node4:elements.Node):
