@@ -9,6 +9,8 @@ from core import problem, elements, settings, solvers, results
 
 
 class ContextMenu:
+    """ The context menu is an object that can be shown in a settings frame
+    """
     def __init__(self, items, gui:'DSSGUI'):
         self._items = items
         self._gui = gui

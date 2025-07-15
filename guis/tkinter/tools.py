@@ -33,7 +33,7 @@ class ToolSelect(Tool):
         self._r1 = None
         self._r2 = None  # For self.start_or_end_beam()
 
-        self.build_bc_menu()
+        self._build_bc_menu()
 
         self._bm = tk.Menu(self._rcm, tearoff=0)  # Beam menu
         self._rcm.add_cascade(label='Start/end element', menu=self._bm)
@@ -104,7 +104,7 @@ class ToolSelect(Tool):
 
         self._closest_node_label = np.array(self._gui.problem.nodes[node_id].r)  # Problem coordinates
 
-    def build_bc_menu(self):
+    def _build_bc_menu(self):
         """
         Coordinates on these labels are updated when the left mouse button
         is clicked on the canvas. (See self.rightclickmenu )
