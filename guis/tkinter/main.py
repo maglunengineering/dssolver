@@ -33,12 +33,12 @@ class DSSGUI:
         self.mainframe.pack(fill=tk.BOTH, expand=True)
         self.mainframe.winfo_toplevel().title('DSSolver')
         self.topmenu = None
-        self.rsm_settings = None
-        self._settings_frames = {}
+        self.settings_frame = None
+        self._settings_frame_dict = {}
         self.sel_obj_settings:extras.DSSSettingsFrame = None
         self.selected_object = None
         self.listbox_results = None
-        self.rsm = None
+        self.right_frame = None
         self.canvas:extras.DSSCanvas = extras.DSSCanvas(self.mainframe, bg='white', highlightthickness=0)
         self.canvas.dss = self
         self.canvas.grid(row=0, column=0, sticky='nsew')
@@ -53,7 +53,7 @@ class DSSGUI:
 
         self.build_grid()
         self.build_menu(kwargs.get('plugins', {}))
-        self.build_rsmenu()
+        self.build_listbox()
         #self.build_bc_menu()  # Outsourced
 
         self.tool = None
@@ -149,18 +149,20 @@ class DSSGUI:
             self.canvas.update()
 
 
-    def build_rsmenu(self):
+    def build_listbox(self):
         color1 = 'gray74'
         color2 = 'gray82'
-        self.rsm = tk.Frame(self.mainframe, bg=color1, width=400)
-        self.rsm.grid(row=0, column=1, sticky='nsew')
+        self.right_frame = tk.Frame(self.mainframe, bg=color1, width=400)
+        self.right_frame.grid(row=0, column=1, sticky='nsew')
 
-        self.listbox_results = extras.DSSListbox(self.rsm)
-        self.listbox_results.grid(row=1, column=0)
+        self.listbox_results = extras.DSSListbox(self.right_frame)
+        #self.listbox_results.grid(row=1, column=0)
+        self.listbox_results.pack()
         self.listbox_results.bind('<Double-Button-1>', self.view_results)
 
-        self.rsm_settings = tk.Frame(self.rsm, bg=color2, width=400)
-        self.rsm_settings.grid(row=3, column=0, sticky='nw')
+        self.settings_frame = tk.Frame(self.right_frame, bg=color2, width=400)
+        #self.rsm_settings.grid(row=3, column=0, sticky='nw')
+        self.settings_frame.pack()
         #rsm_shm_label = tk.Label(self.rsm_settings, text='Settings', bg=color2)
         #rsm_shm_label.grid(row=0, column=1, columnspan=3, sticky='ew')
 #
@@ -175,32 +177,39 @@ class DSSGUI:
         return self._kbw.is_keydown(key)
 
     def set_settings_(self, key, category_or_object):
-        if key in self._settings_frames:
-            self._settings_frames.pop(key).destroy()
+        """ This is the only method to control self.settings_frame
+        """
+        if key in self._settings_frame_dict:
+            self._settings_frame_dict.pop(key).destroy()
+        if (key_label := f'{key}.Label') in self._settings_frame_dict:
+            self._settings_frame_dict.pop(key_label).destroy()
 
         if isinstance(category_or_object, str):
-            frame = extras.DSSSettingsFrame.from_settings(self.rsm_settings, category_or_object)
+            frame = extras.DSSSettingsFrame.from_settings(self.settings_frame, category_or_object)
         elif not isinstance(category_or_object, typing.Iterable):
-            frame = extras.DSSSettingsFrame.from_object(self.rsm_settings, category_or_object)
+            frame = extras.DSSSettingsFrame.from_object(self.settings_frame, category_or_object)
         else: # Multiselect
-            frame = extras.DSSSettingsFrame.from_object(self.rsm_settings, context_menu.ContextMenu(category_or_object, self))
+            frame = extras.DSSSettingsFrame.from_object(self.settings_frame, context_menu.ContextMenu(category_or_object, self))
 
         if len(frame) == 0:
             return
 
-        self._settings_frames[key] = frame
-        index = len(self._settings_frames)
+        self._settings_frame_dict[key] = frame
+        index = len(self._settings_frame_dict)
 
         text = key if isinstance(category_or_object, str) else f'{key} ({category_or_object.__class__.__name__})'
-        label = tk.Label(self.rsm_settings, text=text, bg='gray82')
-        label.grid(row=2*index, column=1, columnspan=2, sticky='ew')
+        label = tk.Label(self.settings_frame, text=text, bg='gray82')
+        self._settings_frame_dict[f'{key}.Label'] = label
+        #label.grid(row=2*index, column=1, columnspan=2, sticky='ew')
+        label.pack()
 
-        frame.grid(row=2*index+1, column=1, columnspan=2, sticky='ew')
+        #frame.grid(row=2*index+1, column=1, columnspan=2, sticky='ew')
+        frame.pack()
 
     def set_settings_default(self):
         if self.sel_obj_settings:
             self.sel_obj_settings.destroy()
-        plugin_settings_frame = extras.DSSSettingsFrame.from_settings(self.rsm_settings, 'dssgui')
+        plugin_settings_frame = extras.DSSSettingsFrame.from_settings(self.settings_frame, 'dssgui')
         plugin_settings_frame.grid(row=3, columnspan=2, sticky='ew')
 
     def set_settings(self, obj):
